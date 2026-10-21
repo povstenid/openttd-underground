@@ -41,6 +41,7 @@ void InvalidateWindowClassesData(WindowClass cls, ConvertibleThroughBase auto da
 
 void CloseNonVitalWindows();
 void CloseAllNonVitalWindows();
+void HandleBackButton();
 void DeleteAllMessages();
 void CloseConstructionWindows();
 void HideVitalWindows();

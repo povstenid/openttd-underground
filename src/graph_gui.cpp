@@ -261,6 +261,10 @@ protected:
 		inline void Fill(uint i, const auto &data) const { this->dataset.values[i] = std::invoke(this->proj, data); }
 	};
 
+	/* Compilers without class template argument deduction for aggregates (e.g. clang 17 of the Android NDK) need this guide. */
+	template <typename Tprojection>
+	Filler(BaseFiller, Tprojection) -> Filler<Tprojection>;
+
 	/**
 	 * Get appropriate part of dataset values for the current number of horizontal points.
 	 * @param dataset Dataset to get values of
