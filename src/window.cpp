@@ -3374,6 +3374,24 @@ void CloseNonVitalWindows()
 }
 
 /**
+ * Act on the Back button of a remote control or phone: stop the active tool if there is one,
+ * otherwise close the front-most window that can be closed.
+ */
+void HandleBackButton()
+{
+	if (_thd.place_mode != HT_NONE || _thd.window_class != WC_MAIN_WINDOW) {
+		ResetObjectToPlace();
+		return;
+	}
+
+	for (Window *w : Window::IterateFromFront()) {
+		if (w->window_desc.flags.Test(WindowDefaultFlag::NoClose)) continue;
+		w->Close();
+		return;
+	}
+}
+
+/**
  * It is possible that a stickied window gets to a position where the
  * 'close' button is outside the gaming area. You cannot close it then; except
  * with this function. It closes all windows calling the standard function,

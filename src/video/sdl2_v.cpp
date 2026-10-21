@@ -281,6 +281,7 @@ static constexpr SDLVkMapping _vk_mapping[] = {
 	AM(SDLK_0, SDLK_9, '0', '9'),
 
 	AS_UP(SDLK_ESCAPE,    WKC_ESC),
+	AS_UP(SDLK_AC_BACK,   WKC_ESC),
 	AS_UP(SDLK_PAUSE,     WKC_PAUSE),
 	AS_UP(SDLK_BACKSPACE, WKC_BACKSPACE),
 
@@ -471,6 +472,9 @@ bool VideoDriver_SDL_Base::PollEvent()
 			if ((ev.key.keysym.mod & (KMOD_ALT | KMOD_GUI)) &&
 					(ev.key.keysym.sym == SDLK_RETURN || ev.key.keysym.sym == SDLK_f)) {
 				if (ev.key.repeat == 0) ToggleFullScreen(!_fullscreen);
+			} else if (ev.key.keysym.sym == SDLK_AC_BACK && !this->edit_box_focused) {
+				/* Android's Back button; in an edit box it acts as Escape (below). */
+				if (ev.key.repeat == 0) HandleBackButton();
 			} else {
 				char32_t character;
 
@@ -529,6 +533,16 @@ bool VideoDriver_SDL_Base::PollEvent()
 			}
 			break;
 		}
+
+#ifdef __ANDROID__
+		case SDL_APP_DIDENTERFOREGROUND: {
+			/* Android replaces the window surface while the app is in the background; fetch the new one and redraw everything. */
+			int w, h;
+			SDL_GetWindowSize(this->sdl_window, &w, &h);
+			CreateMainSurface(std::max(w, 64), std::max(h, 64), true);
+			break;
+		}
+#endif
 	}
 
 	return true;
@@ -541,6 +555,10 @@ static std::optional<std::string_view> InitializeSDL()
 
 #ifdef SDL_HINT_APP_NAME
 	SDL_SetHint(SDL_HINT_APP_NAME, "OpenTTD");
+#endif
+#ifdef __ANDROID__
+	/* Deliver the Back button of a remote control or phone as a key press instead of closing the game. */
+	SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
 #endif
 
 	if (SDL_InitSubSystem(SDL_INIT_VIDEO) < 0) return SDL_GetError();
