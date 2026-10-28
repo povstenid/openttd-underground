@@ -29,9 +29,6 @@ void ShowUndergroundToolbar();
  */
 void ToggleUndergroundViewButton(UndergroundViewMode mode);
 
-/** Draw the arrow that marks the buttons of the views of the levels above (\a up) or below. */
-void DrawUndergroundViewButtonArrow(const Rect &r, bool up);
-
 /*
  * The underground tools of the railway construction toolbar. While an
  * underground view is shown, the toolbar builds on the viewed level; the

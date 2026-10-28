@@ -335,7 +335,7 @@ static const SpriteID SPR_BRIDGE_DECKS_ROAD = SPR_BRIDGE_DECKS_BASE + 18;
  * which checks these offsets and the count; keep them in sync.
  */
 static constexpr SpriteID SPR_METRO_STATION_BASE = SPR_BRIDGE_DECKS_BASE + BRIDGE_DECKS_SPRITE_COUNT;
-static constexpr uint16_t METRO_STATION_SPRITE_COUNT = 152;
+static constexpr uint16_t METRO_STATION_SPRITE_COUNT = 157;
 
 /* Underground station: ground sprites (64x31) and sortable platform pieces with
  * the bounding boxes of the vanilla rail platforms; boards/pillars stand on the
@@ -472,6 +472,15 @@ static constexpr uint8_t METRO_PARKING_SPRITE_COUNT = 4;
  * +1 along the north-west wall, +2 along the north-east wall, +3 open. */
 static constexpr SpriteID SPR_METRO_INDUSTRY_BASEMENT_BASE = SPR_METRO_STATION_BASE + 144;
 static constexpr uint8_t METRO_INDUSTRY_BASEMENT_SPRITE_COUNT = 8;
+/* More toolbar button icons, after the basement: the metro blueprints, the views of the
+ * levels above and below the viewed one, build underground and the station coverage
+ * (main toolbar). */
+static constexpr SpriteID SPR_METRO_ICON_BLUEPRINTS  = SPR_METRO_STATION_BASE + 152;
+static constexpr SpriteID SPR_METRO_ICON_SHOW_ABOVE  = SPR_METRO_STATION_BASE + 153;
+static constexpr SpriteID SPR_METRO_ICON_SHOW_BELOW  = SPR_METRO_STATION_BASE + 154;
+static constexpr SpriteID SPR_METRO_ICON_UNDERGROUND = SPR_METRO_STATION_BASE + 155;
+static constexpr SpriteID SPR_METRO_ICON_COVERAGE    = SPR_METRO_STATION_BASE + 156;
+static constexpr uint8_t METRO_MORE_ICON_SPRITE_COUNT = 5;
 
 /**
  * Pedestrian sprites (base set Action 5 type 0x1D). Generated together with

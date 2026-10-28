@@ -1094,11 +1094,6 @@ struct BuildRailToolbarWindow : Window {
 		size.width = std::max(size.width, d.width + padding.width);
 	}
 
-	void DrawWidget(const Rect &r, WidgetID widget) const override
-	{
-		if (widget == WID_RAT_SHOW_ABOVE || widget == WID_RAT_SHOW_BELOW) DrawUndergroundViewButtonArrow(r, widget == WID_RAT_SHOW_ABOVE);
-	}
-
 	void OnPlacePresize([[maybe_unused]] Point pt, TileIndex tile) override
 	{
 		Command<Commands::BuildTunnel>::Do(DoCommandFlag::Auto, tile, TRANSPORT_RAIL, _cur_railtype);
@@ -1234,17 +1229,17 @@ static constexpr std::initializer_list<NWidgetPart> _nested_build_rail_widgets =
 						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_IMG_CONVERT_RAIL, STR_RAIL_TOOLBAR_TOOLTIP_CONVERT_RAIL),
 		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_PICK_RAILTYPE),
 						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_IMG_QUERY, STR_RAIL_TOOLBAR_TOOLTIP_PICK_RAILTYPE),
-		NWidget(WWT_PUSHTXTBTN, COLOUR_DARK_GREEN, WID_RAT_BLUEPRINTS),
-						SetFill(0, 1), SetMinimalSize(22, 22), SetTextStyle(TC_WHITE), SetStringTip(STR_RAIL_TOOLBAR_BLUEPRINTS, STR_RAIL_TOOLBAR_TOOLTIP_BLUEPRINTS),
+		NWidget(WWT_PUSHIMGBTN, COLOUR_DARK_GREEN, WID_RAT_BLUEPRINTS),
+						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_METRO_ICON_BLUEPRINTS, STR_RAIL_TOOLBAR_TOOLTIP_BLUEPRINTS),
 
 		NWidget(WWT_PANEL, COLOUR_DARK_GREEN), SetToolbarSpacerMinimalSize(), EndContainer(),
 
 		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_XRAY),
 						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_METRO_ICON_XRAY, STR_UNDERGROUND_TOOLTIP_XRAY),
 		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_SHOW_ABOVE),
-						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_METRO_ICON_XRAY, STR_UNDERGROUND_TOOLTIP_SHOW_ABOVE),
+						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_METRO_ICON_SHOW_ABOVE, STR_UNDERGROUND_TOOLTIP_SHOW_ABOVE),
 		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_SHOW_BELOW),
-						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_METRO_ICON_XRAY, STR_UNDERGROUND_TOOLTIP_SHOW_BELOW),
+						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_METRO_ICON_SHOW_BELOW, STR_UNDERGROUND_TOOLTIP_SHOW_BELOW),
 		NWidget(WWT_PUSHIMGBTN, COLOUR_DARK_GREEN, WID_RAT_LEVEL_DOWN),
 						SetFill(0, 1), SetMinimalSize(12, 22), SetSpriteTip(SPR_ARROW_DOWN, STR_UNDERGROUND_TOOLTIP_LEVEL_DOWN),
 		NWidget(WWT_TEXTBTN, COLOUR_DARK_GREEN, WID_RAT_LEVEL),

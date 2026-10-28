@@ -846,14 +846,6 @@ void ToggleUndergroundViewButton(UndergroundViewMode mode)
 	SetUndergroundViewMode(building ? _view_before_button : UndergroundViewMode::Off);
 }
 
-void DrawUndergroundViewButtonArrow(const Rect &r, bool up)
-{
-	SpriteID arrow = up ? SPR_ARROW_UP : SPR_ARROW_DOWN;
-	Dimension d = GetSpriteSize(arrow);
-	Rect ir = r.Shrink(WidgetDimensions::scaled.bevel);
-	DrawSprite(arrow, PAL_NONE, ir.right + 1 - d.width, up ? ir.top : ir.bottom + 1 - d.height);
-}
-
 /** The soil tooltip of the metro tools while it is shown; another tooltip (a drag's measurement) replaces it. */
 static const Window *_soil_tooltip = nullptr;
 

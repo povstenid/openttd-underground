@@ -1405,6 +1405,166 @@ def toolbar_icons():
     return [xray, rail, portal, ramp_dn, ramp_up, sig, station, pav, under]
 
 
+# ----- more toolbar icons ---------------------------------------------------------
+#
+# Buttons that had only a text or borrowed another button's sprite: the
+# blueprints of the rail toolbar, the views of the levels above / below (rail
+# and main toolbar), the underground and the station coverage buttons of the
+# main toolbar. Drawn at icon scale; the arrows are the ones of the ramp icons.
+
+def centred(name, px, comment):
+    xs = [p[0] for p in px]
+    ys = [p[1] for p in px]
+    cx, cy = (min(xs) + max(xs) + 1) // 2, (min(ys) + max(ys) + 1) // 2
+    return Sprite(name, {(x - cx, y - cy): c for (x, y), c in px.items()}, comment=comment)
+
+
+def stamp(px, bitmap, cmap, ox, oy):
+    for j, row in enumerate(bitmap):
+        for i, ch in enumerate(row):
+            c = cmap.get(ch)
+            if c:
+                px[(ox + i, oy + j)] = c
+
+
+def blueprint_icon():
+    """Two blue sheets of a blueprint, the front one with a grid, a dog-ear
+    and a track plan with a station drawn on it in white."""
+    px = {}
+
+    def sheet(x0, y0, w, h, fill, grid, ear):
+        for y in range(y0, y0 + h):
+            for x in range(x0, x0 + w):
+                u, v = x - x0, y - y0
+                if ear and u - (w - 1 - ear) > v:
+                    continue                           # the cut corner
+                edge = u in (0, w - 1) or v in (0, h - 1) or (ear and u - (w - 1 - ear) == v)
+                if edge:
+                    px[(x, y)] = 1
+                elif grid and (u % 4 == 0 or v % 4 == 0):
+                    px[(x, y)] = 150
+                else:
+                    px[(x, y)] = fill
+        if ear:
+            # the folded-over corner, lit
+            for v in range(1, ear + 1):
+                for u in range(w - 1 - ear, w - 1 - ear + v):
+                    px[(x0 + u, y0 + v)] = 153 if u - (w - 1 - ear) < v - 1 else 1
+            for u in range(w - 1 - ear, w):
+                px[(x0 + u, y0 + ear)] = 1
+
+    sheet(5, 0, 15, 15, 146, False, 0)                 # the copy behind
+    sheet(0, 3, 16, 17, 148, True, 4)                  # the front sheet
+    # track plan: a line along the sheet that branches into a siding with a platform
+    for x in range(2, 14):
+        px[(x, 14)] = 15
+    for i in range(5):
+        px[(4 + i, 13 - i)] = 15
+    for x in range(8, 14):
+        px[(x, 9)] = 15
+    for x in range(9, 14):
+        for y in (6, 7):
+            px[(x, y)] = 15 if y == 7 or x in (9, 13) else 152
+    return centred('SPR_METRO_ICON_BLUEPRINTS', px, 'toolbar icon: metro blueprints')
+
+
+def level_plate(px, plate, cy, kind):
+    """One underground level as a thin plate: the metro slab with a track shrunk
+    3x (plate, centred), drawn at height cy. kind: 'ghost' (a level the view does
+    not draw: only a dotted outline), 'view' (the viewed level, outlined in
+    black), 'shown' (a level the view draws in full)."""
+    thick = 2
+    keys = set(plate)
+    edge = {k for k in keys if any((k[0] + dx, k[1] + dy) not in keys for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))}
+    if kind == 'ghost':
+        for (x, y) in edge:
+            if (x + y) % 2 == 0:
+                px[(x, cy + y)] = 6
+        return
+    # the sides below the front edges: south-west lighter than south-east, as on all metro art
+    for t in range(1, thick + 1):
+        for (x, y) in keys:
+            if (x, y + t) not in keys:
+                px[(x, cy + y + t)] = 1 if t == thick else (5 if x < 0 else 3)
+    for (x, y), c in plate.items():
+        px[(x, cy + y)] = 1 if kind == 'view' and (x, y) in edge else c
+
+
+def level_view_icon(name, up, plate):
+    """Three levels: the viewed one in the middle, the level shown by the button
+    (above or below) drawn in full, the other one only outlined; the arrow of
+    the ramp icons points to the levels the button shows."""
+    px = {}
+    spacing = 6
+    kinds = ['shown', 'view', 'ghost'] if up else ['ghost', 'view', 'shown']
+    # bottom level first, so the upper ones are drawn over it
+    for i in (2, 1, 0):
+        level_plate(px, plate, i * spacing, kinds[i])
+    xs = [p[0] for p in px]
+    ys = [p[1] for p in px]
+    if up:
+        stamp(px, ARROW_DOWN[::-1], {'k': 1, 'o': 208, 'O': 207}, max(xs) - 3, min(ys) - 2)
+    else:
+        stamp(px, ARROW_DOWN, {'k': 1, 'o': 164, 'O': 163}, max(xs) - 3, max(ys) - 7)
+    return centred(name, px, 'toolbar icon: view of the levels ' + ('above' if up else 'below'))
+
+
+def underground_icon(slab_s, rail_x, rib):
+    """Main toolbar, build underground: the underground track icon with the metro M."""
+    px = shrink({**screen_pixels(slab_s), **screen_pixels(rail_x), **screen_pixels(rib)})
+    xs = [p[0] for p in px]
+    ys = [p[1] for p in px]
+    stamp(px, SIGN_ICON, SIGN_CMAP, min(xs) + 3, min(ys) + 1)
+    return centred('SPR_METRO_ICON_UNDERGROUND', px, 'toolbar icon: build underground')
+
+
+def coverage_icon(grass, station):
+    """Main toolbar, station coverage: a station on a patch of grass inside
+    the dashed white outline of its catchment area."""
+    px = {}
+    hw, hh = 15, 8
+    g = shrink(screen_pixels(grass))
+    for dy in range(-hh, hh + 1):
+        for dx in range(-hw, hw + 1):
+            d = abs(dx) / hw + abs(dy) / hh
+            if d > 1.0 + 1e-9:
+                continue
+            c = g.get((dx % 16 - 8, dy % 8 - 4)) or 85
+            if d > 1.0 - 1.8 / hw:
+                c = 15 if (dx + 2 * dy) % 6 in (0, 1, 2) else 1   # the catchment outline, dashed
+            px[(dx, dy)] = c
+    # the station: the platforms of the metro art shrunk 3x, in the middle
+    for (x, y), c in station.items():
+        px[(x, y - 1)] = c
+    return centred('SPR_METRO_ICON_COVERAGE', px, 'toolbar icon: station coverage')
+
+
+def shrunk_centred(sprites, k):
+    px = {}
+    for sp in sprites:
+        px.update(screen_pixels(sp))
+    small = shrink(px, k)
+    xs = [p[0] for p in small]
+    ys = [p[1] for p in small]
+    cx, cy = (min(xs) + max(xs) + 1) // 2, (min(ys) + max(ys) + 1) // 2
+    return {(x - cx, y - cy): c for (x, y), c in small.items()}
+
+
+def more_toolbar_icons():
+    slab_s = slab('icon', 4, 1, '')
+    rail_x = mock_ground('rail_x')
+    plate = shrunk_centred([slab_s, rail_x], 3)
+    station = shrunk_centred([platform_floor('icon', False), rail_x, platform_rear('icon', False),
+                              platform_front('icon', False), pillar('icon', False)], 3)
+    return [
+        blueprint_icon(),
+        level_view_icon('SPR_METRO_ICON_SHOW_ABOVE', True, plate),
+        level_view_icon('SPR_METRO_ICON_SHOW_BELOW', False, plate),
+        underground_icon(slab_s, rail_x, tunnel_rib('icon', False)),
+        coverage_icon(mock_ground('grass'), station),
+    ]
+
+
 # --------------------------------------------------------------------------
 # Soil (metro v2 spec 2.1, 2.4, 2.5)
 # --------------------------------------------------------------------------
@@ -1996,6 +2156,8 @@ def build_sprites():
     for role in range(4):
         for variant in range(2):
             sp.append(basement_tile(role, variant))
+    # 21. more toolbar icons: blueprints, views of the levels above / below, underground, station coverage
+    sp.extend(more_toolbar_icons())
     return sp
 
 # --------------------------------------------------------------------------

@@ -6465,5 +6465,4 @@ STR_ERROR_BLUEPRINT_TOO_BIG                                     :чертёж с
 STR_ERROR_BLUEPRINT_STILL_PASTING                               :предыдущий чертёж ещё вставляется
 STR_BLUEPRINT_PASTE_STOPPED                                     :{WHITE}Вставка чертежа остановлена после части {NUM} из {NUM}
 STR_BLUEPRINT_PASTE_INCOMPLETE                                  :{WHITE}Чертёж построен не полностью: построено {NUM}, пропущено {NUM}
-STR_RAIL_TOOLBAR_BLUEPRINTS                                     :Чрт
 STR_RAIL_TOOLBAR_TOOLTIP_BLUEPRINTS                             :{BLACK}Чертежи метро: скопировать постройки на нескольких уровнях и вставить в другом месте (Ctrl+B)

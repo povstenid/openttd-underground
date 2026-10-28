@@ -5586,7 +5586,6 @@ STR_ERROR_BLUEPRINT_TOO_BIG                                     :the blueprint i
 STR_ERROR_BLUEPRINT_STILL_PASTING                               :the previous blueprint is still being pasted
 STR_BLUEPRINT_PASTE_STOPPED                                     :{WHITE}Pasting the blueprint stopped after part {NUM} of {NUM}
 STR_BLUEPRINT_PASTE_INCOMPLETE                                  :{WHITE}The blueprint was built only in part: pieces built {NUM}, left out {NUM}
-STR_RAIL_TOOLBAR_BLUEPRINTS                                     :BP
 STR_RAIL_TOOLBAR_TOOLTIP_BLUEPRINTS                             :{BLACK}Metro blueprints: copy construction on several levels and paste it elsewhere (Ctrl+B)
 
 # Object related errors

@@ -2108,13 +2108,6 @@ struct MainToolbarWindow : Window {
 		this->DrawWidgets();
 	}
 
-	void DrawWidget(const Rect &r, WidgetID widget) const override
-	{
-		if (widget == WID_TN_UNDERGROUND_BELOW || widget == WID_TN_UNDERGROUND_ABOVE) {
-			DrawUndergroundViewButtonArrow(r, widget == WID_TN_UNDERGROUND_ABOVE);
-		}
-	}
-
 	void OnClick([[maybe_unused]] Point pt, WidgetID widget, [[maybe_unused]] int click_count) override
 	{
 		if (_game_mode != GM_MENU && !this->IsWidgetDisabled(widget)) _toolbar_button_procs[widget](this);
@@ -2306,11 +2299,11 @@ static std::unique_ptr<NWidgetBase> MakeMainToolbar()
 		{WID_TN_MUSIC_SOUND,  WWT_IMGBTN,     SPR_IMG_MUSIC},
 		{WID_TN_MESSAGES,     WWT_IMGBTN,     SPR_IMG_MESSAGES},
 		{WID_TN_HELP,         WWT_IMGBTN,     SPR_IMG_QUERY},
-		{WID_TN_UNDERGROUND,  WWT_IMGBTN,     SPR_IMG_TUNNEL_RAIL},
+		{WID_TN_UNDERGROUND,  WWT_IMGBTN,     SPR_METRO_ICON_UNDERGROUND},
 		{WID_TN_UNDERGROUND_XRAY, WWT_IMGBTN, SPR_METRO_ICON_XRAY},
-		{WID_TN_UNDERGROUND_BELOW, WWT_IMGBTN, SPR_METRO_ICON_XRAY},
-		{WID_TN_UNDERGROUND_ABOVE, WWT_IMGBTN, SPR_METRO_ICON_XRAY},
-		{WID_TN_STATION_COVERAGE, WWT_IMGBTN, SPR_IMG_RAIL_STATION},
+		{WID_TN_UNDERGROUND_BELOW, WWT_IMGBTN, SPR_METRO_ICON_SHOW_BELOW},
+		{WID_TN_UNDERGROUND_ABOVE, WWT_IMGBTN, SPR_METRO_ICON_SHOW_ABOVE},
+		{WID_TN_STATION_COVERAGE, WWT_IMGBTN, SPR_METRO_ICON_COVERAGE},
 		{WID_TN_SWITCH_BAR,   WWT_IMGBTN,     SPR_IMG_SWITCH_TOOLBAR},
 	};
 
