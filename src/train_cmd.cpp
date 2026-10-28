@@ -4046,16 +4046,6 @@ static bool CheckReverseTrain(const Train *v)
 		Yapf3DResult ahead = Yapf3DFindPathFromRef(front_ref, front_td, target, target_station, v);
 		Yapf3DResult back = Yapf3DFindPathFromRef(back_ref, back_td, target, target_station, v);
 		if (!back.path_found) return false;
-		/* Never turn into a way another train already holds (one coming up
-		 * behind): the two would stand face to face, or meet. The way back up
-		 * to its first signal must be free. */
-		for (auto it = back.path.rbegin() + 1; it != back.path.rend(); ++it) {
-			const TileSlice &s = _multilayer_map.GetSlice(it->first.slice);
-			if (s.kind == SliceKind::Portal) break;
-			if (IsUndergroundTrackReservedByOther(it->first, TrackdirToTrack(it->second), v->index)) return false;
-			if (HasUndergroundSignalOnTrackdir(s, it->second)) break;
-		}
-		if (!ahead.path_found) return true;
 		/* A way that reaches the target beats one that only gets to a portal;
 		 * between two ways out, the rest of the trip from the portal to the
 		 * target counts as the search scored it. */
@@ -4063,6 +4053,22 @@ static bool CheckReverseTrain(const Train *v)
 			if (!r.exit_portal.IsValid() || !_multilayer_map.IsValidSlice(r.exit_portal.slice)) return false;
 			return _multilayer_map.GetSlice(r.exit_portal.slice).kind == SliceKind::Portal;
 		};
+		/* Never turn into a way another train already holds (one coming up
+		 * behind): the two would stand face to face, or meet. The way back up
+		 * to its first signal must be free. Unless there is no way on ahead to
+		 * the target: running on, say past a one-way signal into a dead end
+		 * behind a terminus, the train could never come back. Turned round, it
+		 * waits for the way, as it would on the surface. */
+		bool only_way_back = !ahead.path_found || (ends_at_portal(ahead) && !ends_at_portal(back));
+		if (!only_way_back) {
+			for (auto it = back.path.rbegin() + 1; it != back.path.rend(); ++it) {
+				const TileSlice &s = _multilayer_map.GetSlice(it->first.slice);
+				if (s.kind == SliceKind::Portal) break;
+				if (IsUndergroundTrackReservedByOther(it->first, TrackdirToTrack(it->second), v->index)) return false;
+				if (HasUndergroundSignalOnTrackdir(s, it->second)) break;
+			}
+		}
+		if (!ahead.path_found) return true;
 		auto score = [&](const Yapf3DResult &r) {
 			int s = r.total_cost;
 			if (ends_at_portal(r) && target != INVALID_TILE) s += DistanceManhattan(r.exit_portal.tile, target) * 100;
