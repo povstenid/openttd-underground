@@ -6,7 +6,7 @@
     1. Builds the dependencies for each ABI with vcpkg (SDL2 as a shared library, the rest static).
     2. Builds strgen/settingsgen for the host, as the cross build cannot run its own tools.
     3. Cross-compiles OpenTTD with the NDK into libopenttd.so for each ABI.
-    4. Packs the libraries, the game data (languages, base sets, script libraries) and the
+    4. Packs the libraries, the game data (languages, base sets, script libraries, the metro set) and the
        Java activity into an APK and signs it with a local key.
 
     Needs the Android SDK (platform 34, build-tools 34.0.0, NDK), a JDK 17 and vcpkg.
@@ -137,6 +137,9 @@ foreach ($dir in 'ai', 'game') {
     Copy-Item "$DataBuild\$dir" "$Assets\$dir" -Recurse
     if (Test-Path "$Assets\$dir\regression") { Remove-Item -Recurse -Force "$Assets\$dir\regression" }
 }
+# The bundled metro set; a first new game enables it, as the default config has no [newgrf] section.
+if (-not (Test-Path "$DataBuild\newgrf\metro_set.grf")) { throw "No metro_set.grf in $DataBuild\newgrf; the OpenTTD build copies it there." }
+Copy-Item "$DataBuild\newgrf" "$Assets\newgrf" -Recurse
 if ($Baseset) {
     Get-ChildItem $Baseset -File | Where-Object { -not (Test-Path (Join-Path "$Assets\baseset" $_.Name)) } | Copy-Item -Destination "$Assets\baseset"
 }
