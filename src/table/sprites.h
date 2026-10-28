@@ -329,8 +329,165 @@ static const SpriteID SPR_BRIDGE_DECKS_MONO = SPR_BRIDGE_DECKS_BASE + 6;
 static const SpriteID SPR_BRIDGE_DECKS_MGLV = SPR_BRIDGE_DECKS_BASE + 12;
 static const SpriteID SPR_BRIDGE_DECKS_ROAD = SPR_BRIDGE_DECKS_BASE + 18;
 
+/**
+ * Metro sprites (base set Action 5 type 0x1C). Generated together with
+ * media/baseset/openttd/metro_station.nfo by generate_metro_sprites.py,
+ * which checks these offsets and the count; keep them in sync.
+ */
+static constexpr SpriteID SPR_METRO_STATION_BASE = SPR_BRIDGE_DECKS_BASE + BRIDGE_DECKS_SPRITE_COUNT;
+static constexpr uint16_t METRO_STATION_SPRITE_COUNT = 144;
+
+/* Underground station: ground sprites (64x31) and sortable platform pieces with
+ * the bounding boxes of the vanilla rail platforms; boards/pillars stand on the
+ * rear platform. Company colour is remapped on benches, boards and pillar bands. */
+static constexpr SpriteID SPR_METRO_PLATFORM_FLOOR_X = SPR_METRO_STATION_BASE + 0;
+static constexpr SpriteID SPR_METRO_PLATFORM_FLOOR_Y = SPR_METRO_STATION_BASE + 1;
+static constexpr SpriteID SPR_METRO_PLATFORM_X_REAR  = SPR_METRO_STATION_BASE + 2;  ///< Box {0,0,0} {16,5,2}.
+static constexpr SpriteID SPR_METRO_PLATFORM_X_FRONT = SPR_METRO_STATION_BASE + 3;  ///< Box {0,11,0} {16,5,2}.
+static constexpr SpriteID SPR_METRO_PLATFORM_Y_REAR  = SPR_METRO_STATION_BASE + 4;  ///< Box {0,0,0} {5,16,2}.
+static constexpr SpriteID SPR_METRO_PLATFORM_Y_FRONT = SPR_METRO_STATION_BASE + 5;  ///< Box {11,0,0} {5,16,2}.
+static constexpr SpriteID SPR_METRO_BOARD_X          = SPR_METRO_STATION_BASE + 6;  ///< Box {5,1,3} {7,2,10}.
+static constexpr SpriteID SPR_METRO_BOARD_Y          = SPR_METRO_STATION_BASE + 7;  ///< Box {1,5,3} {2,7,10}.
+static constexpr SpriteID SPR_METRO_PILLAR_X         = SPR_METRO_STATION_BASE + 8;  ///< Box {7,1,3} {2,2,22}.
+static constexpr SpriteID SPR_METRO_PILLAR_Y         = SPR_METRO_STATION_BASE + 9;  ///< Box {1,7,3} {2,2,22}.
+
+/* Tunnel mouth on the slice-view slab, per DiagDirection (into the tunnel, like
+ * SPR_TUNNEL_ENTRY_REAR_RAIL): +dir*2 rear (ground sprite), +dir*2+1 front
+ * (sortable, vanilla tunnel roof bounds). */
+static constexpr SpriteID SPR_METRO_TUNNEL_BASE      = SPR_METRO_STATION_BASE + 10;
+
+/* Station exits on the surface. */
+static constexpr SpriteID SPR_METRO_PAVILION_GROUND  = SPR_METRO_STATION_BASE + 18; ///< Paved 64x31 ground.
+static constexpr SpriteID SPR_METRO_PAVILION_X       = SPR_METRO_STATION_BASE + 19; ///< Entrance building, door towards an X road; box {0,0,0} {16,16,20}.
+static constexpr SpriteID SPR_METRO_PAVILION_Y       = SPR_METRO_STATION_BASE + 20; ///< Entrance building, door towards a Y road; box {0,0,0} {16,16,20}.
+static constexpr SpriteID SPR_METRO_UNDERPASS_X      = SPR_METRO_STATION_BASE + 21; ///< Stairwell on the north-west pavement of an X road; box {0,0,0} {16,3,16}.
+static constexpr SpriteID SPR_METRO_UNDERPASS_Y      = SPR_METRO_STATION_BASE + 22; ///< Stairwell on the north-east pavement of a Y road; box {0,0,0} {3,16,16}.
+
+/* Slice view markers (screen-aligned, centred on the draw point). */
+static constexpr SpriteID SPR_METRO_EXIT_MARKER      = SPR_METRO_STATION_BASE + 23;
+static constexpr SpriteID SPR_METRO_RAMP_ARROW_DOWN  = SPR_METRO_STATION_BASE + 24;
+static constexpr SpriteID SPR_METRO_RAMP_ARROW_UP    = SPR_METRO_STATION_BASE + 25;
+
+/* Slice view slab (cut rock): the plain soil slab, and a darker variant that is no
+ * longer drawn (the soil colours replaced it; kept so the IDs after it do not shift). */
+static constexpr SpriteID SPR_METRO_SLAB             = SPR_METRO_STATION_BASE + 26;
+static constexpr SpriteID SPR_METRO_SLAB_DARK        = SPR_METRO_STATION_BASE + 27;
+
+/* Concrete ramp ground, inclined, per descent DiagDirection (+0 NE .. +3 NW). */
+static constexpr SpriteID SPR_METRO_RAMP_BASE        = SPR_METRO_STATION_BASE + 28;
+
+/* X-ray view: checkerboard that dims the surface (drawn at z = 7). */
+static constexpr SpriteID SPR_METRO_CEILING          = SPR_METRO_STATION_BASE + 32;
+
+/* Metro portals on the surface, per DiagDirection (into the tunnel): +dir*2 rear
+ * (ground sprite), +dir*2+1 front (sortable, vanilla tunnel roof bounds).
+ * HILL: concrete headwall at the top edge of an incline (mouth at the foot level);
+ * DIVE: entrance block on flat ground (portal below the surface). */
+static constexpr SpriteID SPR_METRO_PORTAL_HILL_BASE = SPR_METRO_STATION_BASE + 33;
+static constexpr SpriteID SPR_METRO_PORTAL_DIVE_BASE = SPR_METRO_STATION_BASE + 41;
+/** DIVE for a portal only one level below the ground: a shallower open cut. */
+static constexpr SpriteID SPR_METRO_PORTAL_CUT_SHALLOW_BASE = SPR_METRO_STATION_BASE + 74;
+
+/* Slice view of a dive portal at its level, per DiagDirection: the gate on the open
+ * edge (box: one tile-unit thick along that edge, 20 high) and the concrete ramp
+ * rising from the plane one level up to the open edge (ground sprite). */
+static constexpr SpriteID SPR_METRO_PORTAL_GATE_BASE = SPR_METRO_STATION_BASE + 49;
+static constexpr SpriteID SPR_METRO_PORTAL_RAMP_BASE = SPR_METRO_STATION_BASE + 53;
+
+/* Concrete tunnel rib over a straight underground track (sortable): the ring
+ * stands near the north-east (X) / north-west (Y) tile edge, behind the signals
+ * of its tile. Bounding box X {2,0,0} {1,16,18}, Y {0,2,0} {16,1,18}. */
+static constexpr SpriteID SPR_METRO_TUNNEL_RIB_X     = SPR_METRO_STATION_BASE + 57;
+static constexpr SpriteID SPR_METRO_TUNNEL_RIB_Y     = SPR_METRO_STATION_BASE + 58;
+
+/* Metro-style (short) stations: a short name board between two pillars (box
+ * X {5,1,3} {5,2,10}, Y {1,5,3} {2,5,10}) and the end wall with an arch over the
+ * track (box X {1,16,20}, Y {16,1,20}, at either end of the station). */
+static constexpr SpriteID SPR_METRO_BOARD_SHORT_X      = SPR_METRO_STATION_BASE + 59;
+static constexpr SpriteID SPR_METRO_BOARD_SHORT_Y      = SPR_METRO_STATION_BASE + 60;
+static constexpr SpriteID SPR_METRO_STATION_PORTAL_X   = SPR_METRO_STATION_BASE + 61;
+static constexpr SpriteID SPR_METRO_STATION_PORTAL_Y   = SPR_METRO_STATION_BASE + 62;
+
+/* Tunnel ribs over diagonal track pieces (sortable), the ring of the straight rib
+ * standing across the middle of the piece. A: UPPER (box {0,0,0} {8,8,18}) and
+ * LOWER (box at {8,8,0}); B: RIGHT (box {0,8,0} {8,8,18}) and LEFT (box at {8,0,0}). */
+static constexpr SpriteID SPR_METRO_TUNNEL_RIB_DIAG_A = SPR_METRO_STATION_BASE + 63;
+static constexpr SpriteID SPR_METRO_TUNNEL_RIB_DIAG_B = SPR_METRO_STATION_BASE + 64;
+
+/* Underground toolbar button icons, drawn from the metro art. */
+static constexpr SpriteID SPR_METRO_ICON_XRAY      = SPR_METRO_STATION_BASE + 65;
+static constexpr SpriteID SPR_METRO_ICON_RAIL      = SPR_METRO_STATION_BASE + 66;
+static constexpr SpriteID SPR_METRO_ICON_PORTAL    = SPR_METRO_STATION_BASE + 67;
+static constexpr SpriteID SPR_METRO_ICON_RAMP_DOWN = SPR_METRO_STATION_BASE + 68;
+static constexpr SpriteID SPR_METRO_ICON_RAMP_UP   = SPR_METRO_STATION_BASE + 69;
+static constexpr SpriteID SPR_METRO_ICON_SIGNAL    = SPR_METRO_STATION_BASE + 70;
+static constexpr SpriteID SPR_METRO_ICON_STATION   = SPR_METRO_STATION_BASE + 71;
+static constexpr SpriteID SPR_METRO_ICON_PAVILION  = SPR_METRO_STATION_BASE + 72;
+static constexpr SpriteID SPR_METRO_ICON_UNDERPASS = SPR_METRO_STATION_BASE + 73;
+
+/* Soil of the slice view (metro v2). Slab textures, two variants each, in the
+ * order roots, veins, grain, sparkle, glass; drawn with a soil recolour. */
+static constexpr SpriteID SPR_METRO_SOIL_SLAB_BASE = SPR_METRO_STATION_BASE + 82;
+/* Light concrete floor under the objects of the viewed level. */
+static constexpr SpriteID SPR_METRO_CONCRETE_FLOOR = SPR_METRO_STATION_BASE + 92;
+/* Recolour sprites, one per SoilLayer: the slab's rock ramp to the layer's colours. */
+static constexpr SpriteID SPR_METRO_SOIL_PAL_BASE = SPR_METRO_STATION_BASE + 93;
+/* Recolour sprites, one per SoilLayer: the X-ray backdrop, muted towards grey. */
+static constexpr SpriteID SPR_METRO_SOIL_XRAY_PAL_BASE = SPR_METRO_STATION_BASE + 104;
+/* Striped floor of a house foundation; no longer drawn (the underground parking
+ * replaced it), kept so the IDs after it do not shift. */
+static constexpr SpriteID SPR_METRO_BASEMENT_FLOOR = SPR_METRO_STATION_BASE + 115;
+/* Water column under rivers, canals and the sea: +0 the first level below the bed .. +2 the third. */
+static constexpr SpriteID SPR_METRO_WATER_FLOOR_BASE = SPR_METRO_STATION_BASE + 116;
+/* Ground below the water of the sea where underground construction is forbidden. */
+static constexpr SpriteID SPR_METRO_SEA_FORBIDDEN = SPR_METRO_STATION_BASE + 119;
+/* Sand below rivers, canals and the sea (SoilLayer SandLight .. SandDark): a grainy
+ * slab in two variants, then one slab and one X-ray recolour per sand layer. */
+static constexpr SpriteID SPR_METRO_SAND_SLAB_BASE = SPR_METRO_STATION_BASE + 120;
+static constexpr SpriteID SPR_METRO_SAND_PAL_BASE = SPR_METRO_STATION_BASE + 122;
+static constexpr SpriteID SPR_METRO_SAND_XRAY_PAL_BASE = SPR_METRO_STATION_BASE + 125;
+/* Tunnel art, after the sand: evacuation walkway along the front side (a ground
+ * sprite) and the cable tray along the back side (sorted behind the rib of the tile). */
+static constexpr SpriteID SPR_METRO_TUNNEL_ART_BASE = SPR_METRO_STATION_BASE + 128;
+static constexpr SpriteID SPR_METRO_TUNNEL_WALKWAY_X = SPR_METRO_TUNNEL_ART_BASE + 0;
+static constexpr SpriteID SPR_METRO_TUNNEL_WALKWAY_Y = SPR_METRO_TUNNEL_ART_BASE + 1;
+static constexpr SpriteID SPR_METRO_TUNNEL_CABLES_X  = SPR_METRO_TUNNEL_ART_BASE + 2;
+static constexpr SpriteID SPR_METRO_TUNNEL_CABLES_Y  = SPR_METRO_TUNNEL_ART_BASE + 3;
+/* The cable tray on a tile with signals, held by the rib in the middle of the tile. */
+static constexpr SpriteID SPR_METRO_TUNNEL_CABLES_SIGNAL_X = SPR_METRO_TUNNEL_ART_BASE + 4;
+static constexpr SpriteID SPR_METRO_TUNNEL_CABLES_SIGNAL_Y = SPR_METRO_TUNNEL_ART_BASE + 5;
+/* Walkway on the diagonal pieces, in the order UPPER, LOWER, LEFT, RIGHT. */
+static constexpr SpriteID SPR_METRO_TUNNEL_WALKWAY_DIAG_BASE = SPR_METRO_TUNNEL_ART_BASE + 6;
+/* Cable tray on the diagonal pieces whose back side runs through the tile. */
+static constexpr SpriteID SPR_METRO_TUNNEL_CABLES_DIAG_LOWER = SPR_METRO_TUNNEL_ART_BASE + 10;
+static constexpr SpriteID SPR_METRO_TUNNEL_CABLES_DIAG_RIGHT = SPR_METRO_TUNNEL_ART_BASE + 11;
+static constexpr uint8_t METRO_TUNNEL_ART_SPRITE_COUNT = 12;
+/* Underground parking under houses, after the tunnel art, by the place of the tile in
+ * the house: +0 the back corner (both walls, the ramp), +1 along the north-west wall,
+ * +2 along the north-east wall, +3 open (the driving aisle). */
+static constexpr SpriteID SPR_METRO_PARKING_BASE = SPR_METRO_STATION_BASE + 140;
+static constexpr uint8_t METRO_PARKING_SPRITE_COUNT = 4;
+
+/**
+ * Pedestrian sprites (base set Action 5 type 0x1D). Generated together with
+ * media/baseset/openttd/pedestrians.nfo by generate_pedestrian_sprites.py,
+ * which checks the count; keep them in sync.
+ * Order: variant * 16 + DiagDirection of travel * 4 + animation frame, then
+ * the standing people at SPR_PEDESTRIAN_STANDING_BASE + variant * 12 +
+ * DiagDirection faced * 3 + pose. The draw point is the feet; shirts and
+ * dresses use the company colour ramp.
+ */
+static constexpr SpriteID SPR_PEDESTRIAN_BASE = SPR_METRO_STATION_BASE + METRO_STATION_SPRITE_COUNT;
+static constexpr uint8_t PEDESTRIAN_VARIANTS = 4;
+static constexpr uint8_t PEDESTRIAN_FRAMES = 4;
+static constexpr SpriteID SPR_PEDESTRIAN_STANDING_BASE = SPR_PEDESTRIAN_BASE + PEDESTRIAN_VARIANTS * 4 * PEDESTRIAN_FRAMES;
+static constexpr uint8_t PEDESTRIAN_STANDING_POSES = 3; ///< Idle, weight shifted with the head turned, hand at the face.
+static constexpr SpriteID SPR_IMG_PEDESTRIANS = SPR_PEDESTRIAN_STANDING_BASE + PEDESTRIAN_VARIANTS * 4 * PEDESTRIAN_STANDING_POSES; ///< Transparency toolbar icon.
+static constexpr uint16_t PEDESTRIAN_SPRITE_COUNT = 113;
+static_assert(PEDESTRIAN_SPRITE_COUNT == PEDESTRIAN_VARIANTS * 4 * (PEDESTRIAN_FRAMES + PEDESTRIAN_STANDING_POSES) + 1);
+
 /* From where can we start putting NewGRFs? */
-static const SpriteID SPR_NEWGRFS_BASE = SPR_BRIDGE_DECKS_BASE + BRIDGE_DECKS_SPRITE_COUNT;
+static const SpriteID SPR_NEWGRFS_BASE = SPR_PEDESTRIAN_BASE + PEDESTRIAN_SPRITE_COUNT;
 
 /* Manager face sprites */
 static const SpriteID SPR_GRADIENT = 874; // background gradient behind manager face

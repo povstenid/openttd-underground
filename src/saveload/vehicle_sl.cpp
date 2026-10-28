@@ -810,6 +810,10 @@ public:
 		 SLE_CONDVAR(Train, flags,               SLE_UINT16,                 SLV_100, SL_MAX_VERSION),
 		 SLE_CONDVAR(Train, wait_counter,        SLE_UINT16,                 SLV_136, SL_MAX_VERSION),
 		 SLE_CONDVAR(Train, gv_flags,            SLE_UINT16,                 SLV_139, SL_MAX_VERSION),
+
+		 SLE_CONDVAR(Train, underground_depth,      SLE_INT16,                  SLV_MULTILAYER_MAP, SL_MAX_VERSION),
+		 SLE_CONDVAR(Train, underground_slice,      SLE_UINT32,                 SLV_MULTILAYER_MAP, SL_MAX_VERSION),
+		 SLE_CONDVAR(Train, underground_tile_raw,   SLE_UINT32,                 SLV_MULTILAYER_MAP, SL_MAX_VERSION),
 	};
 	static inline const SaveLoadCompatTable compat_description = _vehicle_train_sl_compat;
 

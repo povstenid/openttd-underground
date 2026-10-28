@@ -9,6 +9,8 @@ add_files(
     script_config.cpp
     script_config.hpp
     script_fatalerror.hpp
+    script_json.cpp
+    script_json.hpp
     script_gui.h
     script_gui.cpp
     script_info.cpp

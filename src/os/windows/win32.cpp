@@ -340,6 +340,37 @@ std::optional<std::string> GetClipboardContents()
 	return result;
 }
 
+/**
+ * Put text on the clipboard of the system.
+ * @param text The text.
+ * @return Whether it is there now.
+ */
+bool SetClipboardContents(std::string_view text)
+{
+	std::wstring wide = OTTD2FS(text);
+	HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, (wide.size() + 1) * sizeof(wchar_t));
+	if (mem == nullptr) return false;
+	wchar_t *buf = static_cast<wchar_t *>(GlobalLock(mem));
+	if (buf == nullptr) {
+		GlobalFree(mem);
+		return false;
+	}
+	std::copy_n(wide.c_str(), wide.size() + 1, buf);
+	GlobalUnlock(mem);
+
+	/* Without an owner window, emptying the clipboard leaves it without an owner and setting data then fails. */
+	HWND owner = GetActiveWindow();
+	if (owner == nullptr) owner = GetForegroundWindow();
+	if (owner == nullptr || !OpenClipboard(owner)) {
+		GlobalFree(mem);
+		return false;
+	}
+	bool ok = EmptyClipboard() && SetClipboardData(CF_UNICODETEXT, mem) != nullptr;
+	if (!ok) GlobalFree(mem);
+	CloseClipboard();
+	return ok;
+}
+
 
 /**
  * Convert to OpenTTD's encoding from a wide string.

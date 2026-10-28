@@ -14,8 +14,20 @@
 #include "direction_type.h"
 #include "track_type.h"
 #include "vehicle_type.h"
+#include "signal_type.h"
+#include "multilayer/multilayer_types.h"
 
 TrackBits GetReservedTrackbits(TileIndex t);
+TrackBits GetUndergroundReservedTrackbits(const TileRef &ref);
+TrackBits GetUndergroundReservedTrackbits(const TileRef &ref, VehicleID owner);
+VehicleID GetUndergroundReservationOwner(const TileRef &ref);
+bool IsUndergroundTrackReservedByOther(const TileRef &ref, Track t, VehicleID owner);
+bool TryReserveUndergroundTrack(const TileRef &ref, Track t, VehicleID owner);
+void UnreserveUndergroundTrack(const TileRef &ref, Track t);
+void FreeUndergroundPathAhead(const TileRef &ref, Trackdir td, VehicleID owner);
+
+bool HasUndergroundSignalOnTrack(const TileRef &ref, Track t);
+SignalState GetUndergroundSignalState(const TileRef &ref, Trackdir td, VehicleID owner = VehicleID::Invalid());
 
 void SetRailStationPlatformReservation(TileIndex start, DiagDirection dir, bool b);
 

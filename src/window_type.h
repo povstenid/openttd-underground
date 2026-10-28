@@ -677,6 +677,12 @@ enum WindowClass : uint16_t {
 	 */
 	WC_ENDSCREEN,
 
+	/**
+	 * Metro blueprints window; %Window numbers:
+	 *   - 0 = #MetroBlueprintWidgets
+	 */
+	WC_METRO_BLUEPRINTS,
+
 
 	/**
 	 * Script debug window; %Window numbers:

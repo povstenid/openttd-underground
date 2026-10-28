@@ -416,6 +416,21 @@ static uint32_t PositionHelper(const Vehicle *v, bool consecutive)
 	return chain_before | chain_after << 8 | (chain_before + chain_after + consecutive) << 16;
 }
 
+/**
+ * Vehicle state as NewGRFs see it. A train part below ground is hidden from the
+ * surface view but runs on rails like any other and is drawn in the underground
+ * views, so it is not reported as hidden: sets hide their sprites in a depot or
+ * tunnel, the train would be invisible in the underground views.
+ * @param v The vehicle.
+ * @return The vehicle state.
+ */
+static VehStates GetNewGRFVehicleState(const Vehicle *v)
+{
+	VehStates state = v->vehstatus;
+	if (v->type == VEH_TRAIN && Train::From(v)->IsUnderground()) state.Reset(VehState::Hidden);
+	return state;
+}
+
 static uint32_t VehicleGetVariable(Vehicle *v, const VehicleScopeResolver *object, uint8_t variable, uint32_t parameter, bool &available)
 {
 	/* Calculated vehicle parameters */
@@ -566,7 +581,8 @@ static uint32_t VehicleGetVariable(Vehicle *v, const VehicleScopeResolver *objec
 		case 0x4A:
 			switch (v->type) {
 				case VEH_TRAIN: {
-					RailType rt = GetTileRailType(v->tile);
+					/* Below ground the track is in the train's slice, not on the surface tile. */
+					RailType rt = Train::From(v)->GetCurrentRailType();
 					const RailTypeInfo *rti = GetRailTypeInfo(rt);
 					return (rti->flags.Test(RailTypeFlag::Catenary) ? 0x200 : 0) |
 						(HasPowerOnRail(Train::From(v)->railtypes, rt) ? 0x100 : 0) |
@@ -656,7 +672,7 @@ static uint32_t VehicleGetVariable(Vehicle *v, const VehicleScopeResolver *objec
 			uint32_t ret = prev ? DirDifference(u->direction, v->direction) : DirDifference(v->direction, u->direction);
 			if (ret > DIRDIFF_REVERSE) ret |= 0x08;
 
-			if (u->vehstatus.Test(VehState::Hidden)) ret |= 0x80;
+			if (GetNewGRFVehicleState(u).Test(VehState::Hidden)) ret |= 0x80;
 
 			/* Get position difference. */
 			ret |= ((prev ? u->x_pos - v->x_pos : v->x_pos - u->x_pos) & 0xFF) << 8;
@@ -678,7 +694,7 @@ static uint32_t VehicleGetVariable(Vehicle *v, const VehicleScopeResolver *objec
 				case VEH_TRAIN: {
 					RailType param_type = GetRailTypeTranslation(parameter, object->ro.grffile);
 					if (param_type == INVALID_RAILTYPE) return 0x00;
-					RailType tile_type = GetTileRailType(v->tile);
+					RailType tile_type = Train::From(v)->GetCurrentRailType();
 					if (tile_type == param_type) return 0x0F;
 					return (HasPowerOnRail(param_type, tile_type) ? 0x04 : 0x00) |
 							(IsCompatibleRail(param_type, tile_type) ? 0x02 : 0x00) |
@@ -715,7 +731,7 @@ static uint32_t VehicleGetVariable(Vehicle *v, const VehicleScopeResolver *objec
 
 		case 0x65:
 			if (v->type == VEH_TRAIN) {
-				RailType rt = GetRailType(v->tile);
+				RailType rt = Train::From(v)->GetCurrentRailType();
 				return GetBadgeVariableResult(*object->ro.grffile, GetRailTypeInfo(rt)->badges, parameter);
 			}
 			if (v->type == VEH_ROAD) {
@@ -734,7 +750,7 @@ static uint32_t VehicleGetVariable(Vehicle *v, const VehicleScopeResolver *objec
 				const Train *t = Train::From(v);
 				bool is_powered_wagon = t->flags.Test(VehicleRailFlag::PoweredWagon);
 				const Train *u = is_powered_wagon ? t->First() : t; // for powered wagons the engine defines the type of engine (i.e. railtype)
-				RailType railtype = GetRailType(v->tile);
+				RailType railtype = t->GetCurrentRailType();
 				bool powered = t->IsEngine() || is_powered_wagon;
 				bool has_power = HasPowerOnRail(u->railtypes, railtype);
 
@@ -830,7 +846,7 @@ static uint32_t VehicleGetVariable(Vehicle *v, const VehicleScopeResolver *objec
 		case 0x2F: break; // not implemented
 		case 0x30: break; // not implemented
 		case 0x31: break; // not implemented
-		case 0x32: return v->vehstatus.base();
+		case 0x32: return GetNewGRFVehicleState(v).base();
 		case 0x33: return 0; // non-existent high byte of vehstatus
 		case 0x34: return v->type == VEH_AIRCRAFT ? (v->cur_speed * 10) / 128 : v->cur_speed;
 		case 0x35: return GB(v->type == VEH_AIRCRAFT ? (v->cur_speed * 10) / 128 : v->cur_speed, 8, 8);

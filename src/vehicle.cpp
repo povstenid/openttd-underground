@@ -60,6 +60,7 @@
 #include "timer/timer_game_calendar.h"
 #include "timer/timer_game_economy.h"
 #include "timer/timer_game_tick.h"
+#include "multilayer/underground_view.h"
 
 #include "table/strings.h"
 
@@ -564,6 +565,8 @@ CommandCost EnsureNoVehicleOnGround(TileIndex tile)
 	for (const Vehicle *v : VehiclesOnTile(tile)) {
 		if (v->type == VEH_DISASTER || (v->type == VEH_AIRCRAFT && v->subtype == AIR_SHADOW)) continue;
 		if (v->z_pos > z) continue;
+		/* Underground trains are below the ground, not on it. */
+		if (!IsVehicleOnSurfaceLayer(v)) continue;
 
 		return CommandCost(STR_ERROR_TRAIN_IN_THE_WAY + v->type);
 	}
@@ -587,6 +590,7 @@ CommandCost TunnelBridgeIsFree(TileIndex tile, TileIndex endtile, const Vehicle 
 		for (const Vehicle *v : VehiclesOnTile(t)) {
 			if (v->type != VEH_TRAIN && v->type != VEH_ROAD && v->type != VEH_SHIP) continue;
 			if (v == ignore) continue;
+			if (!IsVehicleOnSurfaceLayer(v)) continue;
 			return CommandCost(STR_ERROR_TRAIN_IN_THE_WAY + v->type);
 		}
 	}
@@ -611,6 +615,8 @@ CommandCost EnsureNoTrainOnTrackBits(TileIndex tile, TrackBits track_bits)
 		if (v->type != VEH_TRAIN) continue;
 
 		const Train *t = Train::From(v);
+		/* An underground train does not use the surface track bits above it. */
+		if (!t->IsOnSurfaceLayer()) continue;
 		if ((t->track != track_bits) && !TracksOverlap(t->track | track_bits)) continue;
 
 		return CommandCost(STR_ERROR_TRAIN_IN_THE_WAY + v->type);
@@ -795,6 +801,7 @@ void Vehicle::HandlePathfindingResult(bool path_found)
 		if (!this->vehicle_flags.Test(VehicleFlag::PathfinderLost)) return;
 
 		/* Clear the flag as the PF's problem was solved. */
+		Debug(misc, 1, "vehicle {} found its way again: tile ({},{})", this->index.base(), TileX(this->tile), TileY(this->tile));
 		this->vehicle_flags.Reset(VehicleFlag::PathfinderLost);
 		SetWindowWidgetDirty(WC_VEHICLE_VIEW, this->index, WID_VV_START_STOP);
 		InvalidateWindowClassesData(GetWindowClassForVehicleType(this->type));
@@ -807,6 +814,9 @@ void Vehicle::HandlePathfindingResult(bool path_found)
 	if (this->vehicle_flags.Test(VehicleFlag::PathfinderLost)) return;
 
 	/* It is first time the problem occurred, set the "lost" flag. */
+	Debug(misc, 1, "vehicle {} lost: tile ({},{}) dest ({},{}) order type {} dest {}", this->index.base(), TileX(this->tile), TileY(this->tile),
+		this->dest_tile == INVALID_TILE ? -1 : (int)TileX(this->dest_tile), this->dest_tile == INVALID_TILE ? -1 : (int)TileY(this->dest_tile),
+		(int)this->current_order.GetType(), this->current_order.GetDestination().value);
 	this->vehicle_flags.Set(VehicleFlag::PathfinderLost);
 	SetWindowWidgetDirty(WC_VEHICLE_VIEW, this->index, WID_VV_START_STOP);
 	InvalidateWindowClassesData(GetWindowClassForVehicleType(this->type));
@@ -1114,6 +1124,28 @@ void CallVehicleTicks()
 	cur_company.Restore();
 }
 
+static bool IsVehicleVisibleInCurrentView(const Vehicle *v)
+{
+	if (v->type == VEH_TRAIN) {
+		const Train *train = Train::From(v);
+		if (train->IsUnderground()) {
+			/* A part in the open cut of a portal diving into flat ground is still in
+			 * view on the surface, running down to the tunnel mouth. */
+			if (!IsUndergroundSliceMode() && GetOpenCutPortal(train) != nullptr) return !v->vehstatus.Test(VehState::Hidden);
+			/* Underground train parts: their own level in the slice view, all in the X-ray view. */
+			return IsUndergroundTrainDepthShown(train->underground_depth);
+		}
+	}
+
+	if (v->vehstatus.Test(VehState::Hidden)) return false;
+
+	/* The slice view cuts the world at the viewed level: anything above the plane is not drawn. */
+	if (IsUndergroundSliceMode()) {
+		return GetVehicleViewportZ(v) < (GetUndergroundViewDepth() + 1) * static_cast<int>(TILE_HEIGHT);
+	}
+	return true;
+}
+
 /**
  * Add vehicle sprite for drawing to the screen.
  * @param v Vehicle to draw.
@@ -1138,7 +1170,7 @@ static void DoDrawVehicle(const Vehicle *v)
 	for (uint i = 0; i < v->sprite_cache.sprite_seq.count; ++i) {
 		PaletteID pal2 = v->sprite_cache.sprite_seq.seq[i].pal;
 		if (!pal2 || v->vehstatus.Test(VehState::Crashed)) pal2 = pal;
-		AddSortableSpriteToDraw(v->sprite_cache.sprite_seq.seq[i].sprite, pal2, v->x_pos, v->y_pos, v->z_pos, v->bounds, shadowed);
+		AddSortableSpriteToDraw(v->sprite_cache.sprite_seq.seq[i].sprite, pal2, v->x_pos, v->y_pos, GetVehicleViewportZ(v), v->bounds, shadowed);
 	}
 	EndSpriteCombine();
 }
@@ -1186,7 +1218,7 @@ void ViewportAddVehicles(DrawPixelInfo *dpi)
 
 			while (v != nullptr) {
 
-				if (!v->vehstatus.Test(VehState::Hidden) &&
+				if (IsVehicleVisibleInCurrentView(v) &&
 					l <= v->coord.right + xb &&
 					t <= v->coord.bottom + yb &&
 					r >= v->coord.left - xb &&
@@ -1268,7 +1300,8 @@ Vehicle *CheckClickOnVehicle(const Viewport &vp, int x, int y)
 			Vehicle *v = _vehicle_viewport_hash[hx + hy]; // already masked & 0xFFF
 
 			while (v != nullptr) {
-				if (!v->vehstatus.Any({VehState::Hidden, VehState::Unclickable}) &&
+				if (!v->vehstatus.Test(VehState::Unclickable) &&
+					IsVehicleVisibleInCurrentView(v) &&
 					x >= v->coord.left && x <= v->coord.right &&
 					y >= v->coord.top && y <= v->coord.bottom) {
 
@@ -1714,7 +1747,7 @@ void Vehicle::UpdateBoundingBoxCoordinates(bool update_cache) const
 	this->sprite_cache.sprite_seq.GetBounds(&new_coord);
 
 	/* z-bounds are not used. */
-	Point pt = RemapCoords(this->x_pos + this->bounds.origin.x + this->bounds.offset.x, this->y_pos + this->bounds.origin.y + this->bounds.offset.y, this->z_pos);
+	Point pt = RemapCoords(this->x_pos + this->bounds.origin.x + this->bounds.offset.x, this->y_pos + this->bounds.origin.y + this->bounds.offset.y, GetVehicleViewportZ(this));
 	new_coord.left   += pt.x;
 	new_coord.top    += pt.y;
 	new_coord.right  += pt.x + 2 * ZOOM_BASE;
@@ -1724,7 +1757,7 @@ void Vehicle::UpdateBoundingBoxCoordinates(bool update_cache) const
 	if (_draw_bounding_boxes) {
 		int x = this->x_pos + this->bounds.origin.x;
 		int y = this->y_pos + this->bounds.origin.y;
-		int z = this->z_pos + this->bounds.origin.z;
+		int z = GetVehicleViewportZ(this) + this->bounds.origin.z;
 		new_coord.left   = std::min(new_coord.left, RemapCoords(x + bounds.extent.x, y, z).x);
 		new_coord.right  = std::max(new_coord.right, RemapCoords(x, y + bounds.extent.y, z).x + 1);
 		new_coord.top    = std::min(new_coord.top, RemapCoords(x, y, z + bounds.extent.z).y);
@@ -2223,7 +2256,9 @@ void Vehicle::DeleteUnreachedImplicitOrders()
  */
 void Vehicle::BeginLoading()
 {
-	assert(IsTileType(this->tile, TileType::Station) || this->type == VEH_SHIP);
+	assert(IsTileType(this->tile, TileType::Station) ||
+			this->type == VEH_SHIP ||
+			(this->type == VEH_TRAIN && Train::From(this)->IsUnderground()));
 
 	TimerGameTick::Ticks travel_time = TimerGameTick::counter - this->last_loading_tick;
 	if (this->current_order.IsType(OT_GOTO_STATION) &&
@@ -2880,7 +2915,7 @@ void Vehicle::ShowVisualEffect() const
 				IsDepotTile(v->tile) ||
 				IsTunnelTile(v->tile) ||
 				(v->type == VEH_TRAIN &&
-				!HasPowerOnRail(Train::From(v)->railtypes, GetTileRailType(v->tile)))) {
+				!HasPowerOnRail(Train::From(v)->railtypes, Train::From(v)->GetCurrentRailType()))) {
 			continue;
 		}
 

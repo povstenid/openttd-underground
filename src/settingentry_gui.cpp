@@ -643,6 +643,16 @@ SettingsContainer &GetSettingsTree()
 				viewports->Add(new SettingEntry("gui.show_track_reservation"));
 			}
 
+			SettingsPage *pedestrians = interface->Add(new SettingsPage(STR_CONFIG_SETTING_INTERFACE_PEDESTRIANS));
+			{
+				pedestrians->Add(new SettingEntry("gui.show_pedestrians"));
+				pedestrians->Add(new SettingEntry("gui.pedestrians_from_houses"));
+				pedestrians->Add(new SettingEntry("gui.pedestrian_arrivals"));
+				pedestrians->Add(new SettingEntry("gui.pedestrian_crowds"));
+				pedestrians->Add(new SettingEntry("gui.pedestrian_ratio"));
+				pedestrians->Add(new SettingEntry("gui.pedestrian_limit"));
+			}
+
 			SettingsPage *construction = interface->Add(new SettingsPage(STR_CONFIG_SETTING_INTERFACE_CONSTRUCTION));
 			{
 				construction->Add(new SettingEntry("gui.link_terraform_toolbar"));
@@ -773,6 +783,63 @@ SettingsContainer &GetSettingsTree()
 			limitations->Add(new SettingEntry("construction.crossing_with_competitor"));
 			limitations->Add(new SettingEntry("vehicle.disable_elrails"));
 			limitations->Add(new SettingEntry("order.station_length_loading_penalty"));
+		}
+
+		SettingsPage *underground = main->Add(new SettingsPage(STR_CONFIG_SETTING_UNDERGROUND));
+		{
+			SettingsPage *depth = underground->Add(new SettingsPage(STR_CONFIG_SETTING_UNDERGROUND_DEPTH));
+			{
+				depth->Add(new SettingEntry("underground.deepest_tunnel_level"));
+				depth->Add(new SettingEntry("underground.deepest_station_level"));
+				depth->Add(new SettingEntry("construction.max_underground_depth"));
+				depth->Add(new SettingEntry("underground.sea_tunnels"));
+				depth->Add(new SettingEntry("underground.foundation_high_percent"));
+				depth->Add(new SettingEntry("underground.foundation_medium_percent"));
+				depth->Add(new SettingEntry("construction.max_station_exit_distance"));
+			}
+
+			SettingsPage *prices = underground->Add(new SettingsPage(STR_CONFIG_SETTING_UNDERGROUND_PRICES));
+			{
+				prices->Add(new SettingEntry("underground.base_cost_multiplier"));
+				prices->Add(new SettingEntry("underground.ramp_cost_multiplier"));
+				prices->Add(new SettingEntry("underground.portal_cost_multiplier"));
+				SettingsPage *tunnels = prices->Add(new SettingsPage(STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_SOIL));
+				{
+					tunnels->Add(new SettingEntry("underground.tunnel_cost_earth"));
+					tunnels->Add(new SettingEntry("underground.tunnel_cost_clay_light"));
+					tunnels->Add(new SettingEntry("underground.tunnel_cost_clay"));
+					tunnels->Add(new SettingEntry("underground.tunnel_cost_clay_dark"));
+					tunnels->Add(new SettingEntry("underground.tunnel_cost_marble_light"));
+					tunnels->Add(new SettingEntry("underground.tunnel_cost_marble_grey"));
+					tunnels->Add(new SettingEntry("underground.tunnel_cost_granite_pink"));
+					tunnels->Add(new SettingEntry("underground.tunnel_cost_granite_grey"));
+					tunnels->Add(new SettingEntry("underground.tunnel_cost_granite_dark"));
+					tunnels->Add(new SettingEntry("underground.tunnel_cost_granite_black"));
+					tunnels->Add(new SettingEntry("underground.tunnel_cost_obsidian"));
+					tunnels->Add(new SettingEntry("underground.tunnel_cost_sand"));
+				}
+				SettingsPage *stations = prices->Add(new SettingsPage(STR_CONFIG_SETTING_UNDERGROUND_STATION_SOIL));
+				{
+					stations->Add(new SettingEntry("underground.station_cost_earth"));
+					stations->Add(new SettingEntry("underground.station_cost_clay_light"));
+					stations->Add(new SettingEntry("underground.station_cost_clay"));
+					stations->Add(new SettingEntry("underground.station_cost_clay_dark"));
+					stations->Add(new SettingEntry("underground.station_cost_marble_light"));
+					stations->Add(new SettingEntry("underground.station_cost_marble_grey"));
+					stations->Add(new SettingEntry("underground.station_cost_granite_pink"));
+					stations->Add(new SettingEntry("underground.station_cost_granite_grey"));
+					stations->Add(new SettingEntry("underground.station_cost_granite_dark"));
+					stations->Add(new SettingEntry("underground.station_cost_granite_black"));
+					stations->Add(new SettingEntry("underground.station_cost_obsidian"));
+					stations->Add(new SettingEntry("underground.station_cost_sand"));
+				}
+			}
+
+			SettingsPage *refund = underground->Add(new SettingsPage(STR_CONFIG_SETTING_UNDERGROUND_REFUND_PAGE));
+			{
+				refund->Add(new SettingEntry("underground.refund_percent"));
+				refund->Add(new SettingEntry("underground.refund_soil"));
+			}
 		}
 
 		SettingsPage *disasters = main->Add(new SettingsPage(STR_CONFIG_SETTING_ACCIDENTS));

@@ -19,6 +19,11 @@
     # Create a new target which runs the regression
     # Subdirectory targets will add themselves as dependencies
     add_custom_target(regression)
+    add_custom_target(scenario_files
+            ALL
+    )
+    add_custom_target(scenario)
 
     add_subdirectory(regression)
     add_subdirectory(stationlist)
+    add_subdirectory(scenarios)

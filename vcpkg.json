@@ -3,7 +3,7 @@
   "dependencies": [
     {
       "name": "breakpad",
-      "platform": "!(windows & arm)"
+      "platform": "!(windows)"
     },
     {
       "name": "curl",

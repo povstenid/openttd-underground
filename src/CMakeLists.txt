@@ -15,6 +15,7 @@ add_subdirectory(game)
 add_subdirectory(lang)
 add_subdirectory(linkgraph)
 add_subdirectory(misc)
+add_subdirectory(multilayer)
 add_subdirectory(music)
 add_subdirectory(network)
 add_subdirectory(newgrf)
@@ -361,6 +362,14 @@ add_files(
     palette_func.h
     pbs.cpp
     pbs.h
+    pedestrian_arrivals.cpp
+    pedestrian_arrivals.h
+    pedestrian_crowd.cpp
+    pedestrian_crowd.h
+    pedestrian_path.cpp
+    pedestrian_path.h
+    pedestrians.cpp
+    pedestrians.h
     picker_func.h
     picker_gui.cpp
     picker_gui.h

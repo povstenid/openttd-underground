@@ -382,7 +382,7 @@ STR_GOTO_ORDER_VIEW                                             :{BLACK}Orders
 STR_GOTO_ORDER_VIEW_TOOLTIP                                     :{BLACK}Open the order view
 
 # Tooltips for the main toolbar
-###length 31
+###length 32
 STR_TOOLBAR_TOOLTIP_PAUSE_GAME                                  :{BLACK}Pause game
 STR_TOOLBAR_TOOLTIP_FORWARD                                     :{BLACK}Fast forward the game
 STR_TOOLBAR_TOOLTIP_OPTIONS                                     :{BLACK}Options and settings
@@ -413,6 +413,11 @@ STR_TOOLBAR_TOOLTIP_LANDSCAPING                                 :{BLACK}Open lan
 STR_TOOLBAR_TOOLTIP_SHOW_SOUND_MUSIC_WINDOW                     :{BLACK}Open sound/music window
 STR_TOOLBAR_TOOLTIP_SHOW_LAST_MESSAGE_NEWS                      :{BLACK}Open last message/news report, messages history or delete all messages
 STR_TOOLBAR_TOOLTIP_LAND_BLOCK_INFORMATION                      :{BLACK}Open land information, screenshot menu, OpenTTD credits, or developer tools
+STR_TOOLBAR_TOOLTIP_UNDERGROUND_VIEW                            :{BLACK}Build underground: open the railway construction toolbar on the viewed underground level
+STR_TOOLBAR_TOOLTIP_UNDERGROUND_XRAY                            :{BLACK}Toggle the underground X-ray view: the surface with the underground drawn through it
+STR_TOOLBAR_TOOLTIP_UNDERGROUND_BELOW                           :{BLACK}Toggle the view of the underground levels below the viewed level, without the surface. The railway construction toolbar builds on the viewed level
+STR_TOOLBAR_TOOLTIP_UNDERGROUND_ABOVE                           :{BLACK}Toggle the view of the underground levels above the viewed level, without the surface. The railway construction toolbar builds on the viewed level
+STR_TOOLBAR_TOOLTIP_STATION_COVERAGE                            :{BLACK}Toggle the coverage overlay of all your stations
 STR_TOOLBAR_TOOLTIP_SWITCH_TOOLBAR                              :{BLACK}Switch toolbars
 
 # Extra tooltips for the scenario editor toolbar
@@ -467,6 +472,7 @@ STR_SETTINGS_MENU_FULL_ANIMATION                                :Full animation
 STR_SETTINGS_MENU_FULL_DETAIL                                   :Full detail
 STR_SETTINGS_MENU_TRANSPARENT_BUILDINGS                         :Transparent buildings
 STR_SETTINGS_MENU_TRANSPARENT_SIGNS                             :Transparent signs
+STR_SETTINGS_MENU_TRANSPARENT_PEDESTRIANS                       :Transparent pedestrians
 
 # File menu
 STR_FILE_MENU_SAVE_GAME                                         :Save game
@@ -1416,6 +1422,62 @@ STR_CONFIG_SETTING_MAX_BRIDGE_HEIGHT_HELPTEXT                   :Maximum height 
 
 STR_CONFIG_SETTING_MAX_TUNNEL_LENGTH                            :Maximum tunnel length: {STRING2}
 STR_CONFIG_SETTING_MAX_TUNNEL_LENGTH_HELPTEXT                   :Maximum length for building tunnels
+STR_CONFIG_SETTING_MAX_STATION_EXIT_DISTANCE                    :Maximum distance of a metro station exit from its platforms: {STRING2}
+STR_CONFIG_SETTING_MAX_STATION_EXIT_DISTANCE_HELPTEXT           :How far (in tiles) a surface exit (pavilion or underpass) of an underground station may be from the nearest platform of that station
+STR_CONFIG_SETTING_MAX_UNDERGROUND_DEPTH                        :Deepest underground level below the surface: {STRING2}
+STR_CONFIG_SETTING_MAX_UNDERGROUND_DEPTH_HELPTEXT               :How many levels below the surface of a tile underground construction may go. The soil (and price) depends on this depth: earth at 1, obsidian from 11
+STR_CONFIG_SETTING_UNDERGROUND_DEEPEST_TUNNEL_LEVEL             :Deepest level of tunnels: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_DEEPEST_TUNNEL_LEVEL_HELPTEXT    :The lowest absolute level underground track, ramps and portals may be built on
+STR_CONFIG_SETTING_UNDERGROUND_DEEPEST_STATION_LEVEL            :Deepest level of stations: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_DEEPEST_STATION_LEVEL_HELPTEXT   :The lowest absolute level underground station platforms may be built on. Never deeper than tunnels
+STR_CONFIG_SETTING_UNDERGROUND_SEA_TUNNELS                      :Tunnels under the sea: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_SEA_TUNNELS_HELPTEXT             :Normally underground construction goes under the sea below its water, which is 1 level deep at the shore, 2 one tile further and 3 in the open sea; like under rivers and canals. "Forbidden" keeps everything out from under the sea, at any depth
+STR_CONFIG_SETTING_UNDERGROUND_SEA_TUNNELS_FORBIDDEN            :Forbidden (stricter)
+STR_CONFIG_SETTING_UNDERGROUND_SEA_TUNNELS_BY_SEA_DEPTH         :Below the water (normal)
+STR_CONFIG_SETTING_UNDERGROUND_FOUNDATION_HIGH                  :Foundation of the tallest houses from: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_FOUNDATION_HIGH_HELPTEXT         :Houses with at least this share of the largest population per tile of all houses have a foundation of 2 levels: nothing can be built under them at depth 1 and 2
+STR_CONFIG_SETTING_UNDERGROUND_FOUNDATION_MEDIUM                :Foundation of medium houses from: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_FOUNDATION_MEDIUM_HELPTEXT       :Houses with at least this share of the largest population per tile of all houses have a foundation of 1 level. Never above the threshold of the tallest houses
+STR_CONFIG_SETTING_UNDERGROUND_BASE_COST                        :Base underground price multiplier: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_BASE_COST_HELPTEXT               :Underground construction costs the surface price of the same thing times this multiplier, times the multiplier of the soil
+STR_CONFIG_SETTING_UNDERGROUND_MULTIPLIER_WHOLE                 :×{COMMA}
+STR_CONFIG_SETTING_UNDERGROUND_MULTIPLIER_VALUE                 :×{DECIMAL}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_EARTH                :Tunnel in earth (depth 1): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_CLAY_LIGHT           :Tunnel in light clay (depth 2): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_CLAY                 :Tunnel in clay (depth 3): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_CLAY_DARK            :Tunnel in dark clay (depth 4): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_MARBLE_LIGHT         :Tunnel in light marble (depth 5): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_MARBLE_GREY          :Tunnel in grey marble (depth 6): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_GRANITE_PINK         :Tunnel in pink granite (depth 7): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_GRANITE_GREY         :Tunnel in grey granite (depth 8): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_GRANITE_DARK         :Tunnel in dark granite (depth 9): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_GRANITE_BLACK        :Tunnel in black granite (depth 10): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_OBSIDIAN             :Tunnel in obsidian (depth 11+): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_EARTH               :Station in earth (depth 1): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_CLAY_LIGHT          :Station in light clay (depth 2): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_CLAY                :Station in clay (depth 3): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_CLAY_DARK           :Station in dark clay (depth 4): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_MARBLE_LIGHT        :Station in light marble (depth 5): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_MARBLE_GREY         :Station in grey marble (depth 6): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_GRANITE_PINK        :Station in pink granite (depth 7): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_GRANITE_GREY        :Station in grey granite (depth 8): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_GRANITE_DARK        :Station in dark granite (depth 9): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_GRANITE_BLACK       :Station in black granite (depth 10): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_OBSIDIAN            :Station in obsidian (depth 11+): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_HELPTEXT             :Price multiplier of underground track, ramps and portals in this soil. Typed values are in tenths: 15 is ×1.5
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_HELPTEXT            :Price multiplier of underground station platforms in this soil, relative to the price of a surface station tile. Typed values are in tenths: 15 is ×1.5
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_SAND                 :Tunnel in sand below water (depth 1-3): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_SAND_HELPTEXT        :Price multiplier of underground track, ramps and portals in the wet sand below rivers, canals and the sea, which takes the place of the earth and the clay there down to depth 3. Typed values are in tenths: 15 is ×1.5
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_SAND                :Station in sand below water (depth 1-3): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_SAND_HELPTEXT       :Price multiplier of underground station platforms in the wet sand below rivers, canals and the sea, relative to the price of a surface station tile. Typed values are in tenths: 15 is ×1.5
+STR_CONFIG_SETTING_UNDERGROUND_RAMP_COST                        :Ramp price multiplier: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_RAMP_COST_HELPTEXT               :A ramp costs this many times underground track in the soil of its lower level. Typed values are in tenths: 15 is ×1.5
+STR_CONFIG_SETTING_UNDERGROUND_PORTAL_COST                      :Portal price multiplier: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_PORTAL_COST_HELPTEXT             :A portal costs this many times underground track in the soil of the first underground level. Typed values are in tenths: 15 is ×1.5
+STR_CONFIG_SETTING_UNDERGROUND_REFUND                           :Refund on removal: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_REFUND_HELPTEXT                  :Share of the build price returned when underground construction is removed. Never more than the build price
+STR_CONFIG_SETTING_UNDERGROUND_REFUND_SOIL                      :Soil counts in the refund: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_REFUND_SOIL_HELPTEXT             :Whether the refund on removal is a share of the price with the soil multiplier, or of the price in earth
 
 STR_CONFIG_SETTING_RAW_INDUSTRY_CONSTRUCTION_METHOD             :Manual primary industry construction method: {STRING2}
 STR_CONFIG_SETTING_RAW_INDUSTRY_CONSTRUCTION_METHOD_HELPTEXT    :Method of funding a primary industry. 'none' means it is not possible to fund any, 'prospecting' means funding is possible, but construction occurs in a random spot on the map and may as well fail, 'as other industries' means raw industries can be constructed by companies like processing industries in any position they like
@@ -1801,6 +1863,18 @@ STR_CONFIG_SETTING_DEFAULT_RAIL_TYPE_MOST_USED                  :Most used
 
 STR_CONFIG_SETTING_SHOW_TRACK_RESERVATION                       :Show path reservations for tracks: {STRING2}
 STR_CONFIG_SETTING_SHOW_TRACK_RESERVATION_HELPTEXT              :Give reserved tracks a different colour to assist in problems with trains refusing to enter path-based blocks
+STR_CONFIG_SETTING_SHOW_PEDESTRIANS                             :Pedestrians: {STRING2}
+STR_CONFIG_SETTING_SHOW_PEDESTRIANS_HELPTEXT                    :Simulate passengers walking in the streets and waiting at stations. Purely visual, they are not saved and do not affect the game. When off, nothing of them is computed. To make them transparent or hide them use the transparency options
+STR_CONFIG_SETTING_PEDESTRIAN_RATIO                             :Passengers per pedestrian: {STRING2}
+STR_CONFIG_SETTING_PEDESTRIAN_RATIO_HELPTEXT                    :How many generated passengers one walking pedestrian stands for. Higher values show fewer pedestrians
+STR_CONFIG_SETTING_PEDESTRIANS_FROM_HOUSES                      :Passengers walk from houses to stations: {STRING2}
+STR_CONFIG_SETTING_PEDESTRIANS_FROM_HOUSES_HELPTEXT             :Show the passengers a house generates walking along the streets to the station they use
+STR_CONFIG_SETTING_PEDESTRIAN_ARRIVALS                          :Passengers leaving vehicles walk to houses: {STRING2}
+STR_CONFIG_SETTING_PEDESTRIAN_ARRIVALS_HELPTEXT                 :Show the passengers a train, bus or tram delivers pouring out of it, or out of the exits of an underground station, and walking to the houses of the town
+STR_CONFIG_SETTING_PEDESTRIAN_CROWDS                            :Waiting passengers stand at stops and on platforms: {STRING2}
+STR_CONFIG_SETTING_PEDESTRIAN_CROWDS_HELPTEXT                   :Show a crowd at bus and tram stops, rail platforms and metro entrances, as large as the number of passengers waiting there
+STR_CONFIG_SETTING_PEDESTRIAN_LIMIT                             :Most pedestrians walking at once: {STRING2}
+STR_CONFIG_SETTING_PEDESTRIAN_LIMIT_HELPTEXT                    :Limit the number of walking pedestrians, for slower computers
 
 STR_CONFIG_SETTING_PERSISTENT_BUILDINGTOOLS                     :Keep building tools active after usage: {STRING2}
 STR_CONFIG_SETTING_PERSISTENT_BUILDINGTOOLS_HELPTEXT            :Keep the building tools for bridges, tunnels, etc. open after use
@@ -2182,6 +2256,7 @@ STR_CONFIG_SETTING_SOUND                                        :Sound
 STR_CONFIG_SETTING_INTERFACE                                    :Interface
 STR_CONFIG_SETTING_INTERFACE_GENERAL                            :General
 STR_CONFIG_SETTING_INTERFACE_VIEWPORTS                          :Viewports
+STR_CONFIG_SETTING_INTERFACE_PEDESTRIANS                        :Pedestrians
 STR_CONFIG_SETTING_INTERFACE_CONSTRUCTION                       :Construction
 STR_CONFIG_SETTING_ADVISORS                                     :News / Advisors
 STR_CONFIG_SETTING_COMPANY                                      :Company
@@ -2191,6 +2266,12 @@ STR_CONFIG_SETTING_VEHICLES_PHYSICS                             :Physics
 STR_CONFIG_SETTING_VEHICLES_ROUTING                             :Routing
 STR_CONFIG_SETTING_VEHICLES_ORDERS                              :Orders
 STR_CONFIG_SETTING_LIMITATIONS                                  :Limitations
+STR_CONFIG_SETTING_UNDERGROUND                                  :Underground
+STR_CONFIG_SETTING_UNDERGROUND_DEPTH                            :Depth
+STR_CONFIG_SETTING_UNDERGROUND_PRICES                           :Prices
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_SOIL                      :Tunnels by soil
+STR_CONFIG_SETTING_UNDERGROUND_STATION_SOIL                     :Stations by soil
+STR_CONFIG_SETTING_UNDERGROUND_REFUND_PAGE                      :Refund on removal
 STR_CONFIG_SETTING_ACCIDENTS                                    :Disasters / Accidents
 STR_CONFIG_SETTING_GENWORLD                                     :World generation
 STR_CONFIG_SETTING_ENVIRONMENT                                  :Environment
@@ -2765,6 +2846,7 @@ STR_TRANSPARENT_BRIDGES_TOOLTIP                                 :{BLACK}Toggle t
 STR_TRANSPARENT_STRUCTURES_TOOLTIP                              :{BLACK}Toggle transparency for structures like lighthouses and antennas. Ctrl+Click to lock
 STR_TRANSPARENT_CATENARY_TOOLTIP                                :{BLACK}Toggle transparency for catenary. Ctrl+Click to lock
 STR_TRANSPARENT_TEXT_TOOLTIP                                    :{BLACK}Toggle transparency for loading and cost/income text. Ctrl+Click to lock
+STR_TRANSPARENT_PEDESTRIANS_TOOLTIP                             :{BLACK}Toggle transparency for pedestrians and waiting passengers. Ctrl+Click to lock
 STR_TRANSPARENT_INVISIBLE_TOOLTIP                               :{BLACK}Set objects invisible instead of transparent
 
 # Linkgraph legend window
@@ -2822,6 +2904,8 @@ STR_RAIL_TOOLBAR_TOOLTIP_BUILD_RAILROAD_BRIDGE                  :{BLACK}Build ra
 STR_RAIL_TOOLBAR_TOOLTIP_BUILD_RAILROAD_TUNNEL                  :{BLACK}Build railway tunnel. Also press Shift to show cost estimate only
 STR_RAIL_TOOLBAR_TOOLTIP_TOGGLE_BUILD_REMOVE_FOR                :{BLACK}Toggle build/remove for railway track, signals, waypoints and stations. Ctrl+Click to also remove the rail of waypoints and stations
 STR_RAIL_TOOLBAR_TOOLTIP_CONVERT_RAIL                           :{BLACK}Convert/Upgrade the type of rail. Also press Shift to show cost estimate only
+STR_RAIL_TOOLBAR_TOOLTIP_PICK_RAILTYPE                          :{BLACK}Pick the track type (K): click on track, a station, bridge, tunnel or underground track to build with its track type from now on
+STR_RAIL_MENU_PICK_RAILTYPE                                     :Pick the track type of a track...
 
 STR_RAIL_NAME_RAILROAD                                          :Railway
 STR_RAIL_NAME_ELRAIL                                            :Electrified railway
@@ -3193,6 +3277,35 @@ STR_LANG_AREA_INFORMATION_RAIL_TYPE                             :{BLACK}Rail typ
 STR_LANG_AREA_INFORMATION_ROAD_TYPE                             :{BLACK}Road type: {LTBLUE}{STRING}
 STR_LANG_AREA_INFORMATION_TRAM_TYPE                             :{BLACK}Tram type: {LTBLUE}{STRING}
 STR_LANG_AREA_INFORMATION_RAIL_SPEED_LIMIT                      :{BLACK}Rail speed limit: {LTBLUE}{VELOCITY}
+STR_LAND_AREA_INFORMATION_UNDERGROUND_TRACK                     :{BLACK}Underground track, level {LTBLUE}{NUM}{BLACK} ({LTBLUE}{NUM}{BLACK} below ground, {LTBLUE}{STRING}{BLACK})
+STR_LAND_AREA_INFORMATION_UNDERGROUND_SIGNALS                   :{BLACK}Underground signals on this tile
+STR_LAND_AREA_INFORMATION_HOUSE_FOUNDATION                      :{BLACK}Foundation: {LTBLUE}{NUM} level{P "" s} below ground
+STR_LAND_AREA_INFORMATION_WATER_DEPTH                           :{BLACK}Water depth: {LTBLUE}{NUM} level{P "" s} below the surface
+STR_LAND_AREA_INFORMATION_UNDERGROUND_PLATFORM                  :{BLACK}Underground platform, level {LTBLUE}{NUM}{BLACK} ({LTBLUE}{NUM}{BLACK} below ground, {LTBLUE}{STRING}{BLACK})
+STR_LAND_AREA_INFORMATION_UNDERGROUND_PLATFORM_OF               :{BLACK}Underground platform, level {LTBLUE}{NUM}{BLACK} ({LTBLUE}{NUM}{BLACK} below ground, {LTBLUE}{STRING}{BLACK}){BLACK}: {LTBLUE}{STATION}
+STR_LAND_AREA_INFORMATION_UNDERGROUND_RAMP                      :{BLACK}Underground ramp between levels {LTBLUE}{NUM}{BLACK} and {LTBLUE}{NUM}{BLACK} ({LTBLUE}{NUM}{BLACK} below ground, {LTBLUE}{STRING}{BLACK})
+STR_LAND_AREA_INFORMATION_UNDERGROUND_PORTAL                    :{BLACK}Metro portal, level {LTBLUE}{NUM}{BLACK} ({LTBLUE}{NUM}{BLACK} below ground, {LTBLUE}{STRING}{BLACK})
+STR_LAND_AREA_INFORMATION_UNDERGROUND_PORTAL_MOUTH              :{BLACK}Metro portal, level {LTBLUE}{NUM}
+STR_UNDERGROUND_SOIL_EARTH                                      :Earth
+STR_UNDERGROUND_SOIL_CLAY_LIGHT                                 :Light clay
+STR_UNDERGROUND_SOIL_CLAY                                       :Clay
+STR_UNDERGROUND_SOIL_CLAY_DARK                                  :Dark clay
+STR_UNDERGROUND_SOIL_MARBLE_LIGHT                               :Light marble
+STR_UNDERGROUND_SOIL_MARBLE_GREY                                :Grey marble
+STR_UNDERGROUND_SOIL_GRANITE_PINK                               :Pink granite
+STR_UNDERGROUND_SOIL_GRANITE_GREY                               :Grey granite
+STR_UNDERGROUND_SOIL_GRANITE_DARK                               :Dark granite
+STR_UNDERGROUND_SOIL_GRANITE_BLACK                              :Black granite
+STR_UNDERGROUND_SOIL_OBSIDIAN                                   :Obsidian
+STR_UNDERGROUND_SOIL_SAND_LIGHT                                 :Light sand
+STR_UNDERGROUND_SOIL_SAND                                       :Sand
+STR_UNDERGROUND_SOIL_SAND_DARK                                  :Dark sand
+STR_ERROR_UNDERGROUND_STATION_TOO_DEEP                          :stations cannot be built deeper than level {NUM}
+STR_UNDERGROUND_SOIL_TOOLTIP                                    :{BLACK}{STRING}, {NUM} below ground: tunnel ×{DECIMAL}, station ×{DECIMAL}
+STR_LAND_AREA_INFORMATION_UNDERGROUND_SOIL_AT_LEVEL             :{BLACK}Level {LTBLUE}{NUM}{BLACK}: {LTBLUE}{NUM}{BLACK} below ground, {LTBLUE}{STRING}
+STR_LAND_AREA_INFORMATION_UNDERGROUND_FOUNDATION_AT_LEVEL       :{BLACK}Level {LTBLUE}{NUM}{BLACK}: {LTBLUE}{NUM}{BLACK} below ground, {LTBLUE}house foundation{BLACK} (down to {NUM} level{P "" s})
+STR_LAND_AREA_INFORMATION_UNDERGROUND_WATER_AT_LEVEL            :{BLACK}Level {LTBLUE}{NUM}{BLACK}: {LTBLUE}{NUM}{BLACK} below ground, {LTBLUE}water{BLACK} (depth {NUM} level{P "" s})
+STR_LAND_AREA_INFORMATION_UNDERGROUND_SEA_AT_LEVEL              :{BLACK}Level {LTBLUE}{NUM}{BLACK}: {LTBLUE}{NUM}{BLACK} below ground, {RED}no construction under the sea
 STR_LANG_AREA_INFORMATION_ROAD_SPEED_LIMIT                      :{BLACK}Road speed limit: {LTBLUE}{VELOCITY}
 STR_LANG_AREA_INFORMATION_TRAM_SPEED_LIMIT                      :{BLACK}Tram speed limit: {LTBLUE}{VELOCITY}
 STR_LAND_AREA_INFORMATION_TOWN_CAN_UPGRADE                      :{BLACK}Town can upgrade: {LTBLUE}Yes
@@ -4550,6 +4663,7 @@ STR_VEHICLE_STATUS_TRAIN_STUCK                                  :{ORANGE}Waiting
 STR_VEHICLE_STATUS_AIRCRAFT_TOO_FAR                             :{ORANGE}Too far to next destination
 
 STR_VEHICLE_STATUS_HEADING_FOR_STATION_VEL                      :{LTBLUE}{1:VELOCITY} - Heading for {0:STATION}
+STR_VEHICLE_STATUS_UNDERGROUND_LEVEL                            :{RAW_STRING} (underground, level -{NUM})
 STR_VEHICLE_STATUS_NO_ORDERS_VEL                                :{LTBLUE}{VELOCITY} - No orders
 STR_VEHICLE_STATUS_HEADING_FOR_WAYPOINT_VEL                     :{LTBLUE}{1:VELOCITY} - Heading for {0:WAYPOINT}
 STR_VEHICLE_STATUS_HEADING_FOR_DEPOT_VEL                        :{ORANGE}{1:VELOCITY} - Heading for {0:DEPOT}
@@ -5279,6 +5393,7 @@ STR_ERROR_IMPOSSIBLE_TRACK_COMBINATION                          :impossible trac
 STR_ERROR_MUST_REMOVE_SIGNALS_FIRST                             :must remove signals first
 STR_ERROR_NO_SUITABLE_RAILROAD_TRACK                            :no suitable railway track
 STR_ERROR_MUST_REMOVE_RAILROAD_TRACK                            :must remove railway track first
+STR_ERROR_MUST_REMOVE_PORTAL_FIRST                              :must remove metro portal first
 STR_ERROR_CROSSING_ON_ONEWAY_ROAD                               :road is one way or blocked
 STR_ERROR_CROSSING_DISALLOWED_RAIL                              :level crossings not allowed for this rail type
 STR_ERROR_CROSSING_DISALLOWED_ROAD                              :level crossings not allowed for this road type
@@ -5291,6 +5406,9 @@ STR_ERROR_THERE_IS_NO_RAILROAD_TRACK                            :there is no rai
 STR_ERROR_THERE_ARE_NO_SIGNALS                                  :there are no signals
 
 STR_ERROR_CAN_T_CONVERT_RAIL                                    :Can't convert rail type here...
+STR_ERROR_CAN_T_COPY_TRACK_TYPE                                 :Can't copy the track type...
+STR_ERROR_NO_TRACK_TO_COPY                                      :{WHITE}... there is no track here
+STR_ERROR_TRACK_TYPE_NOT_AVAILABLE                              :{WHITE}... this track type is not available to your company
 
 # Road construction errors
 STR_ERROR_MUST_REMOVE_ROAD_FIRST                                :must remove road first
@@ -5350,6 +5468,116 @@ STR_ERROR_ANOTHER_TUNNEL_IN_THE_WAY                             :another tunnel 
 STR_ERROR_TUNNEL_THROUGH_MAP_BORDER                             :tunnel would end out of the map
 STR_ERROR_UNABLE_TO_EXCAVATE_LAND                               :unable to excavate land for other end of tunnel
 STR_ERROR_TUNNEL_TOO_LONG                                       :tunnel too long
+
+# Underground / Metro
+STR_ERROR_CAN_T_BUILD_UNDERGROUND_RAIL                          :Can't build underground rail here...
+STR_ERROR_CAN_T_REMOVE_UNDERGROUND_RAIL                         :Can't remove underground rail here...
+STR_ERROR_CAN_T_BUILD_PORTAL                                    :Can't build portal here...
+STR_ERROR_CAN_T_BUILD_UNDERGROUND_STATION                       :Can't build underground station here...
+STR_ERROR_CAN_T_BUILD_STATION_EXIT                              :Can't build station exit here...
+STR_ERROR_CAN_T_BUILD_RAMP                                      :Can't build ramp here...
+STR_ERROR_UNDERGROUND_DEPTH_INVALID                             :underground depth must be below the surface
+STR_ERROR_UNDERGROUND_TOO_DEEP                                  :too deep underground
+STR_ERROR_UNDERGROUND_IN_THE_WAY                                :underground construction in the way
+STR_ERROR_UNDERGROUND_SOMETHING_IN_THE_WAY                      :another underground structure in the way at this depth
+STR_ERROR_UNDERGROUND_RAIL_TYPE_MISMATCH                        :rail type mismatch at this depth
+STR_ERROR_UNDERGROUND_RAMP_MUST_SPAN_ADJACENT_LEVELS            :ramp must connect two adjacent levels
+STR_ERROR_UNDERGROUND_PORTAL_ALREADY_HERE                       :there is already a metro portal here
+STR_ERROR_UNDERGROUND_NO_PORTAL_HERE                            :there is no metro portal here
+STR_ERROR_UNDERGROUND_NO_STATION_HERE                           :there is no underground station here
+STR_ERROR_UNDERGROUND_NO_RAMP_HERE                              :there is no ramp here
+STR_ERROR_UNDERGROUND_NOTHING_TO_REMOVE                         :nothing to remove at this depth
+STR_ERROR_UNDERGROUND_PORTAL_NEEDS_STRAIGHT_TRACK               :a tunnel mouth needs a straight track
+STR_ERROR_UNDERGROUND_PORTAL_TRACK_ONLY                         :only the metro portal's own track can be laid on its tile
+STR_ERROR_CAN_T_REMOVE_STATION_EXIT                             :Can't remove station exit here...
+STR_ERROR_UNDERGROUND_EXIT_TOO_FAR_FROM_PLATFORM                :exit too far from the station's platforms
+STR_ERROR_UNDERGROUND_EXIT_NEEDS_STRAIGHT_ROAD                  :an underpass needs a straight road without junctions
+STR_ERROR_UNDERGROUND_EXIT_ALREADY_HERE                         :there is already a station exit here
+STR_ERROR_UNDERGROUND_NO_EXIT_HERE                              :there is no station exit here
+STR_ERROR_UNDERGROUND_MUST_REMOVE_EXIT_FIRST                    :remove the metro station exit first
+STR_ERROR_UNDERGROUND_HOUSE_FOUNDATION                          :building foundation here (down to {NUM} level{P "" s} below ground)
+STR_ERROR_UNDERGROUND_WATER_TOO_SHALLOW                         :too shallow under the water: must be deeper than {NUM} level{P "" s} here
+STR_ERROR_UNDERGROUND_UNDER_SEA                                 :no underground construction under the sea
+STR_UNDERGROUND_LEVEL_SURFACE                                   :Surface
+STR_UNDERGROUND_TOOLTIP_LEVEL                                   :{BLACK}The level the tools build on: the surface, or the height of the viewed underground level. Click to switch between the surface and the underground
+STR_UNDERGROUND_TOOLTIP_LEVEL_DOWN                              :{BLACK}Build one level deeper. On the surface: go underground, to the level viewed last
+STR_UNDERGROUND_TOOLTIP_LEVEL_UP                                :{BLACK}Build one level higher. From the highest level: back to the surface
+STR_UNDERGROUND_TOOLTIP_PORTAL                                  :{BLACK}Build a portal between the surface and the underground. On flat ground the line dives two levels into the ground, on a hillside the tunnel starts at the foot of the slope. Drag in the direction of travel into the tunnel; a click turns it to the line next to it
+STR_UNDERGROUND_TOOLTIP_SHOW_ABOVE                              :{BLACK}Toggle the view of the levels above the viewed level: they are drawn in full at their own depth, the surface is hidden. Building stays on the viewed level
+STR_UNDERGROUND_TOOLTIP_SHOW_BELOW                              :{BLACK}Toggle the view of the levels below the viewed level: they are drawn in full at their own depth, the surface is hidden. Building stays on the viewed level
+STR_UNDERGROUND_TOOLTIP_XRAY                                    :{BLACK}Toggle X-ray view: show the surface with the viewed underground level drawn through it; the tools build on that level
+STR_UNDERGROUND_TOOLTIP_REMOVE_TOGGLE                           :{BLACK}Toggle build/remove for underground track and signals (also signals on ramps between levels). Holding Ctrl with the track tool removes track too
+STR_UNDERGROUND_TOOLTIP_RAMP_DOWN                               :{BLACK}Build a ramp to the level below. It descends towards the tile edge nearest to the cursor, as its ghost shows (red: cannot be built there). Dragging from the ramp's tile along a line leads it down towards the drag
+STR_UNDERGROUND_TOOLTIP_RAMP_UP                                 :{BLACK}Build a ramp to the level above. It rises towards the tile edge nearest to the cursor, as its ghost shows (red: cannot be built there). Dragging from the ramp's tile along a line leads it up towards the drag
+STR_UNDERGROUND_TOOLTIP_EXIT_PAVILION                           :{BLACK}Build a station exit pavilion: a station building on a free surface tile or on a town house, which is demolished, within the exit distance limit (see settings) of the platforms of the nearest underground station. Catchment radius 3
+STR_UNDERGROUND_TOOLTIP_DEMOLISH                                :{BLACK}Demolish underground track, stations, signals, portals and ramps on the viewed level. Ctrl+Click+Drag to demolish buildings etc. on the surface instead. Also press Shift to show cost estimate only
+STR_UNDERGROUND_TOOLTIP_EXIT_UNDERPASS                          :{BLACK}Build a station exit underpass: stairs on a straight road tile within the exit distance limit (see settings) of the platforms of the nearest underground station; the road stays usable. Catchment radius 2
+# Metro blueprints
+STR_BLUEPRINT_CAPTION                                           :{WHITE}Metro blueprints
+STR_BLUEPRINT_COPY                                              :Copy
+STR_BLUEPRINT_COPY_TOOLTIP                                      :{BLACK}Copy an area into the clipboard: drag a rectangle. The levels copied are chosen below; the viewed level becomes the level the blueprint is pasted on
+STR_BLUEPRINT_PASTE                                             :Paste
+STR_BLUEPRINT_PASTE_TOOLTIP                                     :{BLACK}Paste the clipboard: the north corner of the blueprint goes to the tile clicked, its level to the viewed level. R and Shift+R turn it, M mirrors it. Ctrl+Click joins its stations to an adjacent own station, Shift+Click shows the cost estimate only
+STR_BLUEPRINT_ROTATE_LEFT                                       :Turn left
+STR_BLUEPRINT_ROTATE_LEFT_TOOLTIP                               :{BLACK}Turn the blueprint a quarter to the left (hotkey R)
+STR_BLUEPRINT_ROTATE_RIGHT                                      :Turn right
+STR_BLUEPRINT_ROTATE_RIGHT_TOOLTIP                              :{BLACK}Turn the blueprint a quarter to the right (hotkey Shift+R)
+STR_BLUEPRINT_MIRROR                                            :Mirror
+STR_BLUEPRINT_MIRROR_TOOLTIP                                    :{BLACK}Mirror the blueprint (hotkey M)
+STR_BLUEPRINT_LEVELS                                            :{BLACK}Levels:
+STR_BLUEPRINT_LEVELS_AUTO                                       :All
+STR_BLUEPRINT_LEVELS_AUTO_TOOLTIP                               :{BLACK}Copy every underground level with construction in the area. Off: copy the levels from the top to the bottom level set here
+STR_BLUEPRINT_LEVEL_TOP                                         :{BLACK}top {NUM}
+STR_BLUEPRINT_LEVEL_BOTTOM                                      :{BLACK}bottom {NUM}
+STR_BLUEPRINT_LEVEL_TOOLTIP                                     :{BLACK}Top and bottom underground level to copy
+STR_BLUEPRINT_SURFACE                                           :Surface
+STR_BLUEPRINT_SURFACE_TOOLTIP                                   :{BLACK}Copy up to the surface: every level above the bottom level, and on the surface rail, signals, depots and the exits of the stations copied
+STR_BLUEPRINT_JOIN                                              :Join stations
+STR_BLUEPRINT_JOIN_TOOLTIP                                      :{BLACK}Join the pasted stations to an own station next to them instead of building new stations (also Ctrl+Click)
+STR_BLUEPRINT_BEST_EFFORT                                       :Build what fits
+STR_BLUEPRINT_BEST_EFFORT_TOOLTIP                               :{BLACK}Leave out the pieces that cannot be built. Off: nothing is built when anything is in the way or the money does not suffice
+STR_BLUEPRINT_TOOLBAR_RAILTYPE                                  :Toolbar track
+STR_BLUEPRINT_TOOLBAR_RAILTYPE_TOOLTIP                          :{BLACK}Build every piece with the track type last used in the railway construction toolbar instead of the blueprint's own
+STR_BLUEPRINT_INFO_NONE                                         :{BLACK}The clipboard is empty: copy an area or pick a blueprint from the list
+STR_BLUEPRINT_INFO                                              :{BLACK}{RAW_STRING}: {NUM}×{NUM} tiles, {NUM} pieces, stations: {NUM}
+STR_BLUEPRINT_INFO_LEVELS                                       :{BLACK}Underground levels {NUM} to {NUM} from the level it is pasted on
+STR_BLUEPRINT_INFO_SURFACE                                      :{BLACK}With construction on the surface
+STR_BLUEPRINT_INFO_TRANSFORM                                    :{BLACK}Turned by {NUM}°
+STR_BLUEPRINT_INFO_TRANSFORM_MIRRORED                           :{BLACK}Turned by {NUM}°, mirrored
+STR_BLUEPRINT_UNNAMED                                           :Clipboard
+STR_BLUEPRINT_LIST_TOOLTIP                                      :{BLACK}Blueprints in the "blueprint" folders. Click to take one into the clipboard, double-click to paste it
+STR_BLUEPRINT_LIST_ENTRY                                        :{RAW_STRING}  {GRAY}{NUM}×{NUM}
+STR_BLUEPRINT_LIST_EMPTY                                        :{GRAY}No blueprints saved yet
+STR_BLUEPRINT_SAVE                                              :Save
+STR_BLUEPRINT_SAVE_TOOLTIP                                      :{BLACK}Save the clipboard in the "blueprint" folder; a blueprint of the same name is replaced
+STR_BLUEPRINT_SAVE_QUERY                                        :{WHITE}Name of the blueprint
+STR_BLUEPRINT_DELETE                                            :Delete
+STR_BLUEPRINT_DELETE_TOOLTIP                                    :{BLACK}Delete the selected blueprint from disk
+STR_BLUEPRINT_DELETE_QUERY_CAPTION                              :{WHITE}Delete blueprint
+STR_BLUEPRINT_DELETE_QUERY_TEXT                                 :{YELLOW}Delete the blueprint "{RAW_STRING}" from disk?
+STR_BLUEPRINT_RESCAN                                            :Rescan
+STR_BLUEPRINT_RESCAN_TOOLTIP                                    :{BLACK}Read the blueprints from the "blueprint" folders again
+STR_BLUEPRINT_EXPORT                                            :Copy as text
+STR_BLUEPRINT_EXPORT_TOOLTIP                                    :{BLACK}Put the clipboard on the system clipboard as one line of text, to share it
+STR_BLUEPRINT_IMPORT                                            :Paste text
+STR_BLUEPRINT_IMPORT_TOOLTIP                                    :{BLACK}Take a blueprint from text on the system clipboard: a shared line of text or the JSON of a blueprint file
+STR_BLUEPRINT_EXPORTED                                          :{WHITE}The blueprint is on the system clipboard as text
+STR_BLUEPRINT_EXPORTED_CONSOLE                                  :{WHITE}The blueprint text is in the console
+STR_ERROR_CAN_T_COPY_BLUEPRINT                                  :Can't copy blueprint...
+STR_ERROR_BLUEPRINT_NOTHING_TO_COPY                             :there is nothing to copy in this area
+STR_ERROR_CAN_T_PASTE_BLUEPRINT                                 :Can't paste blueprint here...
+STR_ERROR_BLUEPRINT_EMPTY                                       :the blueprint is empty
+STR_ERROR_BLUEPRINT_UNKNOWN_RAIL_TYPE                           :the blueprint uses a track type this game does not have
+STR_ERROR_BLUEPRINT_NOTHING_BUILT                               :nothing of the blueprint could be built
+STR_ERROR_CAN_T_LOAD_BLUEPRINT                                  :Can't take the blueprint...
+STR_ERROR_CAN_T_SAVE_BLUEPRINT                                  :Can't save the blueprint...
+STR_ERROR_BLUEPRINT_INVALID_TEXT                                :{RAW_STRING}
+STR_ERROR_BLUEPRINT_TOO_BIG                                     :the blueprint is too big to paste at once
+STR_ERROR_BLUEPRINT_STILL_PASTING                               :the previous blueprint is still being pasted
+STR_BLUEPRINT_PASTE_STOPPED                                     :{WHITE}Pasting the blueprint stopped after part {NUM} of {NUM}
+STR_BLUEPRINT_PASTE_INCOMPLETE                                  :{WHITE}The blueprint was built only in part: pieces built {NUM}, left out {NUM}
+STR_RAIL_TOOLBAR_BLUEPRINTS                                     :BP
+STR_RAIL_TOOLBAR_TOOLTIP_BLUEPRINTS                             :{BLACK}Metro blueprints: copy construction on several levels and paste it elsewhere (Ctrl+B)
 
 # Object related errors
 STR_ERROR_TOO_MANY_OBJECTS                                      :too many objects

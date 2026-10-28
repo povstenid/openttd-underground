@@ -22,6 +22,7 @@
 #include "timer/timer_game_calendar.h"
 #include "timer/timer_game_economy.h"
 #include "vehicle_func.h"
+#include "train.h"
 #include "sound_func.h"
 #include "ai/ai.hpp"
 #include "game/game.hpp"
@@ -581,7 +582,8 @@ static bool RoadVehCheckTrainCrash(RoadVehicle *v)
 		if (!IsLevelCrossingTile(tile)) continue;
 
 		if (HasVehicleNearTileXY(v->x_pos, v->y_pos, 4, [&u](const Vehicle *t) {
-				return t->type == VEH_TRAIN && abs(t->z_pos - u->z_pos) <= 6;
+				/* Underground trains pass below the crossing. */
+				return t->type == VEH_TRAIN && abs(t->z_pos - u->z_pos) <= 6 && IsVehicleOnSurfaceLayer(t);
 			})) {
 			RoadVehCrash(v);
 			return true;

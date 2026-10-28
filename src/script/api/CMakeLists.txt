@@ -185,6 +185,7 @@ add_files(
     script_log_types.hpp
     script_map.hpp
     script_marine.hpp
+    script_metro.hpp
     script_newgrf.hpp
     script_news.hpp
     script_object.hpp
@@ -205,6 +206,7 @@ add_files(
     script_storypageelementlist.hpp
     script_subsidy.hpp
     script_subsidylist.hpp
+    script_test.hpp
     script_testmode.hpp
     script_text.hpp
     script_tile.hpp
@@ -257,6 +259,7 @@ add_files(
     script_log.cpp
     script_map.cpp
     script_marine.cpp
+    script_metro.cpp
     script_newgrf.cpp
     script_news.cpp
     script_object.cpp
@@ -277,6 +280,7 @@ add_files(
     script_storypageelementlist.cpp
     script_subsidy.cpp
     script_subsidylist.cpp
+    script_test.cpp
     script_testmode.cpp
     script_text.cpp
     script_tile.cpp

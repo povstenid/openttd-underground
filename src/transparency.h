@@ -30,6 +30,7 @@ enum TransparencyOption : uint8_t {
 	TO_STRUCTURES, ///< other objects such as transmitters and lighthouses
 	TO_CATENARY,   ///< catenary
 	TO_TEXT,       ///< loading and cost/income text
+	TO_PEDESTRIANS, ///< pedestrians and waiting passengers
 	TO_END,
 	TO_INVALID,    ///< Invalid transparency option
 };

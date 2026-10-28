@@ -1,3 +1,41 @@
+# OpenTTD Underground
+
+A fork of [OpenTTD](https://www.openttd.org) with a multi-level underground: metro lines, stations, portals and ramps below the map, with their own signals, soil and building rules. It is an experimental fork: its savegames cannot be loaded by vanilla OpenTTD.
+
+- **Player guide:** https://povstenid.github.io/openttd-underground/ (the source is in [site/](site/))
+- **Play in the browser:** https://povstenid.github.io/openttd-underground/play/
+- **Downloads** for Windows, Linux and Android TV: [Releases](https://github.com/povstenid/openttd-underground/releases)
+
+![A city on the surface](docs/screenshots/01_surface_city.png)
+![The same city in the X-ray view](docs/screenshots/02_xray_red_line.png)
+![The underground level in the slice view](docs/screenshots/04_slice_red_level.png)
+
+## What it adds
+
+- **Underground levels.** Every map column holds several levels below the surface. Track, stations, portals and ramps between levels are built on the level being viewed.
+- **Views.** X-ray (the surface with the underground drawn through it), a slice view cut at the viewed level, and views of the levels below or above it without the surface.
+- **One railway toolbar** for the surface and the underground: level buttons (PgUp/PgDn), portal and ramp tools with a preview of their direction, station exits (a pavilion building or stairs on a road), a track type picker.
+- **Signals underground**: all vanilla signal types, on track and on ramps, path reservations with per-track ownership, portals that let a train out only when the way on is free.
+- **Soil.** The ground below is coloured by depth, from earth and clay down to marble, granite and obsidian, and building gets more expensive the deeper it goes. Prices, depth limits and refunds are set on the "Underground" settings page.
+- **Building rules.** Tall houses have foundations (drawn as underground car parks) that tunnels cannot cross; rivers, canals and the sea have a water column that tunnels must pass below.
+- **Tunnels look like tunnels**: steel ribs, a cable tray and an evacuation walkway.
+- **Blueprints**: copy an area with all its underground levels and paste it elsewhere (Ctrl+B).
+- **Tests**: game-script scenarios for the metro under `regression/scenarios/metro_*`, see [docs/metro_scenario_tests.md](docs/metro_scenario_tests.md).
+
+More detail: [docs/metro_v2_spec.md](docs/metro_v2_spec.md) (in Russian), [docs/metro_blueprints.md](docs/metro_blueprints.md).
+
+## Building
+
+Build it like OpenTTD (see [COMPILING.md](COMPILING.md)). The metro sprites are generated into `openttd.grf` with grfcodec: pass `-DGRFCODEC_EXECUTABLE=` and `-DNFORENUM_EXECUTABLE=` to CMake (Windows binaries are in `tools/grfcodec`), otherwise the build falls back to a base set without the metro sprites.
+
+## Кратко по-русски
+
+Форк OpenTTD с многоуровневой подземкой: линии метро, станции, порталы и пандусы под картой, свои сигналы, грунт по глубине и правила застройки (фундаменты домов, глубина воды). Сейвы несовместимы с обычным OpenTTD.
+
+The rest of this file is the original OpenTTD README.
+
+---
+
 # OpenTTD
 
 ## Table of contents

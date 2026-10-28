@@ -28,6 +28,19 @@ enum RailToolbarWidgets : WidgetID {
 	WID_RAT_BUILD_TUNNEL,   ///< Build a tunnel.
 	WID_RAT_REMOVE,         ///< Bulldozer to remove rail.
 	WID_RAT_CONVERT_RAIL,   ///< Convert other rail to this type.
+	WID_RAT_PICK_RAILTYPE,  ///< Copy the track type of a tile.
+	WID_RAT_BUILD_EXIT_PAVILION,  ///< Build a pavilion exit of an underground station.
+	WID_RAT_BUILD_EXIT_UNDERPASS, ///< Build an underpass exit of an underground station.
+	WID_RAT_BUILD_PORTAL,    ///< Build a portal between the surface and the underground.
+	WID_RAT_BUILD_RAMP_DOWN, ///< Build a ramp to the underground level below.
+	WID_RAT_BUILD_RAMP_UP,   ///< Build a ramp to the underground level above.
+	WID_RAT_XRAY,            ///< Toggle the X-ray view of the viewed underground level.
+	WID_RAT_SHOW_ABOVE,      ///< Toggle the view of the levels above the viewed underground level.
+	WID_RAT_SHOW_BELOW,      ///< Toggle the view of the levels below the viewed underground level.
+	WID_RAT_LEVEL_DOWN,      ///< Build one level deeper; from the surface, go underground.
+	WID_RAT_LEVEL,           ///< The level the tools build on; switches between the surface and the underground.
+	WID_RAT_LEVEL_UP,        ///< Build one level higher; from the highest level, on the surface.
+	WID_RAT_BLUEPRINTS,      ///< Open the metro blueprints window.
 };
 
 /** Widgets of the #BuildRailStationWindow class. */

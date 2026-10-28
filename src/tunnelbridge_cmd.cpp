@@ -39,6 +39,7 @@
 #include "tunnelbridge_cmd.h"
 #include "landscape_cmd.h"
 #include "terraform_cmd.h"
+#include "multilayer/underground_conflict.h"
 
 #include "table/strings.h"
 #include "table/bridge_land.h"
@@ -683,6 +684,12 @@ CommandCost CmdBuildTunnel(DoCommandFlags flags, TileIndex start_tile, Transport
 
 	if (HasTileWaterGround(start_tile)) return CommandCost(STR_ERROR_CAN_T_BUILD_ON_WATER);
 
+	/* A metro portal at the entrance would be destroyed by clearing the tile. */
+	if (HasUndergroundPortal(start_tile)) return CommandCost(STR_ERROR_ANOTHER_TUNNEL_IN_THE_WAY);
+	if (!_cheats.crossing_tunnels.value && HasUndergroundSliceAtZ(start_tile, start_z)) {
+		return CommandCost(STR_ERROR_ANOTHER_TUNNEL_IN_THE_WAY);
+	}
+
 	CommandCost ret = Command<Commands::LandscapeClear>::Do(flags, start_tile);
 	if (ret.Failed()) return ret;
 
@@ -722,6 +729,12 @@ CommandCost CmdBuildTunnel(DoCommandFlags flags, TileIndex start_tile, Transport
 			return CommandCost(STR_ERROR_ANOTHER_TUNNEL_IN_THE_WAY);
 		}
 
+		/* Underground (metro) slices at the tunnel's level block it like another tunnel.
+		 * Both start_z and metro depths are in TileHeight units. */
+		if (!_cheats.crossing_tunnels.value && HasUndergroundSliceAtZ(end_tile, start_z)) {
+			return CommandCost(STR_ERROR_ANOTHER_TUNNEL_IN_THE_WAY);
+		}
+
 		tiles++;
 		if (tiles == tiles_bump) {
 			tiles_coef++;
@@ -742,6 +755,12 @@ CommandCost CmdBuildTunnel(DoCommandFlags flags, TileIndex start_tile, Transport
 	if (tiles > _settings_game.construction.max_tunnel_length) return CommandCost(STR_ERROR_TUNNEL_TOO_LONG);
 
 	if (HasTileWaterGround(end_tile)) return CommandCost(STR_ERROR_CAN_T_BUILD_ON_WATER);
+
+	/* A metro portal at the exit would be destroyed by clearing the tile. */
+	if (HasUndergroundPortal(end_tile)) return CommandCost(STR_ERROR_ANOTHER_TUNNEL_IN_THE_WAY);
+	if (!_cheats.crossing_tunnels.value && HasUndergroundSliceAtZ(end_tile, end_z)) {
+		return CommandCost(STR_ERROR_ANOTHER_TUNNEL_IN_THE_WAY);
+	}
 
 	/* Clear the tile in any case */
 	ret = Command<Commands::LandscapeClear>::Do(flags, end_tile);

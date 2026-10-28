@@ -35,6 +35,9 @@
 #include "order_cmd.h"
 #include "company_cmd.h"
 #include "core/string_consumer.hpp"
+#include "multilayer/multilayer_map.h"
+#include "multilayer/station_complex.h"
+#include "multilayer/underground_view.h"
 
 #include "widgets/order_widget.h"
 
@@ -368,6 +371,51 @@ static Order GetOrderCmdFromTile(const Vehicle *v, TileIndex tile)
 {
 	Order order{};
 
+	auto make_station_order = [&](StationID station_id) -> bool {
+		const Station *st = Station::GetIfValid(station_id);
+		if (st == nullptr || (st->owner != _local_company && st->owner != OWNER_NONE)) return false;
+
+		StationFacilities facil;
+		switch (v->type) {
+			case VEH_SHIP:     facil = StationFacility::Dock;    break;
+			case VEH_TRAIN:    facil = StationFacility::Train;   break;
+			case VEH_AIRCRAFT: facil = StationFacility::Airport; break;
+			case VEH_ROAD:     facil = {StationFacility::BusStop, StationFacility::TruckStop}; break;
+			default: NOT_REACHED();
+		}
+
+		if (!st->facilities.Any(facil)) return false;
+
+		order.MakeGoToStation(st->index);
+		if (_ctrl_pressed) order.SetLoadType(OrderLoadType::FullLoadAny);
+		if (_settings_client.gui.new_nonstop && v->IsGroundVehicle()) order.SetNonStopType(OrderNonStopFlag::NoIntermediate);
+		order.SetStopLocation(v->type == VEH_TRAIN ? (OrderStopLocation)(_settings_client.gui.stop_location) : OrderStopLocation::FarEnd);
+		return true;
+	};
+
+	auto find_underground_station = [&]() -> StationID {
+		if (v->type != VEH_TRAIN) return StationID::Invalid();
+
+		if (IsUndergroundViewActive()) {
+			SliceID sid = _multilayer_map.FindSliceAt(tile, GetUndergroundViewDepth());
+			if (sid != INVALID_SLICE_ID) {
+				const TileSlice &slice = _multilayer_map.GetSlice(sid);
+				if (slice.kind == SliceKind::StationTile) return StationID(slice.station.station_id);
+			}
+		}
+
+		for (const auto &[station_id_raw, complex] : _station_complexes) {
+			for (const auto &node : complex.nodes) {
+				if (node.ref.tile != tile) continue;
+				if (node.role == StationRole::ExitSurface || node.role == StationRole::Platform) {
+					return StationID(station_id_raw);
+				}
+			}
+		}
+
+		return StationID::Invalid();
+	};
+
 	/* check depot first */
 	if (IsDepotTypeTile(tile, (TransportType)(uint)v->type) && IsTileOwner(tile, _local_company)) {
 		order.MakeGoToDepot(GetDepotDestinationIndex(tile),
@@ -416,24 +464,13 @@ static Order GetOrderCmdFromTile(const Vehicle *v, TileIndex tile)
 			const Industry *in = Industry::GetByTile(tile);
 			st = in->neutral_station;
 		}
-		if (st != nullptr && (st->owner == _local_company || st->owner == OWNER_NONE)) {
-			StationFacilities facil;
-			switch (v->type) {
-				case VEH_SHIP:     facil = StationFacility::Dock;    break;
-				case VEH_TRAIN:    facil = StationFacility::Train;   break;
-				case VEH_AIRCRAFT: facil = StationFacility::Airport; break;
-				case VEH_ROAD:     facil = {StationFacility::BusStop, StationFacility::TruckStop}; break;
-				default: NOT_REACHED();
-			}
-			if (st->facilities.Any(facil)) {
-				order.MakeGoToStation(st->index);
-				if (_ctrl_pressed) order.SetLoadType(OrderLoadType::FullLoadAny);
-				if (_settings_client.gui.new_nonstop && v->IsGroundVehicle()) order.SetNonStopType(OrderNonStopFlag::NoIntermediate);
-				order.SetStopLocation(v->type == VEH_TRAIN ? (OrderStopLocation)(_settings_client.gui.stop_location) : OrderStopLocation::FarEnd);
-				return order;
-			}
+		if (st != nullptr && make_station_order(st->index)) {
+			return order;
 		}
 	}
+
+	StationID underground_station = find_underground_station();
+	if (Station::IsValidID(underground_station) && make_station_order(underground_station)) return order;
 
 	/* not found */
 	order.Free();

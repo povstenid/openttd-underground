@@ -18,6 +18,7 @@
 #include "engine_base.h"
 #include "rail_map.h"
 #include "ground_vehicle.hpp"
+#include "multilayer/multilayer_map.h"
 
 struct Train;
 
@@ -110,10 +111,56 @@ struct Train final : public GroundVehicle<Train, VEH_TRAIN> {
 	TrackBits track{}; ///< On which track the train currently is.
 	TrainForceProceeding force_proceed{}; ///< How the train should behave when it encounters next obstacle.
 
+	/* Underground/metro fields. */
+	bool IsUnderground() const { return this->underground_slice != 0 || this->underground_depth != 0; }
+
+	/**
+	 * Is this train part physically on the surface layer?
+	 * A part on the portal tile column carries the portal slice (and so
+	 * IsUnderground()), but it is still running on the surface rails of the
+	 * portal tile and must interact with surface vehicles, crossings and
+	 * signals like any surface train.
+	 */
+	bool IsOnSurfaceLayer() const
+	{
+		if (!this->IsUnderground()) return true;
+		SliceID sid = static_cast<SliceID>(this->underground_slice);
+		return sid != 0 && _multilayer_map.IsValidSlice(sid) && _multilayer_map.GetSlice(sid).kind == SliceKind::Portal;
+	}
+
+	int16_t underground_depth = 0;      ///< Current underground absolute z level (0 means sea level, not surface).
+	uint32_t underground_slice = 0;     ///< Current SliceID when underground.
+	uint32_t underground_tile_raw = 0;  ///< TileIndex.base() of current underground tile.
+
+	/**
+	 * Get the rail type currently powering this train.
+	 * Underground trains must use the railtype stored in the active slice,
+	 * not the mirrored surface tile beneath them.
+	 */
+	inline RailType GetCurrentRailType() const
+	{
+		if (this->IsUnderground() && this->underground_slice != 0 &&
+				_multilayer_map.IsValidSlice(static_cast<SliceID>(this->underground_slice))) {
+			const TileSlice &slice = _multilayer_map.GetSlice(static_cast<SliceID>(this->underground_slice));
+			uint8_t raw = 0xFF;
+			switch (slice.kind) {
+				case SliceKind::Track: raw = slice.track.railtype; break;
+				case SliceKind::StationTile: raw = slice.station.railtype; break;
+				case SliceKind::Ramp: raw = slice.ramp.railtype; break;
+				default: break;
+			}
+			if (raw < RAILTYPE_END) return static_cast<RailType>(raw);
+		}
+
+		/* The tile above an underground part need not carry rail at all. */
+		RailType rt = GetTileRailType(this->tile);
+		return rt != INVALID_RAILTYPE ? rt : RAILTYPE_RAIL;
+	}
+
 	/** Create new Train object. @copydoc GroundVehicle::GroundVehicle */
 	Train(VehicleID index) : GroundVehicleBase(index) {}
 	/** We want to 'destruct' the right class. */
-	~Train() override { this->PreDestructor(); }
+	~Train() override;  /* Defined in train_cmd.cpp — also cleans up underground state. */
 
 	friend struct GroundVehicle<Train, VEH_TRAIN>; // GroundVehicle needs to use the acceleration functions defined at Train.
 
@@ -192,7 +239,7 @@ struct Train final : public GroundVehicle<Train, VEH_TRAIN> {
 	 */
 	inline VehicleAccelerationModel GetAccelerationType() const
 	{
-		return GetRailTypeInfo(GetRailType(this->tile))->acceleration_type;
+		return GetRailTypeInfo(this->GetCurrentRailType())->acceleration_type;
 	}
 
 protected: // These functions should not be called outside acceleration code.
@@ -204,7 +251,7 @@ protected: // These functions should not be called outside acceleration code.
 	inline uint16_t GetPower() const
 	{
 		/* Power is not added for articulated parts */
-		if (!this->IsArticulatedPart() && HasPowerOnRail(this->railtypes, GetRailType(this->tile))) {
+		if (!this->IsArticulatedPart() && HasPowerOnRail(this->railtypes, this->GetCurrentRailType())) {
 			uint16_t power = GetVehicleProperty(this, PROP_TRAIN_POWER, RailVehInfo(this->engine_type)->power);
 			/* Halve power for multiheaded parts */
 			if (this->IsMultiheaded()) power /= 2;
@@ -221,7 +268,7 @@ protected: // These functions should not be called outside acceleration code.
 	inline uint16_t GetPoweredPartPower() const
 	{
 		/* For powered wagons the engine defines the type of engine (i.e. railtype) */
-		if (this->flags.Test(VehicleRailFlag::PoweredWagon) && HasPowerOnRail(this->railtypes, GetRailType(this->tile))) {
+		if (this->flags.Test(VehicleRailFlag::PoweredWagon) && HasPowerOnRail(this->railtypes, this->GetCurrentRailType())) {
 			return RailVehInfo(this->gcache.first_engine)->pow_wag_power;
 		}
 
@@ -328,7 +375,7 @@ protected: // These functions should not be called outside acceleration code.
 	 */
 	inline uint16_t GetMaxTrackSpeed() const
 	{
-		return GetRailTypeInfo(GetRailType(this->tile))->max_speed;
+		return GetRailTypeInfo(this->GetCurrentRailType())->max_speed;
 	}
 
 	/**
@@ -360,5 +407,35 @@ protected: // These functions should not be called outside acceleration code.
 		return false;
 	}
 };
+
+/**
+ * Is the vehicle on the surface layer of the map?
+ * Underground trains share the surface vehicle tile hash (their tile is the
+ * surface tile above them), so every per-tile vehicle enumeration that is
+ * about the surface (collisions, crossings, signals, reservations, terrain
+ * checks, flooding, disasters) must filter with this predicate.
+ * @param v The vehicle to check.
+ * @return \c true for every non-train vehicle, for surface trains and for
+ *         train parts that are on a portal tile column.
+ */
+inline bool IsVehicleOnSurfaceLayer(const Vehicle *v)
+{
+	return v->type != VEH_TRAIN || Train::From(v)->IsOnSurfaceLayer();
+}
+
+/**
+ * Do two train parts run on the same layer, i.e. can they physically touch?
+ * @param a First train part.
+ * @param b Second train part.
+ * @return \c true if both are on the surface layer, or both are underground
+ *         (off the portal column) at the same depth.
+ */
+inline bool TrainsShareLayer(const Train *a, const Train *b)
+{
+	bool a_surface = a->IsOnSurfaceLayer();
+	bool b_surface = b->IsOnSurfaceLayer();
+	if (a_surface || b_surface) return a_surface == b_surface;
+	return a->underground_depth == b->underground_depth;
+}
 
 #endif /* TRAIN_H */

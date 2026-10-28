@@ -42,6 +42,7 @@
 #include "road_cmd.h"
 #include "landscape_cmd.h"
 #include "rail_cmd.h"
+#include "multilayer/underground_cmd.h"
 
 #include "table/strings.h"
 #include "table/roadtypes.h"
@@ -726,6 +727,12 @@ CommandCost CmdBuildRoad(DoCommandFlags flags, TileIndex tile, RoadBits pieces, 
 			}
 
 			if (GetRailTileType(tile) != RailTileType::Normal) goto do_clear;
+
+			/* A level crossing on a metro portal's surface rail would orphan the portal. */
+			{
+				CommandCost portal_ret = CheckPortalSurfaceRailRemoval(tile, TRACK_BIT_ALL, flags);
+				if (portal_ret.Failed()) return portal_ret;
+			}
 
 			if (RoadNoLevelCrossing(rt)) {
 				return CommandCost(STR_ERROR_CROSSING_DISALLOWED_ROAD);

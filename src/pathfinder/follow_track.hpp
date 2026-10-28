@@ -18,6 +18,8 @@
 #include "../tunnelbridge_map.h"
 #include "../depot_map.h"
 #include "pathfinder_func.h"
+#include "../multilayer/portal_registry.h"
+#include "../debug.h"
 
 /**
  * Track follower helper template class (can serve pathfinders and vehicle
@@ -45,6 +47,7 @@ struct CFollowTrackT {
 	bool is_tunnel; ///< last turn passed tunnel
 	bool is_bridge; ///< last turn passed bridge ramp
 	bool is_station; ///< last turn passed station
+	bool is_portal = false; ///< last move passed through an underground portal
 	int tiles_skipped; ///< number of skipped tunnel or station tiles
 	ErrorCode err;
 	RailTypes railtypes;
@@ -157,7 +160,9 @@ struct CFollowTrackT {
 
 			return false;
 		}
-		if ((!IsRailTT() && !Allow90degTurns()) || (IsRailTT() && Rail90DegTurnDisallowed(GetTileRailType(this->old_tile), GetTileRailType(this->new_tile), !Allow90degTurns()))) {
+		/* Through a bent metro tunnel the trackdir beyond the exit has nothing to
+		 * do with the one at the entrance: no 90 degree rule applies there. */
+		if (!this->is_portal && ((!IsRailTT() && !Allow90degTurns()) || (IsRailTT() && Rail90DegTurnDisallowed(GetTileRailType(this->old_tile), GetTileRailType(this->new_tile), !Allow90degTurns())))) {
 			this->new_td_bits &= (TrackdirBits)~(int)TrackdirCrossesTrackdirs(this->old_td);
 			if (this->new_td_bits == TRACKDIR_BIT_NONE) {
 				this->err = EC_90DEG;
@@ -204,7 +209,37 @@ protected:
 		this->is_station = false;
 		this->is_bridge = false;
 		this->is_tunnel = false;
+		this->is_portal = false;
 		this->tiles_skipped = 0;
+
+		/* Underground portal: lookup precomputed connections (like tunnel teleport). */
+		if constexpr (Ttr_type_ == TRANSPORT_RAIL) {
+			const auto &conns = GetPortalConnections(this->old_tile);
+			for (const auto &conn : conns) {
+				if (conn.entry_dir == this->exitdir && IsValidTile(conn.exit_tile)) {
+					/* Teleport to tile BEYOND exit portal (like vanilla tunnel).
+					 * conn.exit_tile is the portal tile; we need the tile after it. */
+					TileIndexDiffC step = TileIndexDiffCByDiagDir(conn.exit_dir);
+					int bx = TileX(conn.exit_tile) + step.x;
+					int by = TileY(conn.exit_tile) + step.y;
+					if (bx >= 0 && by >= 0 && bx < (int)Map::SizeX() && by < (int)Map::SizeY()) {
+						TileIndex beyond = TileXY(bx, by);
+						/* Only teleport if beyond tile has rail. */
+						TrackBits tracks = TrackStatusToTrackBits(GetTileTrackStatus(beyond, TRANSPORT_RAIL, 0));
+						if (tracks != TRACK_BIT_NONE) {
+							this->is_portal = true;
+							this->new_tile = beyond;
+							this->tiles_skipped = conn.path_length;
+							/* The tunnel may bend: the train comes out moving in the
+							 * exit portal's direction, which decides the trackdirs it
+							 * can take on the tile beyond. */
+							this->exitdir = conn.exit_dir;
+							return;
+						}
+					}
+				}
+			}
+		}
 
 		/* extra handling for tunnels and bridges in our direction */
 		if (IsTileType(this->old_tile, TileType::TunnelBridge)) {

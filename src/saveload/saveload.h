@@ -415,6 +415,14 @@ enum SaveLoadVersion : uint16_t {
 	SLV_SIGN_TEXT_COLOURS,                  ///< 363  PR#14743 Configurable sign text colors in scenario editor.
 	SLV_BUOYS_AT_0_0,                       ///< 364  PR#14983 Allow to build buoys at (0x0).
 
+	SLV_MULTILAYER_MAP,                     ///< 365  Multi-layer map with underground support.
+	SLV_METRO_PORTAL_RAILTYPE,              ///< 366  Underground portal slices store their rail type (infrastructure accounting).
+	SLV_METRO_STATION_EXITS,                ///< 367  Underground station exits have a type (pavilion / underpass / implicit) and a distance limit.
+	SLV_METRO_V2_SETTINGS,                  ///< 368  Metro v2: underground settings (depth limits, soil prices, refunds).
+	SLV_METRO_PAID_SOIL,                    ///< 369  Metro v2: underground slices store the soil price multiplier paid, refunds are capped by it.
+	SLV_METRO_V3_RESERVED_370,              ///< 370  Taken by metro v3 (SLV_PROGRAMMABLE_SIGNALS), so metro v2 and v3 saves agree on the numbers above it.
+	SLV_METRO_RUNTIME_STATE,                ///< 371  Underground reservations, portal exit claims and train path state are saved in full, a loaded game runs on like the live one.
+
 	SL_MAX_VERSION,                         ///< Highest possible saveload version
 };
 

@@ -34,11 +34,20 @@ std::optional<std::string_view> VideoDriver_Null::Start(const StringList &parm)
 	_screen.width  = _screen.pitch = _cur_resolution.width;
 	_screen.height = _cur_resolution.height;
 	_screen.dst_ptr = nullptr;
-	ScreenSizeChanged();
 
-	/* Do not render, nor blit */
-	Debug(misc, 1, "Forcing blitter 'null'...");
-	BlitterFactory::SelectBlitter("null");
+	/* Do not render, nor blit — unless a real blitter is explicitly requested,
+	 * e.g. for taking world screenshots from headless test runs. */
+	if (GetDriverParamBool(parm, "real_blitter")) {
+		Debug(misc, 1, "Null video: keeping blitter '{}' for headless rendering", BlitterFactory::GetCurrentBlitter()->GetName());
+		/* Window redraws blit into _screen; give them a real buffer instead of
+		 * letting the blitter write through a null pointer. */
+		this->headless_screen_buffer.resize(static_cast<size_t>(_screen.pitch) * _screen.height * 4, 0);
+		_screen.dst_ptr = this->headless_screen_buffer.data();
+	} else {
+		Debug(misc, 1, "Forcing blitter 'null'...");
+		BlitterFactory::SelectBlitter("null");
+	}
+	ScreenSizeChanged();
 	return std::nullopt;
 }
 
@@ -54,6 +63,8 @@ void VideoDriver_Null::MainLoop()
 		::GameLoop();
 		::InputLoop();
 		::UpdateWindows();
+		/* Execute jobs queued for the main thread (e.g. console screenshots). */
+		this->DrainCommandQueue();
 	}
 
 	/* If requested, make a save just before exit. The normal exit-flow is

@@ -33,6 +33,8 @@
 #include "../object_cmd.h"
 #include "../order_cmd.h"
 #include "../rail_cmd.h"
+#include "../multilayer/underground_cmd.h"
+#include "../multilayer/blueprint_cmd.h"
 #include "../road_cmd.h"
 #include "../roadveh_cmd.h"
 #include "../settings_cmd.h"
@@ -83,7 +85,8 @@ static constexpr auto _callback_tuple = std::make_tuple(
 	&CcGame,
 	&CcAddVehicleNewGroup,
 	&CcMoveStationName,
-	&CcMoveWaypointName
+	&CcMoveWaypointName,
+	&CcPasteUndergroundBlueprint
 );
 
 #ifdef SILENCE_GCC_FUNCTION_POINTER_CAST

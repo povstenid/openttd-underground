@@ -16,6 +16,7 @@
 #include "yapf_destrail.hpp"
 #include "../../viewport_func.h"
 #include "../../newgrf_station.h"
+#include "../../multilayer/underground_train.h"
 
 #include "../../safeguards.h"
 
@@ -97,7 +98,9 @@ private:
 				this->res_fail_td = td;
 			}
 		} else {
-			if (!TryReserveRailTrack(tile, TrackdirToTrack(td))) {
+			/* The mouth of a portal a train below ground is coming out of is
+			 * held for it, like the track a train stands on. */
+			if (IsPortalExitClaimed(tile, Yapf().GetVehicle()->index) || !TryReserveRailTrack(tile, TrackdirToTrack(td))) {
 				/* Tile couldn't be reserved, undo. */
 				this->res_fail_tile = tile;
 				this->res_fail_td = td;
@@ -588,6 +591,9 @@ Track YapfTrainChooseTrack(const Train *v, TileIndex tile, DiagDirection enterdi
 
 bool YapfTrainCheckReverse(const Train *v)
 {
+	/* No reverse check for underground trains. */
+	if (v->IsUnderground()) return false;
+
 	const Train *last_veh = v->Last();
 
 	/* get trackdirs of both ends */
@@ -641,11 +647,22 @@ bool YapfTrainCheckReverse(const Train *v)
 
 FindDepotData YapfTrainFindNearestDepot(const Train *v, int max_penalty)
 {
+	/* No depot search for underground trains. */
+	if (v->IsUnderground()) return {};
+
 	const Train *last_veh = v->Last();
 
 	PBSTileInfo origin = FollowTrainReservation(v);
 	TileIndex last_tile = last_veh->tile;
 	Trackdir td_rev = ReverseTrackdir(last_veh->GetVehicleTrackdir());
+	/* The tail still in a metro tunnel (the front has come out of a portal):
+	 * its tile is the surface above it, with no track for its trackdir. Search
+	 * forwards only; the train cannot turn round in the tunnel to a surface
+	 * depot behind it anyway. */
+	if (last_veh->IsUnderground()) {
+		last_tile = INVALID_TILE;
+		td_rev = INVALID_TRACKDIR;
+	}
 
 	return _settings_game.pf.forbid_90_deg
 		? CYapfAnyDepotRailNo90::stFindNearestDepotTwoWay(v, origin.tile, origin.trackdir, last_tile, td_rev, max_penalty, YAPF_INFINITE_PENALTY)

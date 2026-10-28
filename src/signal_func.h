@@ -59,6 +59,7 @@ enum SigSegState : uint8_t {
 };
 
 SigSegState UpdateSignalsOnSegment(TileIndex tile, DiagDirection side, Owner owner);
+SigSegState GetSignalSegmentStateWithout(TileIndex tile, DiagDirection side, Owner owner, const struct Vehicle *ignore);
 void SetSignalsOnBothDir(TileIndex tile, Track track, Owner owner);
 void AddTrackToSignalBuffer(TileIndex tile, Track track, Owner owner);
 void AddSideToSignalBuffer(TileIndex tile, DiagDirection side, Owner owner);

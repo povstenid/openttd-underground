@@ -27,6 +27,7 @@
 #include "core/random_func.hpp"
 #include "linkgraph/linkgraph.h"
 #include "linkgraph/linkgraphschedule.h"
+#include "multilayer/station_complex.h"
 
 #include "table/strings.h"
 
@@ -160,6 +161,10 @@ Station::~Station()
 
 	_station_kdtree.Remove(this->index);
 	if (this->sign.kdtree_valid) _viewport_sign_kdtree.Remove(ViewportSignKdtreeItem::MakeStation(this->index));
+
+	/* Drop the underground station complex, if any. StationIDs are reused by the
+	 * pool, so a stale entry would attach itself to an unrelated future station. */
+	RemoveStationComplex(this->index.base());
 }
 
 
@@ -494,7 +499,22 @@ void Station::RecomputeCatchment(bool no_clear_nearby_lists)
 		return;
 	}
 
-	this->catchment_tiles.Initialize(GetCatchmentRect());
+	Rect catchment_rect = GetCatchmentRect();
+	auto sc_it = _station_complexes.find(this->index.base());
+	if (sc_it != _station_complexes.end()) {
+		for (const auto *exit_node : sc_it->second.GetExits()) {
+			if (!exit_node->ref.IsValid()) continue;
+
+			TileIndex exit_tile = exit_node->ref.tile;
+			const uint r = GetStationExitCatchmentRadius(exit_node->exit_type);
+			catchment_rect.left = std::min<int>(catchment_rect.left, std::max<int>(TileX(exit_tile) - static_cast<int>(r), 0));
+			catchment_rect.top = std::min<int>(catchment_rect.top, std::max<int>(TileY(exit_tile) - static_cast<int>(r), 0));
+			catchment_rect.right = std::max<int>(catchment_rect.right, std::min<int>(TileX(exit_tile) + static_cast<int>(r), Map::MaxX()));
+			catchment_rect.bottom = std::max<int>(catchment_rect.bottom, std::min<int>(TileY(exit_tile) + static_cast<int>(r), Map::MaxY()));
+		}
+	}
+
+	this->catchment_tiles.Initialize(catchment_rect);
 
 	/* Loop finding all station tiles */
 	TileArea ta(TileXY(this->rect.left, this->rect.top), TileXY(this->rect.right, this->rect.bottom));
@@ -506,7 +526,27 @@ void Station::RecomputeCatchment(bool no_clear_nearby_lists)
 
 		/* This tile sub-loop doesn't need to test any tiles, they are simply added to the catchment set. */
 		TileArea ta2 = TileArea(tile, 1, 1).Expand(r);
-		for (TileIndex tile2 : ta2) this->catchment_tiles.SetTile(tile2);
+		for (TileIndex tile2 : ta2) {
+			if (!this->catchment_tiles.Contains(tile2)) continue;
+			this->catchment_tiles.SetTile(tile2);
+		}
+	}
+
+	/* Also include catchment from StationComplex ExitSurface tiles. Underground
+	 * platforms themselves catch nothing: a metro station without any exit built
+	 * by the player keeps an empty catchment (from its underground part). */
+	if (sc_it != _station_complexes.end()) {
+		for (const auto *exit_node : sc_it->second.GetExits()) {
+			if (!exit_node->ref.IsValid()) continue;
+			TileIndex exit_tile = exit_node->ref.tile;
+			/* Pavilions catch like a bus station, underpasses one tile less. */
+			uint r = GetStationExitCatchmentRadius(exit_node->exit_type);
+			TileArea ta2 = TileArea(exit_tile, 1, 1).Expand(r);
+			for (TileIndex tile2 : ta2) {
+				if (!this->catchment_tiles.Contains(tile2)) continue;
+				this->catchment_tiles.SetTile(tile2);
+			}
+		}
 	}
 
 	/* Search catchment tiles for towns and industries */

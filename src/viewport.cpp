@@ -90,6 +90,12 @@
 #include "network/network_func.h"
 #include "framerate_type.h"
 #include "viewport_cmd.h"
+#include "pedestrians.h"
+#include "multilayer/underground_view.h"
+#include "multilayer/underground_gui.h"
+#include "multilayer/underground_render.h"
+#include "multilayer/multilayer_map.h"
+#include "timer/timer_game_tick.h"
 
 #include <forward_list>
 #include <stack>
@@ -254,7 +260,7 @@ void InitializeWindowViewport(Window *w, int x, int y,
 		} else {
 			x = TileX(tile) * TILE_SIZE;
 			y = TileY(tile) * TILE_SIZE;
-			pt = MapXYZToViewport(*vp, x, y, GetSlopePixelZ(x, y));
+			pt = MapXYZToViewport(*vp, x, y, GetViewSlopePixelZ(x, y));
 		}
 		vp->follow_vehicle = VehicleID::Invalid();
 	}
@@ -1010,6 +1016,40 @@ const Waypoint *_viewport_highlight_waypoint; ///< Currently selected waypoint f
 const Waypoint *_viewport_highlight_waypoint_rect; ///< Currently selected waypoint for rectangle highlight
 const Town *_viewport_highlight_town; ///< Currently selected town for coverage area highlight
 
+static bool _viewport_highlight_company_coverage = false; ///< Highlight the catchment of every station of the local company.
+static std::vector<uint8_t> _company_coverage_cache;       ///< Per tile: 1 when inside the catchment of an own station.
+static uint64_t _company_coverage_cache_tick = UINT64_MAX; ///< Tick the cache was built for.
+
+/** Rebuild the own-stations coverage cache, at most once per game tick. */
+static void UpdateCompanyCoverageCache()
+{
+	if (_company_coverage_cache_tick == TimerGameTick::counter && _company_coverage_cache.size() == Map::Size()) return;
+	_company_coverage_cache_tick = TimerGameTick::counter;
+	_company_coverage_cache.assign(Map::Size(), 0);
+	for (const Station *st : Station::Iterate()) {
+		if (st->owner != _local_company || st->catchment_tiles.tile == INVALID_TILE) continue;
+		BitmapTileIterator it(st->catchment_tiles);
+		for (TileIndex tile = it; tile != INVALID_TILE; tile = ++it) {
+			_company_coverage_cache[tile.base()] = 1;
+		}
+	}
+}
+
+/** Show or hide the coverage overlay of all stations of the local company. */
+void ToggleViewportCompanyCoverage()
+{
+	_viewport_highlight_company_coverage = !_viewport_highlight_company_coverage;
+	_company_coverage_cache_tick = UINT64_MAX;
+	if (!_viewport_highlight_company_coverage) _company_coverage_cache.clear();
+	MarkWholeScreenDirty();
+}
+
+/** Whether the coverage overlay of all own stations is shown. */
+bool IsViewportCompanyCoverageShown()
+{
+	return _viewport_highlight_company_coverage;
+}
+
 /**
  * Get tile highlight type of coverage area for a given tile.
  * @param t Tile that is being drawn
@@ -1017,6 +1057,12 @@ const Town *_viewport_highlight_town; ///< Currently selected town for coverage 
  */
 static TileHighlightType GetTileHighlightType(TileIndex t)
 {
+	if (_viewport_highlight_company_coverage) {
+		if (IsTileType(t, TileType::Station) && IsTileOwner(t, _local_company)) return THT_WHITE;
+		UpdateCompanyCoverageCache();
+		if (_company_coverage_cache[t.base()] != 0) return THT_BLUE;
+	}
+
 	if (_viewport_highlight_station != nullptr) {
 		if (IsTileType(t, TileType::Station) && GetStationIndex(t) == _viewport_highlight_station->index) return THT_WHITE;
 		if (_viewport_highlight_station->TileIsInCatchment(t)) return THT_BLUE;
@@ -1156,6 +1202,8 @@ draw_inner:
 				}
 			}
 			DrawSelectionSprite(SPR_DOT, PAL_NONE, ti, z, foundation_part);
+		} else if (((_thd.drawstyle & HT_RAIL) != 0 || (_thd.drawstyle & HT_DRAG_MASK) == HT_LINE) && IsValidTile(ti->tile) && HasPortalOnTile(ti->tile)) {
+			/* No rail can be laid on a metro portal tile beyond its own track: no drag highlight there. */
 		} else if (_thd.drawstyle & HT_RAIL) {
 			/* autorail highlight piece under cursor */
 			HighLightStyle type = _thd.drawstyle & HT_DIR_MASK;
@@ -1197,7 +1245,7 @@ draw_inner:
 static int GetViewportY(Point tile)
 {
 	/* Each increment in X or Y direction moves down by half a tile, i.e. TILE_PIXELS / 2. */
-	return (tile.y * (int)(TILE_PIXELS / 2) + tile.x * (int)(TILE_PIXELS / 2) - TilePixelHeightOutsideMap(tile.x, tile.y)) << ZOOM_BASE_SHIFT;
+	return (tile.y * (int)(TILE_PIXELS / 2) + tile.x * (int)(TILE_PIXELS / 2) - GetViewTilePixelHeight(tile.x, tile.y)) << ZOOM_BASE_SHIFT;
 }
 
 /**
@@ -1260,9 +1308,16 @@ static void ViewportAddLandscape()
 				tile_type = TileType::Void;
 			}
 
+			bool cut_by_slice = false;
 			if (tile_type != TileType::Void) {
 				/* We are inside the map => paint landscape. */
 				std::tie(_cur_ti.tileh, _cur_ti.z) = GetTilePixelSlope(_cur_ti.tile);
+				if (IsTileCutBySlice(_cur_ti.tile)) {
+					/* Slice view: this column is cut by the plane and drawn as a flat slab at the plane's height. */
+					cut_by_slice = true;
+					_cur_ti.tileh = SLOPE_FLAT;
+					_cur_ti.z = GetUndergroundSlicePixelZ();
+				}
 			} else {
 				/* We are outside the map => paint black. */
 				std::tie(_cur_ti.tileh, _cur_ti.z) = GetTilePixelSlopeOutsideMap(tilecoord.x, tilecoord.y);
@@ -1270,7 +1325,13 @@ static void ViewportAddLandscape()
 
 			int viewport_y = GetViewportY(tilecoord);
 
-			if (viewport_y + MAX_TILE_EXTENT_BOTTOM < _vd.dpi.top) {
+			/* Underground levels drawn at their own depth below the ground the tile is drawn at. */
+			int below_extent = 0;
+			if (IsUndergroundViewActive() && tile_type != TileType::Void) {
+				below_extent = ZOOM_BASE * std::max(0, GetViewTilePixelHeight(tilecoord.x, tilecoord.y) - GetUndergroundViewLowestPixelZ());
+			}
+
+			if (viewport_y + MAX_TILE_EXTENT_BOTTOM + below_extent < _vd.dpi.top) {
 				/* The tile in this column is not visible yet.
 				 * Tiles in other columns may be visible, but we need more rows in any case. */
 				last_row = false;
@@ -1308,8 +1369,34 @@ static void ViewportAddLandscape()
 				_vd.last_foundation_child[0] = LAST_CHILD_NONE;
 				_vd.last_foundation_child[1] = LAST_CHILD_NONE;
 
-				_tile_type_procs[tile_type]->draw_tile_proc(&_cur_ti);
-				if (_cur_ti.tile != INVALID_TILE) DrawTileSelection(&_cur_ti);
+				if (cut_by_slice) {
+					/* Slice view: flat slab at the plane with the viewed level's content; nothing above it. */
+					DrawUndergroundSliceTile(&_cur_ti);
+					DrawTileSelection(&_cur_ti);
+				} else if (IsUndergroundXRayMode() && _cur_ti.tile != INVALID_TILE) {
+					/* X-ray view: the world above the level is shown pale
+					 * (and can be hidden entirely), the viewed level is drawn on top.
+					 * The tall surface portal arch is intentionally NOT drawn here:
+					 * its sortable sprite would cover the underground rendering of
+					 * the portal tile (the inclined connection ramp). */
+					if (_underground_show_above) {
+						_tile_type_procs[tile_type]->draw_tile_proc(&_cur_ti);
+					}
+					DrawUndergroundTile(&_cur_ti);
+					DrawTileSelection(&_cur_ti);
+				} else {
+					/* Normal surface drawing. */
+					_tile_type_procs[tile_type]->draw_tile_proc(&_cur_ti);
+					/* Draw portal overlay on surface (always visible). */
+					if (_cur_ti.tile != INVALID_TILE && HasPortalOnTile(_cur_ti.tile)) {
+						DrawPortalOverlay(&_cur_ti);
+					}
+					/* Underpass exits of underground stations (pavilions are station tiles). */
+					if (_cur_ti.tile != INVALID_TILE && HasStationExitOverlay(_cur_ti.tile)) {
+						DrawStationExitOverlay(&_cur_ti);
+					}
+					if (_cur_ti.tile != INVALID_TILE) DrawTileSelection(&_cur_ti);
+				}
 			}
 		}
 	}
@@ -1829,6 +1916,7 @@ void ViewportDoDraw(const Viewport &vp, int left, int top, int right, int bottom
 
 	ViewportAddLandscape();
 	ViewportAddVehicles(&_vd.dpi);
+	ViewportAddPedestrians(&_vd.dpi);
 
 	ViewportAddKdtreeSigns(&_vd.dpi);
 
@@ -2132,6 +2220,19 @@ void MarkTileDirtyByTile(TileIndex tile, int bridge_level_offset, int tile_heigh
 			pt.y - MAX_TILE_EXTENT_TOP - ZOOM_BASE * TILE_HEIGHT * bridge_level_offset,
 			pt.x + MAX_TILE_EXTENT_RIGHT,
 			pt.y + MAX_TILE_EXTENT_BOTTOM);
+
+	/* In the slice view a cut column is drawn at the plane, not at its terrain height;
+	 * the X-ray view and the view of the levels below draw deeper levels lower still. */
+	if (IsUndergroundViewActive()) {
+		int z = IsTileCutBySlice(tile) ? GetUndergroundSlicePixelZ() : tile_height_override * TILE_HEIGHT;
+		Point ps = RemapCoords(TileX(tile) * TILE_SIZE, TileY(tile) * TILE_SIZE, z);
+		Point pd = RemapCoords(TileX(tile) * TILE_SIZE, TileY(tile) * TILE_SIZE, std::min(z, GetUndergroundViewLowestPixelZ()));
+		MarkAllViewportsDirty(
+				ps.x - MAX_TILE_EXTENT_LEFT,
+				ps.y - MAX_TILE_EXTENT_TOP,
+				ps.x + MAX_TILE_EXTENT_RIGHT,
+				pd.y + MAX_TILE_EXTENT_BOTTOM);
+	}
 }
 
 /**
@@ -2198,11 +2299,11 @@ static void SetSelectionTilesDirty()
 		do {
 			/* topmost dirty point */
 			TileIndex top_tile = TileVirtXY(top_x, top_y);
-			Point top = RemapCoords(top_x, top_y, GetTileMaxPixelZ(top_tile));
+			Point top = RemapCoords(top_x, top_y, GetViewTileMaxPixelZ(top_tile));
 
 			/* bottommost point */
 			TileIndex bottom_tile = TileVirtXY(bot_x, bot_y);
-			Point bot = RemapCoords(bot_x + TILE_SIZE, bot_y + TILE_SIZE, GetTilePixelZ(bottom_tile)); // bottommost point
+			Point bot = RemapCoords(bot_x + TILE_SIZE, bot_y + TILE_SIZE, GetViewTilePixelZ(bottom_tile)); // bottommost point
 
 			/* the 'x' coordinate of 'top' and 'bot' is the same (and always in the same distance from tile middle),
 			 * tile height/slope affects only the 'y' on-screen coordinate! */
@@ -2506,6 +2607,28 @@ bool HandleViewportClicked(const Viewport &vp, int x, int y)
 	}
 
 	if (CheckClickOnViewportSign(vp, x, y)) return true;
+
+	/* In the underground slice view a plain click on a ramp jumps the view
+	 * to the level at the ramp's other end — quick level navigation. */
+	if (IsUndergroundViewActive() && _multilayer_map.IsAllocated()) {
+		Point pt = TranslateXYToTileCoord(vp, x, y);
+		if (pt.x != -1) {
+			TileIndex tile = TileVirtXY(pt.x, pt.y);
+			SliceID sid = _multilayer_map.FindSliceAt(tile, GetUndergroundViewDepth());
+			if (sid != INVALID_SLICE_ID) {
+				const TileSlice &s = _multilayer_map.GetSlice(sid);
+				if (s.kind == SliceKind::Ramp) {
+					int16_t cur = GetUndergroundViewDepth();
+					int16_t other = (cur == s.ramp.entry_depth) ? s.ramp.exit_depth : s.ramp.entry_depth;
+					SetUndergroundViewDepth(other);
+					MarkWholeScreenDirty();
+					InvalidateWindowClassesData(WC_BUILD_TOOLBAR);
+					return true;
+				}
+			}
+		}
+	}
+
 	bool result = CheckClickOnLandscape(vp, x, y);
 
 	if (v != nullptr) {
@@ -2548,7 +2671,7 @@ bool ScrollWindowTo(int x, int y, int z, Window *w, bool instant)
 	if (z == -1) {
 		if ( x >= 0 && x <= (int)Map::SizeX() * (int)TILE_SIZE - 1
 				&& y >= 0 && y <= (int)Map::SizeY() * (int)TILE_SIZE - 1) {
-			z = GetSlopePixelZ(x, y);
+			z = GetViewSlopePixelZ(x, y);
 		} else {
 			z = TileHeightOutsideMap(x / (int)TILE_SIZE, y / (int)TILE_SIZE);
 		}
@@ -2775,6 +2898,13 @@ void UpdateTileSelection()
 
 		/* Draw the new tile selection? */
 		if ((new_drawstyle & HT_DRAG_MASK) != HT_NONE) SetSelectionTilesDirty();
+
+		/* The soil under the cursor of a metro tool, until a drag shows its measurement. */
+		if ((_thd.place_mode & HT_DRAG_MASK) != HT_SPECIAL) {
+			bool on_map = (new_drawstyle & HT_DRAG_MASK) != HT_NONE && _thd.pos.x >= 0 && _thd.pos.y >= 0 &&
+					static_cast<uint>(_thd.pos.x) < Map::SizeX() * TILE_SIZE && static_cast<uint>(_thd.pos.y) < Map::SizeY() * TILE_SIZE;
+			UpdateUndergroundSoilTooltip(on_map ? TileVirtXY(_thd.pos.x, _thd.pos.y) : INVALID_TILE);
+		}
 	}
 }
 

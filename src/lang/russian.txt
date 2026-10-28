@@ -1567,6 +1567,62 @@ STR_CONFIG_SETTING_MAX_BRIDGE_HEIGHT_HELPTEXT                   :Максима�
 
 STR_CONFIG_SETTING_MAX_TUNNEL_LENGTH                            :Максимальная длина туннеля: {STRING}
 STR_CONFIG_SETTING_MAX_TUNNEL_LENGTH_HELPTEXT                   :Ограничение на длину строящихся туннелей
+STR_CONFIG_SETTING_MAX_STATION_EXIT_DISTANCE                    :Наибольшее расстояние выхода станции метро от её платформ: {STRING2}
+STR_CONFIG_SETTING_MAX_STATION_EXIT_DISTANCE_HELPTEXT           :На каком расстоянии (в клетках) от ближайшей платформы может стоять наземный выход (павильон или подземный переход) подземной станции
+STR_CONFIG_SETTING_MAX_UNDERGROUND_DEPTH                        :Наибольшая глубина от земли: {STRING2}
+STR_CONFIG_SETTING_MAX_UNDERGROUND_DEPTH_HELPTEXT               :На сколько уровней ниже поверхности клетки можно строить под землёй. От этой глубины зависят грунт и цена: земля на 1, обсидиан с 11
+STR_CONFIG_SETTING_UNDERGROUND_DEEPEST_TUNNEL_LEVEL             :Самый глубокий уровень туннелей: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_DEEPEST_TUNNEL_LEVEL_HELPTEXT    :Самый низкий абсолютный уровень, на котором можно строить подземные пути, пандусы и порталы
+STR_CONFIG_SETTING_UNDERGROUND_DEEPEST_STATION_LEVEL            :Самый глубокий уровень станций: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_DEEPEST_STATION_LEVEL_HELPTEXT   :Самый низкий абсолютный уровень, на котором можно строить подземные платформы. Не глубже туннелей
+STR_CONFIG_SETTING_UNDERGROUND_SEA_TUNNELS                      :Туннели под морем: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_SEA_TUNNELS_HELPTEXT             :Обычно под морем строить можно ниже воды: у берега она в 1 уровень, клеткой дальше в 2, в открытом море в 3; как под реками и каналами. «Запрещены» не пускает под море совсем, на любой глубине
+STR_CONFIG_SETTING_UNDERGROUND_SEA_TUNNELS_FORBIDDEN            :Запрещены (строже)
+STR_CONFIG_SETTING_UNDERGROUND_SEA_TUNNELS_BY_SEA_DEPTH         :Ниже воды (обычно)
+STR_CONFIG_SETTING_UNDERGROUND_FOUNDATION_HIGH                  :Фундамент самых высоких домов от: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_FOUNDATION_HIGH_HELPTEXT         :Дома, у которых население на клетку не меньше этой доли от наибольшего среди всех домов, имеют фундамент в 2 уровня: под ними нельзя строить на глубине 1 и 2
+STR_CONFIG_SETTING_UNDERGROUND_FOUNDATION_MEDIUM                :Фундамент средних домов от: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_FOUNDATION_MEDIUM_HELPTEXT       :Дома, у которых население на клетку не меньше этой доли от наибольшего среди всех домов, имеют фундамент в 1 уровень. Не выше порога самых высоких домов
+STR_CONFIG_SETTING_UNDERGROUND_BASE_COST                        :Базовый подземный множитель цены: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_BASE_COST_HELPTEXT               :Подземная стройка стоит наземную цену того же объекта, умноженную на этот множитель и на множитель грунта
+STR_CONFIG_SETTING_UNDERGROUND_MULTIPLIER_WHOLE                 :×{COMMA}
+STR_CONFIG_SETTING_UNDERGROUND_MULTIPLIER_VALUE                 :×{DECIMAL}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_EARTH                :Туннель в земле (глубина 1): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_CLAY_LIGHT           :Туннель в светлой глине (глубина 2): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_CLAY                 :Туннель в глине (глубина 3): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_CLAY_DARK            :Туннель в тёмной глине (глубина 4): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_MARBLE_LIGHT         :Туннель в светлом мраморе (глубина 5): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_MARBLE_GREY          :Туннель в сером мраморе (глубина 6): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_GRANITE_PINK         :Туннель в розовом граните (глубина 7): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_GRANITE_GREY         :Туннель в сером граните (глубина 8): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_GRANITE_DARK         :Туннель в тёмном граните (глубина 9): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_GRANITE_BLACK        :Туннель в чёрном граните (глубина 10): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_OBSIDIAN             :Туннель в обсидиане (глубина 11+): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_EARTH               :Станция в земле (глубина 1): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_CLAY_LIGHT          :Станция в светлой глине (глубина 2): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_CLAY                :Станция в глине (глубина 3): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_CLAY_DARK           :Станция в тёмной глине (глубина 4): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_MARBLE_LIGHT        :Станция в светлом мраморе (глубина 5): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_MARBLE_GREY         :Станция в сером мраморе (глубина 6): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_GRANITE_PINK        :Станция в розовом граните (глубина 7): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_GRANITE_GREY        :Станция в сером граните (глубина 8): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_GRANITE_DARK        :Станция в тёмном граните (глубина 9): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_GRANITE_BLACK       :Станция в чёрном граните (глубина 10): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_OBSIDIAN            :Станция в обсидиане (глубина 11+): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_HELPTEXT             :Множитель цены подземного пути, пандусов и порталов в этом грунте. При вводе числом значение в десятых: 15 — это ×1,5
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_HELPTEXT            :Множитель цены подземной платформы в этом грунте, относительно цены клетки обычной наземной станции. При вводе числом значение в десятых: 15 — это ×1,5
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_SAND                 :Туннель в песке под водой (глубина 1-3): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_COST_SAND_HELPTEXT        :Множитель цены подземного пути, пандусов и порталов в мокром песке под реками, каналами и морем, который там до глубины 3 заменяет землю и глину. Значения вводятся в десятых: 15 — это ×1,5
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_SAND                :Станция в песке под водой (глубина 1-3): {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_STATION_COST_SAND_HELPTEXT       :Множитель цены подземных платформ в мокром песке под реками, каналами и морем, относительно цены наземной станции. Значения вводятся в десятых: 15 — это ×1,5
+STR_CONFIG_SETTING_UNDERGROUND_RAMP_COST                        :Множитель цены пандуса: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_RAMP_COST_HELPTEXT               :Пандус стоит во столько раз дороже подземного пути в грунте его нижнего уровня. При вводе числом значение в десятых: 15 — это ×1,5
+STR_CONFIG_SETTING_UNDERGROUND_PORTAL_COST                      :Множитель цены портала: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_PORTAL_COST_HELPTEXT             :Портал стоит во столько раз дороже подземного пути в грунте первого подземного уровня. При вводе числом значение в десятых: 15 — это ×1,5
+STR_CONFIG_SETTING_UNDERGROUND_REFUND                           :Возврат при сносе: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_REFUND_HELPTEXT                  :Какая доля цены постройки возвращается при сносе подземного объекта. Никогда не больше цены постройки
+STR_CONFIG_SETTING_UNDERGROUND_REFUND_SOIL                      :Учитывать грунт в возврате: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_REFUND_SOIL_HELPTEXT             :Считать ли возврат при сносе от цены с множителем грунта или от цены в земле
 
 STR_CONFIG_SETTING_RAW_INDUSTRY_CONSTRUCTION_METHOD             :Способ создания сырьевых предприятий: {STRING}
 STR_CONFIG_SETTING_RAW_INDUSTRY_CONSTRUCTION_METHOD_HELPTEXT    :Способ создания сырьевых предприятий.{}«Не создавать» - отключить возможность их создания транспортными компаниями.{}«Геологоразведка» - предприятие будет создано в случайном месте на карте; иногда геологи не находят месторождений, и строительство предприятия отменяется.{}«Как и остальные» - сырьевые предприятия строятся как и перерабатывающие, с выбором места размещения.
@@ -2342,6 +2398,12 @@ STR_CONFIG_SETTING_VEHICLES_PHYSICS                             :Физичес�
 STR_CONFIG_SETTING_VEHICLES_ROUTING                             :Маршруты
 STR_CONFIG_SETTING_VEHICLES_ORDERS                              :Задания
 STR_CONFIG_SETTING_LIMITATIONS                                  :Ограничения
+STR_CONFIG_SETTING_UNDERGROUND                                  :Подземный режим
+STR_CONFIG_SETTING_UNDERGROUND_DEPTH                            :Глубина
+STR_CONFIG_SETTING_UNDERGROUND_PRICES                           :Цены
+STR_CONFIG_SETTING_UNDERGROUND_TUNNEL_SOIL                      :Туннели по грунтам
+STR_CONFIG_SETTING_UNDERGROUND_STATION_SOIL                     :Станции по грунтам
+STR_CONFIG_SETTING_UNDERGROUND_REFUND_PAGE                      :Возврат при сносе
 STR_CONFIG_SETTING_ACCIDENTS                                    :Аварии и катастрофы
 STR_CONFIG_SETTING_GENWORLD                                     :Создание карты
 STR_CONFIG_SETTING_ENVIRONMENT                                  :Окружение
@@ -2985,6 +3047,8 @@ STR_RAIL_TOOLBAR_TOOLTIP_BUILD_RAILROAD_BRIDGE                  :{BLACK}Стро
 STR_RAIL_TOOLBAR_TOOLTIP_BUILD_RAILROAD_TUNNEL                  :{BLACK}Строительство железнодорожных туннелей. При нажатом Shift - оценка стоимости строительства.
 STR_RAIL_TOOLBAR_TOOLTIP_TOGGLE_BUILD_REMOVE_FOR                :{BLACK}Переключение между строительством и удалением ж/д путей, сигналов, станций. При нажатом Ctrl убирает станции вместе с рельсами.
 STR_RAIL_TOOLBAR_TOOLTIP_CONVERT_RAIL                           :{BLACK}Преобразовать/модернизировать железнодорожное полотно. При нажатом Shift - оценка стоимости модернизации.
+STR_RAIL_TOOLBAR_TOOLTIP_PICK_RAILTYPE                          :{BLACK}Пипетка (K): щёлкните по рельсам, станции, мосту, туннелю или подземному пути, чтобы дальше строить этим типом
+STR_RAIL_MENU_PICK_RAILTYPE                                     :Пипетка: взять тип с рельсов...
 
 STR_RAIL_NAME_RAILROAD                                          :Ж/д
 STR_RAIL_NAME_RAILROAD.m                                        :Ж/д
@@ -3368,6 +3432,35 @@ STR_LANG_AREA_INFORMATION_RAIL_TYPE                             :{BLACK}Тип �
 STR_LANG_AREA_INFORMATION_ROAD_TYPE                             :{BLACK}Тип дорожного полотна: {LTBLUE}{STRING}
 STR_LANG_AREA_INFORMATION_TRAM_TYPE                             :{BLACK}Тип трамвайных путей: {LTBLUE}{STRING}
 STR_LANG_AREA_INFORMATION_RAIL_SPEED_LIMIT                      :{BLACK}Макс. скорость ж/д: {LTBLUE}{VELOCITY}
+STR_LAND_AREA_INFORMATION_UNDERGROUND_TRACK                     :{BLACK}Подземный путь, уровень {LTBLUE}{NUM}{BLACK} ({LTBLUE}{NUM}{BLACK} ниже земли, {LTBLUE}{STRING}{BLACK})
+STR_LAND_AREA_INFORMATION_UNDERGROUND_SIGNALS                   :{BLACK}На клетке есть подземные сигналы
+STR_LAND_AREA_INFORMATION_HOUSE_FOUNDATION                      :{BLACK}Фундамент: {LTBLUE}{NUM} {P уровень уровня уровней} вниз
+STR_LAND_AREA_INFORMATION_WATER_DEPTH                           :{BLACK}Глубина воды: {LTBLUE}{NUM} {P уровень уровня уровней} вниз
+STR_LAND_AREA_INFORMATION_UNDERGROUND_PLATFORM                  :{BLACK}Подземная платформа, уровень {LTBLUE}{NUM}{BLACK} ({LTBLUE}{NUM}{BLACK} ниже земли, {LTBLUE}{STRING}{BLACK})
+STR_LAND_AREA_INFORMATION_UNDERGROUND_PLATFORM_OF               :{BLACK}Подземная платформа, уровень {LTBLUE}{NUM}{BLACK} ({LTBLUE}{NUM}{BLACK} ниже земли, {LTBLUE}{STRING}{BLACK}){BLACK}: {LTBLUE}{STATION}
+STR_LAND_AREA_INFORMATION_UNDERGROUND_RAMP                      :{BLACK}Подземный пандус между уровнями {LTBLUE}{NUM}{BLACK} и {LTBLUE}{NUM}{BLACK} ({LTBLUE}{NUM}{BLACK} ниже земли, {LTBLUE}{STRING}{BLACK})
+STR_LAND_AREA_INFORMATION_UNDERGROUND_PORTAL                    :{BLACK}Портал метро, уровень {LTBLUE}{NUM}{BLACK} ({LTBLUE}{NUM}{BLACK} ниже земли, {LTBLUE}{STRING}{BLACK})
+STR_LAND_AREA_INFORMATION_UNDERGROUND_PORTAL_MOUTH              :{BLACK}Портал метро, уровень {LTBLUE}{NUM}
+STR_UNDERGROUND_SOIL_EARTH                                      :Земля
+STR_UNDERGROUND_SOIL_CLAY_LIGHT                                 :Светлая глина
+STR_UNDERGROUND_SOIL_CLAY                                       :Глина
+STR_UNDERGROUND_SOIL_CLAY_DARK                                  :Тёмная глина
+STR_UNDERGROUND_SOIL_MARBLE_LIGHT                               :Светлый мрамор
+STR_UNDERGROUND_SOIL_MARBLE_GREY                                :Серый мрамор
+STR_UNDERGROUND_SOIL_GRANITE_PINK                               :Розовый гранит
+STR_UNDERGROUND_SOIL_GRANITE_GREY                               :Серый гранит
+STR_UNDERGROUND_SOIL_GRANITE_DARK                               :Тёмный гранит
+STR_UNDERGROUND_SOIL_GRANITE_BLACK                              :Чёрный гранит
+STR_UNDERGROUND_SOIL_OBSIDIAN                                   :Обсидиан
+STR_UNDERGROUND_SOIL_SAND_LIGHT                                 :Светлый песок
+STR_UNDERGROUND_SOIL_SAND                                       :Песок
+STR_UNDERGROUND_SOIL_SAND_DARK                                  :Тёмный песок
+STR_ERROR_UNDERGROUND_STATION_TOO_DEEP                          :станции нельзя строить глубже уровня {NUM}
+STR_UNDERGROUND_SOIL_TOOLTIP                                    :{BLACK}{STRING}, {NUM} ниже земли: туннель ×{DECIMAL}, станция ×{DECIMAL}
+STR_LAND_AREA_INFORMATION_UNDERGROUND_SOIL_AT_LEVEL             :{BLACK}Уровень {LTBLUE}{NUM}{BLACK}: {LTBLUE}{NUM}{BLACK} ниже земли, {LTBLUE}{STRING}
+STR_LAND_AREA_INFORMATION_UNDERGROUND_FOUNDATION_AT_LEVEL       :{BLACK}Уровень {LTBLUE}{NUM}{BLACK}: {LTBLUE}{NUM}{BLACK} ниже земли, {LTBLUE}фундамент дома{BLACK} (до {NUM} {P уровня уровней уровней} вниз)
+STR_LAND_AREA_INFORMATION_UNDERGROUND_WATER_AT_LEVEL            :{BLACK}Уровень {LTBLUE}{NUM}{BLACK}: {LTBLUE}{NUM}{BLACK} ниже земли, {LTBLUE}вода{BLACK} (глубина {NUM} {P уровень уровня уровней})
+STR_LAND_AREA_INFORMATION_UNDERGROUND_SEA_AT_LEVEL              :{BLACK}Уровень {LTBLUE}{NUM}{BLACK}: {LTBLUE}{NUM}{BLACK} ниже земли, {RED}под морем строить нельзя
 STR_LANG_AREA_INFORMATION_ROAD_SPEED_LIMIT                      :{BLACK}Макс. скорость авто: {LTBLUE}{VELOCITY}
 STR_LANG_AREA_INFORMATION_TRAM_SPEED_LIMIT                      :{BLACK}Ограничение скорости трамваев: {LTBLUE}{VELOCITY}
 STR_LAND_AREA_INFORMATION_TOWN_CAN_UPGRADE                      :{BLACK}Возможность обновления: {LTBLUE}да
@@ -5478,6 +5571,9 @@ STR_ERROR_THERE_IS_NO_RAILROAD_TRACK                            :здесь не
 STR_ERROR_THERE_ARE_NO_SIGNALS                                  :сигналы отсутствуют
 
 STR_ERROR_CAN_T_CONVERT_RAIL                                    :Здесь невозможно преобразовать тип рельсов...
+STR_ERROR_CAN_T_COPY_TRACK_TYPE                                 :Не удаётся скопировать тип рельсов...
+STR_ERROR_NO_TRACK_TO_COPY                                      :{WHITE}...здесь нет рельсов
+STR_ERROR_TRACK_TYPE_NOT_AVAILABLE                              :{WHITE}...этот тип рельсов недоступен вашей компании
 
 # Road construction errors
 STR_ERROR_MUST_REMOVE_ROAD_FIRST                                :сначала нужно убрать дорогу
@@ -5537,6 +5633,10 @@ STR_ERROR_ANOTHER_TUNNEL_IN_THE_WAY                             :туннели 
 STR_ERROR_TUNNEL_THROUGH_MAP_BORDER                             :туннель выходит за пределы карты
 STR_ERROR_UNABLE_TO_EXCAVATE_LAND                               :невозможно выровнять склон у другого конца туннеля
 STR_ERROR_TUNNEL_TOO_LONG                                       :туннель слишком длинный
+STR_ERROR_UNDERGROUND_IN_THE_WAY                                :мешает подземное сооружение
+STR_ERROR_UNDERGROUND_HOUSE_FOUNDATION                          :здесь фундамент здания (до {NUM} {P уровня уровней уровней} вниз)
+STR_ERROR_UNDERGROUND_WATER_TOO_SHALLOW                         :слишком мелко под водой: здесь нужно глубже {NUM} {P уровня уровней уровней}
+STR_ERROR_UNDERGROUND_UNDER_SEA                                 :под морем подземное строить нельзя
 
 # Object related errors
 STR_ERROR_TOO_MANY_OBJECTS                                      :слишком много объектов
@@ -6291,3 +6391,69 @@ STR_BADGE_CONFIG_FILTERS                                        :{WHITE}Филь
 STR_BADGE_CONFIG_PREVIEW                                        :Предпросмотр
 STR_BADGE_CONFIG_NAME                                           :Название
 STR_BADGE_FILTER_ANY_LABEL                                      :Любой {STRING}
+# Metro blueprints
+STR_BLUEPRINT_CAPTION                                           :{WHITE}Чертежи метро
+STR_BLUEPRINT_COPY                                              :Копировать
+STR_BLUEPRINT_COPY_TOOLTIP                                      :{BLACK}Скопировать область в буфер: выделите прямоугольник. Копируемые уровни задаются ниже; просматриваемый уровень станет уровнем, на который чертёж вставляется
+STR_BLUEPRINT_PASTE                                             :Вставить
+STR_BLUEPRINT_PASTE_TOOLTIP                                     :{BLACK}Вставить буфер: северный угол чертежа - на выбранную клетку, его уровень - на просматриваемый. R и Shift+R поворачивают, M отражает. Ctrl+щелчок присоединяет станции к соседней своей станции, Shift+щелчок - только оценка стоимости
+STR_BLUEPRINT_ROTATE_LEFT                                       :Влево
+STR_BLUEPRINT_ROTATE_LEFT_TOOLTIP                               :{BLACK}Повернуть чертёж на четверть влево (клавиша R)
+STR_BLUEPRINT_ROTATE_RIGHT                                      :Вправо
+STR_BLUEPRINT_ROTATE_RIGHT_TOOLTIP                              :{BLACK}Повернуть чертёж на четверть вправо (клавиша Shift+R)
+STR_BLUEPRINT_MIRROR                                            :Отразить
+STR_BLUEPRINT_MIRROR_TOOLTIP                                    :{BLACK}Отразить чертёж зеркально (клавиша M)
+STR_BLUEPRINT_LEVELS                                            :{BLACK}Уровни:
+STR_BLUEPRINT_LEVELS_AUTO                                       :Все
+STR_BLUEPRINT_LEVELS_AUTO_TOOLTIP                               :{BLACK}Копировать все подземные уровни, на которых в области что-то построено. Выключено: уровни от верхнего до нижнего, заданных здесь
+STR_BLUEPRINT_LEVEL_TOP                                         :{BLACK}верх {NUM}
+STR_BLUEPRINT_LEVEL_BOTTOM                                      :{BLACK}низ {NUM}
+STR_BLUEPRINT_LEVEL_TOOLTIP                                     :{BLACK}Верхний и нижний копируемые подземные уровни
+STR_BLUEPRINT_SURFACE                                           :Поверхность
+STR_BLUEPRINT_SURFACE_TOOLTIP                                   :{BLACK}Копировать до поверхности: все уровни выше нижнего, а на поверхности - рельсы, сигналы, депо и выходы копируемых станций
+STR_BLUEPRINT_JOIN                                              :Присоединять
+STR_BLUEPRINT_JOIN_TOOLTIP                                      :{BLACK}Присоединять вставленные станции к соседней своей станции вместо постройки новых (также Ctrl+щелчок)
+STR_BLUEPRINT_BEST_EFFORT                                       :Что влезет
+STR_BLUEPRINT_BEST_EFFORT_TOOLTIP                               :{BLACK}Пропускать то, что построить нельзя. Выключено: ничего не строится, если хоть что-то мешает или не хватает денег
+STR_BLUEPRINT_TOOLBAR_RAILTYPE                                  :Рельсы панели
+STR_BLUEPRINT_TOOLBAR_RAILTYPE_TOOLTIP                          :{BLACK}Строить всё типом рельсов, выбранным последним в панели строительства железной дороги, а не типами из чертежа
+STR_BLUEPRINT_INFO_NONE                                         :{BLACK}Буфер пуст: скопируйте область или выберите чертёж из списка
+STR_BLUEPRINT_INFO                                              :{BLACK}{RAW_STRING}: {NUM}×{NUM} клеток, элементов: {NUM}, станций: {NUM}
+STR_BLUEPRINT_INFO_LEVELS                                       :{BLACK}Подземные уровни от {NUM} до {NUM} относительно уровня вставки
+STR_BLUEPRINT_INFO_SURFACE                                      :{BLACK}Со строениями на поверхности
+STR_BLUEPRINT_INFO_TRANSFORM                                    :{BLACK}Поворот на {NUM}°
+STR_BLUEPRINT_INFO_TRANSFORM_MIRRORED                           :{BLACK}Поворот на {NUM}°, отражён
+STR_BLUEPRINT_UNNAMED                                           :Буфер
+STR_BLUEPRINT_LIST_TOOLTIP                                      :{BLACK}Чертежи в папках «blueprint». Щелчок - взять в буфер, двойной щелчок - вставить
+STR_BLUEPRINT_LIST_ENTRY                                        :{RAW_STRING}  {GRAY}{NUM}×{NUM}
+STR_BLUEPRINT_LIST_EMPTY                                        :{GRAY}Сохранённых чертежей нет
+STR_BLUEPRINT_SAVE                                              :Сохранить
+STR_BLUEPRINT_SAVE_TOOLTIP                                      :{BLACK}Сохранить буфер в папку «blueprint»; чертёж с тем же именем заменяется
+STR_BLUEPRINT_SAVE_QUERY                                        :{WHITE}Название чертежа
+STR_BLUEPRINT_DELETE                                            :Удалить
+STR_BLUEPRINT_DELETE_TOOLTIP                                    :{BLACK}Удалить выбранный чертёж с диска
+STR_BLUEPRINT_DELETE_QUERY_CAPTION                              :{WHITE}Удаление чертежа
+STR_BLUEPRINT_DELETE_QUERY_TEXT                                 :{YELLOW}Удалить чертёж «{RAW_STRING}» с диска?
+STR_BLUEPRINT_RESCAN                                            :Обновить
+STR_BLUEPRINT_RESCAN_TOOLTIP                                    :{BLACK}Заново прочитать чертежи из папок «blueprint»
+STR_BLUEPRINT_EXPORT                                            :Как текст
+STR_BLUEPRINT_EXPORT_TOOLTIP                                    :{BLACK}Положить буфер в системный буфер обмена одной строкой текста, чтобы поделиться
+STR_BLUEPRINT_IMPORT                                            :Из текста
+STR_BLUEPRINT_IMPORT_TOOLTIP                                    :{BLACK}Взять чертёж из текста в системном буфере обмена: строки для обмена или JSON файла чертежа
+STR_BLUEPRINT_EXPORTED                                          :{WHITE}Чертёж в системном буфере обмена как текст
+STR_BLUEPRINT_EXPORTED_CONSOLE                                  :{WHITE}Текст чертежа выведен в консоль
+STR_ERROR_CAN_T_COPY_BLUEPRINT                                  :Не удаётся скопировать чертёж...
+STR_ERROR_BLUEPRINT_NOTHING_TO_COPY                             :в этой области нечего копировать
+STR_ERROR_CAN_T_PASTE_BLUEPRINT                                 :Не удаётся вставить чертёж...
+STR_ERROR_BLUEPRINT_EMPTY                                       :чертёж пуст
+STR_ERROR_BLUEPRINT_UNKNOWN_RAIL_TYPE                           :в чертеже тип рельсов, которого нет в этой игре
+STR_ERROR_BLUEPRINT_NOTHING_BUILT                               :ничего из чертежа построить не удалось
+STR_ERROR_CAN_T_LOAD_BLUEPRINT                                  :Не удаётся взять чертёж...
+STR_ERROR_CAN_T_SAVE_BLUEPRINT                                  :Не удаётся сохранить чертёж...
+STR_ERROR_BLUEPRINT_INVALID_TEXT                                :{RAW_STRING}
+STR_ERROR_BLUEPRINT_TOO_BIG                                     :чертёж слишком велик, чтобы вставить его за раз
+STR_ERROR_BLUEPRINT_STILL_PASTING                               :предыдущий чертёж ещё вставляется
+STR_BLUEPRINT_PASTE_STOPPED                                     :{WHITE}Вставка чертежа остановлена после части {NUM} из {NUM}
+STR_BLUEPRINT_PASTE_INCOMPLETE                                  :{WHITE}Чертёж построен не полностью: построено {NUM}, пропущено {NUM}
+STR_RAIL_TOOLBAR_BLUEPRINTS                                     :Чрт
+STR_RAIL_TOOLBAR_TOOLTIP_BLUEPRINTS                             :{BLACK}Чертежи метро: скопировать постройки на нескольких уровнях и вставить в другом месте (Ctrl+B)

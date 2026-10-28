@@ -29,6 +29,7 @@
 #include "dropdown_func.h"
 #include "tunnelbridge.h"
 #include "tilehighlight_func.h"
+#include "core/backup_type.hpp"
 #include "core/geometry_func.hpp"
 #include "hotkeys.h"
 #include "engine_base.h"
@@ -46,6 +47,12 @@
 
 #include "station_map.h"
 #include "tunnelbridge_map.h"
+#include "multilayer/multilayer_map.h"
+#include "multilayer/blueprint_gui.h"
+#include "multilayer/underground_cmd.h"
+#include "multilayer/underground_gui.h"
+#include "multilayer/underground_view.h"
+#include "error.h"
 
 #include "widgets/rail_widget.h"
 
@@ -440,16 +447,91 @@ static void HandleAutoSignalPlacement()
 }
 
 
+/**
+ * The track type of a slice of the underground, if it carries track.
+ * @param s The slice.
+ * @return Its track type, or INVALID_RAILTYPE.
+ */
+static RailType GetUndergroundSliceRailType(const TileSlice &s)
+{
+	uint8_t rt;
+	switch (s.kind) {
+		case SliceKind::Track: rt = s.track.railtype; break;
+		case SliceKind::StationTile: rt = s.station.railtype; break;
+		case SliceKind::Ramp: rt = s.ramp.railtype; break;
+		case SliceKind::Portal: rt = s.portal.railtype; break;
+		default: return INVALID_RAILTYPE;
+	}
+	return rt < RAILTYPE_END ? static_cast<RailType>(rt) : INVALID_RAILTYPE;
+}
+
+/**
+ * The track type to copy from a tile for the "copy track type" tool.
+ * @param tile The tile clicked.
+ * @param depth The underground level looked at, if any: its track goes first.
+ * @return The track type there: of the given level, else of the surface,
+ *         else of any underground level; INVALID_RAILTYPE when there is no track.
+ */
+RailType PickRailTypeAtTile(TileIndex tile, std::optional<int16_t> depth)
+{
+	if (!IsValidTile(tile)) return INVALID_RAILTYPE;
+	const bool ml = _multilayer_map.IsAllocated();
+	if (ml && depth.has_value()) {
+		SliceID sid = _multilayer_map.FindSliceAt(tile, *depth);
+		if (sid != INVALID_SLICE_ID) {
+			RailType rt = GetUndergroundSliceRailType(_multilayer_map.GetSlice(sid));
+			if (rt != INVALID_RAILTYPE) return rt;
+		}
+	}
+	RailType rt = GetTileRailType(tile);
+	if (rt != INVALID_RAILTYPE) return rt;
+	if (ml) {
+		for (SliceID sid : _multilayer_map.GetColumn(tile).slices) {
+			if (!_multilayer_map.IsValidSlice(sid)) continue;
+			rt = GetUndergroundSliceRailType(_multilayer_map.GetSlice(sid));
+			if (rt != INVALID_RAILTYPE) return rt;
+		}
+	}
+	return INVALID_RAILTYPE;
+}
+
+/**
+ * Check a track type copied from a tile, telling the player why it cannot be used.
+ * @param rt The track type found, or INVALID_RAILTYPE.
+ * @param tile The tile clicked, for the position of the error message.
+ * @return True if the company can build this track type.
+ */
+bool CheckPickedRailType(RailType rt, TileIndex tile)
+{
+	int x = TileX(tile) * TILE_SIZE;
+	int y = TileY(tile) * TILE_SIZE;
+	if (rt == INVALID_RAILTYPE) {
+		ShowErrorMessage(GetEncodedString(STR_ERROR_CAN_T_COPY_TRACK_TYPE), GetEncodedString(STR_ERROR_NO_TRACK_TO_COPY), WL_INFO, x, y);
+		return false;
+	}
+	if (!HasRailTypeAvail(_local_company, rt)) {
+		ShowErrorMessage(GetEncodedString(STR_ERROR_CAN_T_COPY_TRACK_TYPE), GetEncodedString(STR_ERROR_TRACK_TYPE_NOT_AVAILABLE), WL_INFO, x, y);
+		return false;
+	}
+	return true;
+}
+
+/** Data of closing the rail toolbar to open it again: the underground view stays. */
+static constexpr int RAIL_TOOLBAR_REOPEN = 1;
+
 /** Rail toolbar management class. */
 struct BuildRailToolbarWindow : Window {
 	RailType railtype = INVALID_RAILTYPE; ///< Rail type to build.
 	WidgetID last_user_action = INVALID_WIDGET; ///< Last started user action.
+	bool underground = false; ///< The tools build on the viewed underground level, as the toolbar was last set up.
 
 	BuildRailToolbarWindow(WindowDesc &desc, RailType railtype) : Window(desc), railtype(railtype)
 	{
 		this->CreateNestedTree();
 		this->FinishInitNested(TRANSPORT_RAIL);
 		this->DisableWidget(WID_RAT_REMOVE);
+		this->underground = IsUndergroundSliceMode();
+		this->UpdateLevelToolTips();
 		this->OnInvalidateData();
 
 		if (_settings_client.gui.link_terraform_toolbar) ShowTerraformToolbar(this);
@@ -461,6 +543,9 @@ struct BuildRailToolbarWindow : Window {
 		if (this->IsWidgetLowered(WID_RAT_BUILD_WAYPOINT)) SetViewportCatchmentWaypoint(nullptr, true);
 		if (_settings_client.gui.link_terraform_toolbar) CloseWindowById(WC_SCEN_LAND_GEN, 0, false);
 		CloseWindowById(WC_SELECT_STATION, 0);
+		UpdateUndergroundRailToolGhost(INVALID_WIDGET, this->railtype);
+		/* The cut-plane views are for building underground; without the toolbar, back to the surface. */
+		if (data != RAIL_TOOLBAR_REOPEN && IsUndergroundSliceMode()) SetUndergroundViewMode(UndergroundViewMode::Off);
 		this->Window::Close();
 	}
 
@@ -469,7 +554,58 @@ struct BuildRailToolbarWindow : Window {
 		WID_RAT_BUILD_NS, WID_RAT_BUILD_X, WID_RAT_BUILD_EW, WID_RAT_BUILD_Y, WID_RAT_AUTORAIL,
 		WID_RAT_BUILD_DEPOT, WID_RAT_BUILD_WAYPOINT, WID_RAT_BUILD_STATION, WID_RAT_BUILD_SIGNALS,
 		WID_RAT_BUILD_BRIDGE, WID_RAT_BUILD_TUNNEL, WID_RAT_CONVERT_RAIL,
+		WID_RAT_BUILD_EXIT_PAVILION, WID_RAT_BUILD_EXIT_UNDERPASS, WID_RAT_BUILD_PORTAL, WID_RAT_BUILD_RAMP_DOWN, WID_RAT_BUILD_RAMP_UP,
 	};
+
+	/**
+	 * Whether a tool can be used on the level the toolbar builds on.
+	 * @param widget The tool's button.
+	 * @param underground The toolbar builds on the viewed underground level.
+	 */
+	static bool IsToolOnLevel(WidgetID widget, bool underground)
+	{
+		switch (widget) {
+			case WID_RAT_BUILD_DEPOT:
+			case WID_RAT_BUILD_WAYPOINT:
+			case WID_RAT_BUILD_BRIDGE:
+			case WID_RAT_BUILD_TUNNEL:
+				return !underground;
+
+			case WID_RAT_BUILD_RAMP_DOWN:
+			case WID_RAT_BUILD_RAMP_UP:
+				return underground;
+
+			default:
+				return true;
+		}
+	}
+
+	/** Explain the tools that build or remove differently underground. */
+	void UpdateLevelToolTips()
+	{
+		this->GetWidget<NWidgetCore>(WID_RAT_DEMOLISH)->SetToolTip(this->underground ? STR_UNDERGROUND_TOOLTIP_DEMOLISH : STR_TOOLTIP_DEMOLISH_BUILDINGS_ETC);
+		this->GetWidget<NWidgetCore>(WID_RAT_REMOVE)->SetToolTip(this->underground ? STR_UNDERGROUND_TOOLTIP_REMOVE_TOGGLE : STR_RAIL_TOOLBAR_TOOLTIP_TOGGLE_BUILD_REMOVE_FOR);
+	}
+
+	/**
+	 * The toolbar switched between building on the surface and underground:
+	 * stop the active tool, to pick it again for the other level.
+	 * @param[out] remove The remove button was down with the tool.
+	 * @param[out] signal_gui The signal selection window was open with the tool.
+	 * @return The tool, or INVALID_WIDGET when none was active.
+	 */
+	WidgetID StopToolForLevelChange(bool &remove, bool &signal_gui)
+	{
+		this->underground = IsUndergroundSliceMode();
+		this->UpdateLevelToolTips();
+
+		WidgetID tool = this->last_user_action;
+		if (_thd.GetCallbackWnd() != this || tool == INVALID_WIDGET || !this->IsWidgetLowered(tool)) return INVALID_WIDGET;
+		remove = _remove_button_clicked;
+		signal_gui = FindWindowById(WC_BUILD_SIGNAL, TRANSPORT_RAIL) != nullptr;
+		ResetObjectToPlace();
+		return tool;
+	}
 
 	void OnInvalidateData([[maybe_unused]] int data = 0, [[maybe_unused]] bool gui_scope = true) override
 	{
@@ -481,11 +617,26 @@ struct BuildRailToolbarWindow : Window {
 			return;
 		}
 
+		bool restart_remove = false;
+		bool restart_signal_gui = true;
+		WidgetID restart = (this->underground != IsUndergroundSliceMode()) ? this->StopToolForLevelChange(restart_remove, restart_signal_gui) : INVALID_WIDGET;
+
 		bool can_build = CanBuildVehicleInfrastructure(VEH_TRAIN);
-		for (const WidgetID widget : can_build_widgets) this->SetWidgetDisabledState(widget, !can_build);
+		for (const WidgetID widget : can_build_widgets) this->SetWidgetDisabledState(widget, !can_build || !IsToolOnLevel(widget, this->underground));
+		this->SetDirty();
+
+		if (restart != INVALID_WIDGET && !this->IsWidgetDisabled(restart)) {
+			/* Pick the tool again for the other level, as it was picked: Ctrl+click
+			 * picks the signal tool without the signal selection window. */
+			AutoRestoreBackup ctrl_backup(_ctrl_pressed, restart == WID_RAT_BUILD_SIGNALS && !restart_signal_gui);
+			this->OnClick(Point(), restart, 1);
+			if (restart_remove && !_remove_button_clicked && !this->IsWidgetDisabled(WID_RAT_REMOVE)) ToggleRailButton_Remove(this);
+		}
+
 		if (!can_build) {
 			CloseWindowById(WC_BUILD_SIGNAL, TRANSPORT_RAIL);
 			CloseWindowById(WC_BUILD_STATION, TRANSPORT_RAIL);
+			CloseUndergroundStationBuilder();
 			CloseWindowById(WC_BUILD_DEPOT, TRANSPORT_RAIL);
 			CloseWindowById(WC_BUILD_WAYPOINT, TRANSPORT_RAIL);
 			CloseWindowById(WC_SELECT_STATION, 0);
@@ -525,6 +676,7 @@ struct BuildRailToolbarWindow : Window {
 	{
 		this->railtype = railtype;
 		this->ReInit();
+		SetUndergroundStationBuilderRailType(railtype);
 	}
 
 	void UpdateRemoveWidgetStatus(WidgetID clicked_widget)
@@ -544,9 +696,13 @@ struct BuildRailToolbarWindow : Window {
 			case WID_RAT_BUILD_STATION:
 			case WID_RAT_BUILD_SIGNALS:
 				/* Removal button is enabled only if the rail/signal/waypoint/station
-				 * button is still lowered.  Once raised, it has to be disabled */
-				this->SetWidgetDisabledState(WID_RAT_REMOVE, !this->IsWidgetLowered(clicked_widget));
-				break;
+				 * button is still lowered.  Once raised, it has to be disabled.
+				 * Underground stations are removed with the demolish tool. */
+				if (clicked_widget != WID_RAT_BUILD_STATION || !IsUndergroundSliceMode()) {
+					this->SetWidgetDisabledState(WID_RAT_REMOVE, !this->IsWidgetLowered(clicked_widget));
+					break;
+				}
+				[[fallthrough]];
 
 			default:
 				/* When any other buttons than rail/signal/waypoint/station, raise and
@@ -565,6 +721,11 @@ struct BuildRailToolbarWindow : Window {
 				return GetString(STR_TOOLBAR_RAILTYPE_VELOCITY, rti->strings.toolbar_caption, PackVelocity(rti->max_speed, VEH_TRAIN));
 			}
 			return GetString(rti->strings.toolbar_caption);
+		}
+
+		if (widget == WID_RAT_LEVEL) {
+			if (!IsUndergroundSliceMode()) return GetString(STR_UNDERGROUND_LEVEL_SURFACE);
+			return GetString(STR_JUST_INT, GetUndergroundViewDepth());
 		}
 
 		return this->Window::GetWidgetString(widget, stringid);
@@ -591,6 +752,12 @@ struct BuildRailToolbarWindow : Window {
 			case WID_RAT_BUILD_BRIDGE: return SPR_CURSOR_BRIDGE;
 			case WID_RAT_BUILD_TUNNEL: return GetRailTypeInfo(_cur_railtype)->cursor.tunnel;
 			case WID_RAT_CONVERT_RAIL: return GetRailTypeInfo(_cur_railtype)->cursor.convert;
+			case WID_RAT_PICK_RAILTYPE: return SPR_CURSOR_QUERY;
+			case WID_RAT_BUILD_EXIT_PAVILION: return SPR_CURSOR_BUS_STATION;
+			case WID_RAT_BUILD_EXIT_UNDERPASS: return SPR_CURSOR_ROAD_TUNNEL;
+			case WID_RAT_BUILD_PORTAL: return GetRailTypeInfo(_cur_railtype)->cursor.tunnel;
+			case WID_RAT_BUILD_RAMP_DOWN: return GetRailTypeInfo(_cur_railtype)->cursor.autorail;
+			case WID_RAT_BUILD_RAMP_UP: return GetRailTypeInfo(_cur_railtype)->cursor.autorail;
 			default: NOT_REACHED();
 		}
 	}
@@ -608,14 +775,23 @@ struct BuildRailToolbarWindow : Window {
 			case WID_RAT_BUILD_EW: return HT_LINE | HT_DIR_HL;
 			case WID_RAT_BUILD_Y: return HT_LINE | HT_DIR_Y;
 			case WID_RAT_AUTORAIL: return HT_RAIL;
-			case WID_RAT_DEMOLISH: return HT_RECT | HT_DIAGONAL;
+			/* Underground the dynamite follows the line, or with Ctrl takes a surface rectangle. */
+			case WID_RAT_DEMOLISH: return IsUndergroundSliceMode() ? HT_RECT : HT_RECT | HT_DIAGONAL;
 			case WID_RAT_BUILD_DEPOT: return HT_RECT;
 			case WID_RAT_BUILD_WAYPOINT: return HT_RECT;
 			case WID_RAT_BUILD_STATION: return HT_RECT;
 			case WID_RAT_BUILD_SIGNALS: return HT_RECT;
 			case WID_RAT_BUILD_BRIDGE: return HT_RECT;
 			case WID_RAT_BUILD_TUNNEL: return HT_SPECIAL;
-			case WID_RAT_CONVERT_RAIL: return HT_RECT | HT_DIAGONAL;
+			/* Underground conversion takes no diagonal areas. */
+			case WID_RAT_CONVERT_RAIL: return IsUndergroundSliceMode() ? HT_RECT : HT_RECT | HT_DIAGONAL;
+			case WID_RAT_PICK_RAILTYPE: return HT_RECT;
+			case WID_RAT_BUILD_EXIT_PAVILION: return HT_RECT;
+			case WID_RAT_BUILD_EXIT_UNDERPASS: return HT_RECT;
+			case WID_RAT_BUILD_PORTAL: return HT_RAIL;
+			/* The ramp's ghost shows its direction; the tile is just framed. */
+			case WID_RAT_BUILD_RAMP_DOWN: return HT_RECT;
+			case WID_RAT_BUILD_RAMP_UP: return HT_RECT;
 			default: NOT_REACHED();
 		}
 	}
@@ -624,6 +800,49 @@ struct BuildRailToolbarWindow : Window {
 	void OnClick([[maybe_unused]] Point pt, WidgetID widget, [[maybe_unused]] int click_count) override
 	{
 		if (widget < WID_RAT_BUILD_NS) return;
+
+		/* The views and levels; the active tool stays. */
+		switch (widget) {
+			case WID_RAT_BLUEPRINTS:
+				ShowMetroBlueprintWindow();
+				return;
+
+			case WID_RAT_XRAY:
+				ToggleUndergroundViewButton(UndergroundViewMode::XRay);
+				return;
+
+			case WID_RAT_SHOW_ABOVE:
+				ToggleUndergroundViewButton(UndergroundViewMode::Above);
+				return;
+
+			case WID_RAT_SHOW_BELOW:
+				ToggleUndergroundViewButton(UndergroundViewMode::Below);
+				return;
+
+			case WID_RAT_LEVEL:
+				SetUndergroundViewMode(IsUndergroundSliceMode() ? UndergroundViewMode::Off : UndergroundViewMode::Slice);
+				SndClickBeep();
+				return;
+
+			case WID_RAT_LEVEL_DOWN:
+				if (!IsUndergroundSliceMode()) {
+					SetUndergroundViewMode(UndergroundViewMode::Slice);
+				} else if (GetUndergroundViewDepth() > GetMetroGlobalMinZ()) {
+					SetUndergroundViewDepth(GetUndergroundViewDepth() - 1);
+					this->SetDirty();
+				}
+				return;
+
+			case WID_RAT_LEVEL_UP:
+				if (!IsUndergroundSliceMode()) return;
+				if (GetUndergroundViewDepth() < GetMetroGlobalMaxZ()) {
+					SetUndergroundViewDepth(GetUndergroundViewDepth() + 1);
+					this->SetDirty();
+				} else {
+					SetUndergroundViewMode(UndergroundViewMode::Off);
+				}
+				return;
+		}
 
 		_remove_button_clicked = false;
 
@@ -651,7 +870,11 @@ struct BuildRailToolbarWindow : Window {
 
 			case WID_RAT_BUILD_STATION:
 				if (started) {
-					ShowStationBuilder(this);
+					if (IsUndergroundSliceMode()) {
+						ShowUndergroundStationBuilder(this, this->railtype);
+					} else {
+						ShowStationBuilder(this);
+					}
 				}
 				break;
 
@@ -676,6 +899,8 @@ struct BuildRailToolbarWindow : Window {
 
 	void OnPlaceObject([[maybe_unused]] Point pt, TileIndex tile) override
 	{
+		if (UndergroundRailToolPlaceObject(this->last_user_action, tile, this->railtype)) return;
+
 		switch (this->last_user_action) {
 			case WID_RAT_BUILD_NS:
 				VpStartPlaceSizing(tile, VPM_FIX_VERTICAL | VPM_RAILDIRS, DDSP_PLACE_RAIL);
@@ -729,8 +954,29 @@ struct BuildRailToolbarWindow : Window {
 				VpStartPlaceSizing(tile, VPM_X_AND_Y, DDSP_CONVERT_RAIL);
 				break;
 
+			case WID_RAT_PICK_RAILTYPE: {
+				/* Continue building with the track type already laid there;
+				 * underground, the track of the viewed level goes first. */
+				RailType rt = PickRailTypeAtTile(tile, IsUndergroundSliceMode() ? std::optional<int16_t>(GetUndergroundViewDepth()) : std::nullopt);
+				if (!CheckPickedRailType(rt, tile)) break;
+				ResetObjectToPlace();
+				this->SelectRailType(rt);
+				break;
+			}
+
 			default: NOT_REACHED();
 		}
+	}
+
+	/**
+	 * Build with another track type from now on, like choosing it in the list.
+	 * @param rt The track type.
+	 */
+	void SelectRailType(RailType rt)
+	{
+		_last_built_railtype = _cur_railtype = rt;
+		this->ModifyRailType(rt);
+		for (WindowClass cls : {WC_BUILD_STATION, WC_BUILD_SIGNAL, WC_BUILD_WAYPOINT, WC_BUILD_DEPOT}) SetWindowDirty(cls, TRANSPORT_RAIL);
 	}
 
 	void OnPlaceDrag(ViewportPlaceMethod select_method, [[maybe_unused]] ViewportDragDropSelectionProcess select_proc, [[maybe_unused]] Point pt) override
@@ -749,6 +995,8 @@ struct BuildRailToolbarWindow : Window {
 	void OnPlaceMouseUp([[maybe_unused]] ViewportPlaceMethod select_method, ViewportDragDropSelectionProcess select_proc, [[maybe_unused]] Point pt, TileIndex start_tile, TileIndex end_tile) override
 	{
 		if (pt.x != -1) {
+			if (UndergroundRailToolPlaceMouseUp(this->last_user_action, select_method, select_proc, start_tile, end_tile, this->railtype, _remove_button_clicked)) return;
+
 			switch (select_proc) {
 				default: NOT_REACHED();
 				case DDSP_BUILD_BRIDGE:
@@ -819,10 +1067,36 @@ struct BuildRailToolbarWindow : Window {
 
 		CloseWindowById(WC_BUILD_SIGNAL, TRANSPORT_RAIL);
 		CloseWindowById(WC_BUILD_STATION, TRANSPORT_RAIL);
+		CloseUndergroundStationBuilder();
 		CloseWindowById(WC_BUILD_DEPOT, TRANSPORT_RAIL);
 		CloseWindowById(WC_BUILD_WAYPOINT, TRANSPORT_RAIL);
 		CloseWindowById(WC_SELECT_STATION, 0);
 		CloseWindowByClass(WC_BUILD_BRIDGE);
+	}
+
+	void OnPaint() override
+	{
+		this->SetWidgetLoweredState(WID_RAT_XRAY, IsUndergroundXRayMode());
+		this->SetWidgetLoweredState(WID_RAT_SHOW_ABOVE, IsUndergroundAboveMode());
+		this->SetWidgetLoweredState(WID_RAT_SHOW_BELOW, IsUndergroundBelowMode());
+		this->SetWidgetLoweredState(WID_RAT_LEVEL, IsUndergroundSliceMode());
+		this->SetWidgetDisabledState(WID_RAT_LEVEL_DOWN, IsUndergroundSliceMode() && GetUndergroundViewDepth() <= GetMetroGlobalMinZ());
+		this->SetWidgetDisabledState(WID_RAT_LEVEL_UP, !IsUndergroundSliceMode());
+		this->DrawWidgets();
+	}
+
+	void UpdateWidgetSize(WidgetID widget, Dimension &size, const Dimension &padding, [[maybe_unused]] Dimension &fill, [[maybe_unused]] Dimension &resize) override
+	{
+		if (widget != WID_RAT_LEVEL) return;
+		Dimension d = GetStringBoundingBox(STR_UNDERGROUND_LEVEL_SURFACE);
+		d = maxdim(d, GetStringBoundingBox(GetString(STR_JUST_INT, GetMetroGlobalMinZ())));
+		d = maxdim(d, GetStringBoundingBox(GetString(STR_JUST_INT, MAX_MAP_HEIGHT_LIMIT)));
+		size.width = std::max(size.width, d.width + padding.width);
+	}
+
+	void DrawWidget(const Rect &r, WidgetID widget) const override
+	{
+		if (widget == WID_RAT_SHOW_ABOVE || widget == WID_RAT_SHOW_BELOW) DrawUndergroundViewButtonArrow(r, widget == WID_RAT_SHOW_ABOVE);
 	}
 
 	void OnPlacePresize([[maybe_unused]] Point pt, TileIndex tile) override
@@ -841,6 +1115,12 @@ struct BuildRailToolbarWindow : Window {
 	void OnRealtimeTick([[maybe_unused]] uint delta_ms) override
 	{
 		if (this->IsWidgetLowered(WID_RAT_BUILD_WAYPOINT)) CheckRedrawRailWaypointCoverage(this);
+	}
+
+	void OnMouseLoop() override
+	{
+		/* The ramp tools show the ramp they would build under the cursor. */
+		UpdateUndergroundRailToolGhost(this->last_user_action != INVALID_WIDGET && this->IsWidgetLowered(this->last_user_action) ? this->last_user_action : INVALID_WIDGET, this->railtype);
 	}
 
 	/**
@@ -894,6 +1174,9 @@ struct BuildRailToolbarWindow : Window {
 		Hotkey('T', "tunnel", WID_RAT_BUILD_TUNNEL),
 		Hotkey('R', "remove", WID_RAT_REMOVE),
 		Hotkey('C', "convert", WID_RAT_CONVERT_RAIL),
+		Hotkey('K', "pick_railtype", WID_RAT_PICK_RAILTYPE),
+		Hotkey(WKC_PAGEDOWN, "level_down", WID_RAT_LEVEL_DOWN),
+		Hotkey(WKC_PAGEUP, "level_up", WID_RAT_LEVEL_UP),
 		Hotkey(WKC_L_BRACKET, "prev_railtype", to_underlying(SpecialListHotkeys::PreviousItem)),
 		Hotkey(WKC_R_BRACKET, "next_railtype", to_underlying(SpecialListHotkeys::NextItem)),
 		Hotkey(WKC_L_BRACKET | WKC_CTRL, "first_railtype", to_underlying(SpecialListHotkeys::FirstItem)),
@@ -929,16 +1212,45 @@ static constexpr std::initializer_list<NWidgetPart> _nested_build_rail_widgets =
 						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_IMG_WAYPOINT, STR_RAIL_TOOLBAR_TOOLTIP_CONVERT_RAIL_TO_WAYPOINT),
 		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_BUILD_STATION),
 						SetFill(0, 1), SetToolbarMinimalSize(2), SetSpriteTip(SPR_IMG_RAIL_STATION, STR_RAIL_TOOLBAR_TOOLTIP_BUILD_RAILROAD_STATION),
+		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_BUILD_EXIT_PAVILION),
+						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_METRO_ICON_PAVILION, STR_UNDERGROUND_TOOLTIP_EXIT_PAVILION),
+		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_BUILD_EXIT_UNDERPASS),
+						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_METRO_ICON_UNDERPASS, STR_UNDERGROUND_TOOLTIP_EXIT_UNDERPASS),
 		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_BUILD_SIGNALS),
 						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_IMG_RAIL_SIGNALS, STR_RAIL_TOOLBAR_TOOLTIP_BUILD_RAILROAD_SIGNALS),
 		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_BUILD_BRIDGE),
 						SetFill(0, 1), SetToolbarMinimalSize(2), SetSpriteTip(SPR_IMG_BRIDGE, STR_RAIL_TOOLBAR_TOOLTIP_BUILD_RAILROAD_BRIDGE),
 		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_BUILD_TUNNEL),
 						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_IMG_TUNNEL_RAIL, STR_RAIL_TOOLBAR_TOOLTIP_BUILD_RAILROAD_TUNNEL),
+		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_BUILD_PORTAL),
+						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_METRO_ICON_PORTAL, STR_UNDERGROUND_TOOLTIP_PORTAL),
+		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_BUILD_RAMP_DOWN),
+						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_METRO_ICON_RAMP_DOWN, STR_UNDERGROUND_TOOLTIP_RAMP_DOWN),
+		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_BUILD_RAMP_UP),
+						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_METRO_ICON_RAMP_UP, STR_UNDERGROUND_TOOLTIP_RAMP_UP),
 		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_REMOVE),
 						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_IMG_REMOVE, STR_RAIL_TOOLBAR_TOOLTIP_TOGGLE_BUILD_REMOVE_FOR),
 		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_CONVERT_RAIL),
 						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_IMG_CONVERT_RAIL, STR_RAIL_TOOLBAR_TOOLTIP_CONVERT_RAIL),
+		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_PICK_RAILTYPE),
+						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_IMG_QUERY, STR_RAIL_TOOLBAR_TOOLTIP_PICK_RAILTYPE),
+		NWidget(WWT_PUSHTXTBTN, COLOUR_DARK_GREEN, WID_RAT_BLUEPRINTS),
+						SetFill(0, 1), SetMinimalSize(22, 22), SetTextStyle(TC_WHITE), SetStringTip(STR_RAIL_TOOLBAR_BLUEPRINTS, STR_RAIL_TOOLBAR_TOOLTIP_BLUEPRINTS),
+
+		NWidget(WWT_PANEL, COLOUR_DARK_GREEN), SetToolbarSpacerMinimalSize(), EndContainer(),
+
+		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_XRAY),
+						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_METRO_ICON_XRAY, STR_UNDERGROUND_TOOLTIP_XRAY),
+		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_SHOW_ABOVE),
+						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_METRO_ICON_XRAY, STR_UNDERGROUND_TOOLTIP_SHOW_ABOVE),
+		NWidget(WWT_IMGBTN, COLOUR_DARK_GREEN, WID_RAT_SHOW_BELOW),
+						SetFill(0, 1), SetToolbarMinimalSize(1), SetSpriteTip(SPR_METRO_ICON_XRAY, STR_UNDERGROUND_TOOLTIP_SHOW_BELOW),
+		NWidget(WWT_PUSHIMGBTN, COLOUR_DARK_GREEN, WID_RAT_LEVEL_DOWN),
+						SetFill(0, 1), SetMinimalSize(12, 22), SetSpriteTip(SPR_ARROW_DOWN, STR_UNDERGROUND_TOOLTIP_LEVEL_DOWN),
+		NWidget(WWT_TEXTBTN, COLOUR_DARK_GREEN, WID_RAT_LEVEL),
+						SetFill(0, 1), SetMinimalSize(30, 22), SetTextStyle(TC_WHITE), SetToolTip(STR_UNDERGROUND_TOOLTIP_LEVEL),
+		NWidget(WWT_PUSHIMGBTN, COLOUR_DARK_GREEN, WID_RAT_LEVEL_UP),
+						SetFill(0, 1), SetMinimalSize(12, 22), SetSpriteTip(SPR_ARROW_UP, STR_UNDERGROUND_TOOLTIP_LEVEL_UP),
 	EndContainer(),
 };
 
@@ -964,10 +1276,24 @@ Window *ShowBuildRailToolbar(RailType railtype)
 	if (!Company::IsValidID(_local_company)) return nullptr;
 	if (!ValParamRailType(railtype)) return nullptr;
 
-	CloseWindowByClass(WC_BUILD_TOOLBAR);
+	/* Another track type is built on the same level. */
+	CloseWindowByClass(WC_BUILD_TOOLBAR, RAIL_TOOLBAR_REOPEN);
 	_cur_railtype = railtype;
 	_remove_button_clicked = false;
 	return new BuildRailToolbarWindow(_build_rail_desc, railtype);
+}
+
+/**
+ * Open the railway construction toolbar, if it is not open yet, with the
+ * "copy track type from a tile" tool picked: the next click on a track
+ * selects its type.
+ */
+void ShowBuildRailToolbarWithPicker()
+{
+	Window *w = FindWindowById(WC_BUILD_TOOLBAR, TRANSPORT_RAIL);
+	if (w == nullptr) w = ShowBuildRailToolbar(_last_built_railtype);
+	if (w == nullptr) return;
+	if (!w->IsWidgetLowered(WID_RAT_PICK_RAILTYPE)) w->OnClick(Point(), WID_RAT_PICK_RAILTYPE, 1);
 }
 
 /* TODO: For custom stations, respect their allowed platforms/lengths bitmasks!
@@ -1754,6 +2080,43 @@ static WindowDesc _signal_builder_desc(
 static void ShowSignalBuilder(Window *parent)
 {
 	new BuildSignalWindow(_signal_builder_desc, parent);
+}
+
+/**
+ * The signal the signal tool builds or converts to, like GenericPlaceSignals
+ * and PlaceSignals_AutoSignals decide it: the choice of the signal selection
+ * window while it is open, otherwise the default signal type and the variant
+ * of the year.
+ * @param signal_on_tile Type of the signal already on the clicked track, if any;
+ *                       decides the types Ctrl+click cycles through.
+ * @return The selection.
+ */
+SignalToolSelection GetSignalToolSelection(std::optional<SignalType> signal_on_tile)
+{
+	SignalToolSelection sel;
+	if (FindWindowById(WC_BUILD_SIGNAL, 0) != nullptr) {
+		sel.type = _cur_signal_type;
+		sel.variant = _cur_signal_variant;
+		sel.convert = _convert_signal_button;
+	} else {
+		sel.type = _settings_client.gui.default_signal_type;
+		sel.variant = TimerGameCalendar::year < _settings_client.gui.semaphore_build_before ? SIG_SEMAPHORE : SIG_ELECTRIC;
+		sel.convert = false;
+	}
+
+	/* Start with the least restrictive case: the player wants to cycle through all signals they can see. */
+	SignalType cur_signal_on_tile = signal_on_tile.value_or(sel.type);
+	if (_settings_client.gui.cycle_signal_types == SIGNAL_CYCLE_ALL) {
+		sel.cycle_start = _settings_client.gui.signal_gui_mode == SIGNAL_GUI_ALL ? SIGTYPE_BLOCK : SIGTYPE_PBS;
+		sel.cycle_end = SIGTYPE_LAST;
+	} else if (cur_signal_on_tile <= SIGTYPE_LAST_NOPBS) {
+		sel.cycle_start = SIGTYPE_BLOCK;
+		sel.cycle_end = SIGTYPE_LAST_NOPBS;
+	} else {
+		sel.cycle_start = SIGTYPE_PBS;
+		sel.cycle_end = SIGTYPE_LAST;
+	}
+	return sel;
 }
 
 struct BuildRailDepotWindow : public PickerWindowBase {

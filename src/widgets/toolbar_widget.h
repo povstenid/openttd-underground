@@ -44,6 +44,11 @@ enum ToolbarNormalWidgets : WidgetID {
 	WID_TN_MUSIC_SOUND,   ///< Music/sound configuration menu.
 	WID_TN_MESSAGES,      ///< Messages menu.
 	WID_TN_HELP,          ///< Help menu.
+	WID_TN_UNDERGROUND,   ///< Open the underground construction toolbar.
+	WID_TN_UNDERGROUND_XRAY, ///< Toggle the underground X-ray view.
+	WID_TN_UNDERGROUND_BELOW, ///< Toggle the view of the underground levels below the viewed one.
+	WID_TN_UNDERGROUND_ABOVE, ///< Toggle the view of the underground levels above the viewed one.
+	WID_TN_STATION_COVERAGE, ///< Toggle the coverage overlay of all own stations.
 	WID_TN_SWITCH_BAR,    ///< Only available when toolbar has been split to switch between different subsets.
 	WID_TN_END,           ///< Helper for knowing the amount of widgets.
 };

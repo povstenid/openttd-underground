@@ -35,6 +35,35 @@ add_custom_target(gs_compat_files
         DEPENDS ${GS_COMPAT_BINARY_FILES}
 )
 
+file(GLOB_RECURSE GS_LIBRARY_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/library/*.nut")
+
+foreach(GS_LIBRARY_SOURCE_FILE IN LISTS GS_LIBRARY_SOURCE_FILES)
+    string(REPLACE "${CMAKE_SOURCE_DIR}/bin/" "" GS_LIBRARY_SOURCE_FILE_NAME "${GS_LIBRARY_SOURCE_FILE}")
+    string(CONCAT GS_LIBRARY_BINARY_FILE "${CMAKE_BINARY_DIR}/" "${GS_LIBRARY_SOURCE_FILE_NAME}")
+    get_filename_component(GS_LIBRARY_BINARY_DIR "${GS_LIBRARY_BINARY_FILE}" DIRECTORY)
+
+    add_custom_command(OUTPUT ${GS_LIBRARY_BINARY_FILE}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${GS_LIBRARY_BINARY_DIR}
+            COMMAND ${CMAKE_COMMAND} -E copy
+                    ${GS_LIBRARY_SOURCE_FILE}
+                    ${GS_LIBRARY_BINARY_FILE}
+            MAIN_DEPENDENCY ${GS_LIBRARY_SOURCE_FILE}
+            COMMENT "Copying ${GS_LIBRARY_SOURCE_FILE_NAME}"
+    )
+
+    list(APPEND GS_LIBRARY_BINARY_FILES ${GS_LIBRARY_BINARY_FILE})
+endforeach()
+
+if(GS_LIBRARY_BINARY_FILES)
+    add_custom_target(gs_library_files
+            DEPENDS ${GS_LIBRARY_BINARY_FILES}
+    )
+
+    add_dependencies(openttd
+        gs_library_files
+    )
+endif()
+
 add_dependencies(openttd
     gs_compat_files
 )

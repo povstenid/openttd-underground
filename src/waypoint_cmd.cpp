@@ -34,6 +34,7 @@
 #include "company_gui.h"
 #include "waypoint_cmd.h"
 #include "landscape_cmd.h"
+#include "multilayer/underground_cmd.h"
 #include "station_layout_type.h"
 
 #include "widgets/misc_widget.h"
@@ -169,6 +170,12 @@ static CommandCost IsValidTileForWaypoint(TileIndex tile, Axis axis, StationID *
 	}
 
 	if (GetAxisForNewRailWaypoint(tile) != axis) return CommandCost(STR_ERROR_NO_SUITABLE_RAILROAD_TRACK);
+
+	/* Converting a metro portal's surface rail into a waypoint would orphan the portal. */
+	if (IsTileType(tile, TileType::Railway)) {
+		CommandCost portal_ret = CheckPortalSurfaceRailRemoval(tile, TRACK_BIT_ALL, {});
+		if (portal_ret.Failed()) return portal_ret;
+	}
 
 	Owner owner = GetTileOwner(tile);
 	CommandCost ret = CheckOwnership(owner);

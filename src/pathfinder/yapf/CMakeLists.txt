@@ -14,6 +14,8 @@ add_files(
     yapf_node_road.hpp
     yapf_node_ship.hpp
     yapf_rail.cpp
+    yapf3d_rail.cpp
+    yapf3d_rail.h
     yapf_river_builder.h
     yapf_river_builder.cpp
     yapf_road.cpp

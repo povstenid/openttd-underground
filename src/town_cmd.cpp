@@ -58,6 +58,8 @@
 #include "clear_map.h"
 #include "tree_map.h"
 #include "map_func.h"
+#include "pedestrians.h"
+#include "multilayer/underground_rules.h"
 #include "timer/timer.h"
 #include "timer/timer_game_calendar.h"
 #include "timer/timer_game_economy.h"
@@ -611,6 +613,7 @@ static void TileLoop_Town(TileIndex tile)
 	uint32_t r = Random();
 
 	StationFinder stations(TileArea(tile, 1, 1));
+	PedestrianSourceScope pedestrian_source(tile);
 
 	if (hs->callback_mask.Test(HouseCallbackMask::ProduceCargo)) {
 		for (uint i = 0; i < 256; i++) {
@@ -2902,6 +2905,9 @@ static bool TryBuildTownHouse(Town *t, TileIndex tile, TownExpandModes modes)
 			/* 1x1 house checks are already done */
 		}
 
+		/* Its foundation must not reach down to underground construction. */
+		if (!CanHouseFoundationBeBuilt(house, tile)) continue;
+
 		uint8_t random_bits = Random();
 
 		if (hs->callback_mask.Test(HouseCallbackMask::AllowConstruction)) {
@@ -2954,6 +2960,9 @@ CommandCost CmdPlaceHouse(DoCommandFlags flags, TileIndex tile, HouseID house, b
 
 		/* Houses cannot be built under bridges. */
 		if (IsBridgeAbove(subtile)) return CommandCost(STR_ERROR_MUST_DEMOLISH_BRIDGE_FIRST);
+
+		/* Nor with a foundation reaching down to underground construction. */
+		if (HasUndergroundWithinDepth(subtile, GetHouseTypeFoundationDepth(house))) return CommandCost(STR_ERROR_UNDERGROUND_IN_THE_WAY);
 
 		/* Make sure there is no slope? */
 		bool noslope = hs->building_flags.Test(BuildingFlag::NotSloped);

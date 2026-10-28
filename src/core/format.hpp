@@ -13,35 +13,43 @@
 #include "../3rdparty/fmt/format.h"
 #include "convertible_through_base.hpp"
 
-template <typename E, typename Char> requires std::is_enum_v<E>
-struct fmt::formatter<E, Char> : fmt::formatter<typename std::underlying_type_t<E>> {
-	using underlying_type = typename std::underlying_type_t<E>;
-	using parent = typename fmt::formatter<underlying_type>;
+template <typename T, bool IsEnum = std::is_enum_v<T>>
+struct openttd_fmt_base_type;
 
-	constexpr fmt::format_parse_context::iterator parse(fmt::format_parse_context &ctx)
-	{
-		return parent::parse(ctx);
-	}
+template <typename T>
+struct openttd_fmt_base_type<T, true> {
+	using type = std::underlying_type_t<T>;
 
-	fmt::format_context::iterator format(const E &e, fmt::format_context &ctx) const
+	static constexpr type Convert(const T &value)
 	{
-		return parent::format(underlying_type(e), ctx);
+		return static_cast<type>(value);
 	}
 };
 
-template <ConvertibleThroughBase T, typename Char>
-struct fmt::formatter<T, Char> : fmt::formatter<typename T::BaseType> {
-	using underlying_type = typename T::BaseType;
-	using parent = typename fmt::formatter<underlying_type>;
+template <typename T>
+	requires (!std::is_enum_v<T> && ConvertibleThroughBase<T>)
+struct openttd_fmt_base_type<T, false> {
+	using type = typename T::BaseType;
+
+	static constexpr type Convert(const T &value)
+	{
+		return value.base();
+	}
+};
+
+template <typename T, typename Char> requires (std::is_enum_v<T> || ConvertibleThroughBase<T>)
+struct fmt::formatter<T, Char> : fmt::formatter<typename openttd_fmt_base_type<T>::type, Char> {
+	using underlying_type = typename openttd_fmt_base_type<T>::type;
+	using parent = typename fmt::formatter<underlying_type, Char>;
 
 	constexpr fmt::format_parse_context::iterator parse(fmt::format_parse_context &ctx)
 	{
 		return parent::parse(ctx);
 	}
 
-	fmt::format_context::iterator format(const T &t, fmt::format_context &ctx) const
+	fmt::format_context::iterator format(const T &value, fmt::format_context &ctx) const
 	{
-		return parent::format(t.base(), ctx);
+		return parent::format(openttd_fmt_base_type<T>::Convert(value), ctx);
 	}
 };
 

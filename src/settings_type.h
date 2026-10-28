@@ -245,6 +245,12 @@ struct GUISettings {
 	TimerGameCalendar::Year semaphore_build_before; ///< build semaphore signals automatically before this year
 	uint8_t news_message_timeout;             ///< how much longer than the news message "age" should we keep the message in the history
 	bool   show_track_reservation;           ///< highlight reserved tracks.
+	bool   show_pedestrians;                 ///< show pedestrians walking from houses to stations.
+	uint8_t pedestrian_ratio;                ///< number of passengers shown by one pedestrian.
+	bool   pedestrians_from_houses;          ///< passengers walk from houses to the stations they use.
+	bool   pedestrian_arrivals;              ///< passengers leaving vehicles walk to houses.
+	bool   pedestrian_crowds;                ///< waiting passengers stand at stops and on platforms.
+	uint16_t pedestrian_limit;               ///< most pedestrians walking at once.
 	uint8_t station_numtracks;                ///< the number of platforms to default on for rail stations
 	uint8_t station_platlength;               ///< the platform length, in tiles, for rail stations
 	bool   station_dragdrop;                 ///< whether drag and drop is enabled for stations
@@ -433,6 +439,56 @@ struct GameCreationSettings {
 	uint8_t amount_of_rivers;                 ///< the amount of rivers
 };
 
+/** Whether underground construction may go under the sea. */
+enum UndergroundSeaTunnels : uint8_t {
+	UST_FORBIDDEN = 0,    ///< Stricter: nothing is built under the sea, at any depth.
+	UST_BY_SEA_DEPTH = 1, ///< The normal rule: below the depth of the sea, which grows with the distance to the shore.
+};
+
+/**
+ * Settings of underground (metro) construction and its prices.
+ * The depth below the surface (construction.max_underground_depth) and the
+ * distance of station exits (construction.max_station_exit_distance) keep
+ * their places in ConstructionSettings for old configs and saves.
+ * Multipliers named "..._cost_..." other than base_cost_multiplier are in tenths (15 = x1.5).
+ */
+struct UndergroundSettings {
+	int8_t deepest_tunnel_level;          ///< deepest absolute level of tunnels, ramps and portals (-10..-1)
+	int8_t deepest_station_level;         ///< deepest absolute level of station platforms (-10..-1), never deeper than tunnels
+	uint8_t sea_tunnels;                  ///< UndergroundSeaTunnels: whether to build under the sea
+	uint8_t foundation_high_percent;      ///< houses with at least this percentage of the largest population per tile have a foundation of 2 levels
+	uint8_t foundation_medium_percent;    ///< houses with at least this percentage of the largest population per tile have a foundation of 1 level
+	uint8_t base_cost_multiplier;         ///< underground prices are the surface prices times this (x1..x50, a whole number)
+	uint16_t tunnel_cost_earth;           ///< tunnel price multiplier in earth (depth 1), in tenths
+	uint16_t tunnel_cost_clay_light;      ///< tunnel price multiplier in light clay (depth 2), in tenths
+	uint16_t tunnel_cost_clay;            ///< tunnel price multiplier in clay (depth 3), in tenths
+	uint16_t tunnel_cost_clay_dark;       ///< tunnel price multiplier in dark clay (depth 4), in tenths
+	uint16_t tunnel_cost_marble_light;    ///< tunnel price multiplier in light marble (depth 5), in tenths
+	uint16_t tunnel_cost_marble_grey;     ///< tunnel price multiplier in grey marble (depth 6), in tenths
+	uint16_t tunnel_cost_granite_pink;    ///< tunnel price multiplier in pink granite (depth 7), in tenths
+	uint16_t tunnel_cost_granite_grey;    ///< tunnel price multiplier in grey granite (depth 8), in tenths
+	uint16_t tunnel_cost_granite_dark;    ///< tunnel price multiplier in dark granite (depth 9), in tenths
+	uint16_t tunnel_cost_granite_black;   ///< tunnel price multiplier in black granite (depth 10), in tenths
+	uint16_t tunnel_cost_obsidian;        ///< tunnel price multiplier in obsidian (depth 11 and deeper), in tenths
+	uint16_t tunnel_cost_sand;            ///< tunnel price multiplier in sand below water (depths 1..3), in tenths
+	uint16_t station_cost_earth;          ///< station price multiplier in earth (depth 1), in tenths
+	uint16_t station_cost_clay_light;     ///< station price multiplier in light clay (depth 2), in tenths
+	uint16_t station_cost_clay;           ///< station price multiplier in clay (depth 3), in tenths
+	uint16_t station_cost_clay_dark;      ///< station price multiplier in dark clay (depth 4), in tenths
+	uint16_t station_cost_marble_light;   ///< station price multiplier in light marble (depth 5), in tenths
+	uint16_t station_cost_marble_grey;    ///< station price multiplier in grey marble (depth 6), in tenths
+	uint16_t station_cost_granite_pink;   ///< station price multiplier in pink granite (depth 7), in tenths
+	uint16_t station_cost_granite_grey;   ///< station price multiplier in grey granite (depth 8), in tenths
+	uint16_t station_cost_granite_dark;   ///< station price multiplier in dark granite (depth 9), in tenths
+	uint16_t station_cost_granite_black;  ///< station price multiplier in black granite (depth 10), in tenths
+	uint16_t station_cost_obsidian;       ///< station price multiplier in obsidian (depth 11 and deeper), in tenths
+	uint16_t station_cost_sand;           ///< station price multiplier in sand below water (depths 1..3), in tenths
+	uint16_t ramp_cost_multiplier;        ///< extra price multiplier of a ramp, in tenths
+	uint16_t portal_cost_multiplier;      ///< extra price multiplier of a portal, in tenths
+	uint8_t refund_percent;               ///< percentage of the build price returned on removal (0..100)
+	bool refund_soil;                     ///< whether the refund on removal includes the soil multiplier
+};
+
 /** Settings related to construction in-game */
 struct ConstructionSettings {
 	uint8_t  map_height_limit;                 ///< the maximum allowed heightlevel
@@ -441,6 +497,8 @@ struct ConstructionSettings {
 	uint16_t max_bridge_length;                ///< maximum length of bridges
 	uint8_t max_bridge_height;                ///< maximum height of bridges
 	uint16_t max_tunnel_length;                ///< maximum length of tunnels
+	uint8_t max_underground_depth;            ///< maximum depth of underground construction below the surface of the tile (1-15)
+	uint8_t max_station_exit_distance;       ///< maximum distance (in tiles) between an underground station exit and the nearest platform (1-6)
 	uint8_t train_signal_side;                ///< show signals on left / driving / right side
 	bool   extra_dynamite;                   ///< extra dynamite
 	bool   road_stop_on_town_road;           ///< allow building of drive-through road stops on town owned roads
@@ -662,7 +720,8 @@ struct GameSettings {
 	DifficultySettings   difficulty;         ///< settings related to the difficulty
 	GameCreationSettings game_creation;      ///< settings used during the creation of a game (map)
 	ConstructionSettings construction;       ///< construction of things in-game
-	AISettings           ai;                 ///< what may the AI do?
+	UndergroundSettings  underground;        ///< underground (metro) construction and its prices
+	AISettings          ai;                 ///< what may the AI do?
 	ScriptSettings       script;             ///< settings for scripts
 	ScriptConfigSettings script_config;      ///< AI and Gamescript configuration.
 	PathfinderSettings   pf;                 ///< settings for all pathfinders

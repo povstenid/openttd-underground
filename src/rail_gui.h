@@ -11,6 +11,8 @@
 #define RAIL_GUI_H
 
 #include "rail_type.h"
+#include "signal_type.h"
+#include "tile_type.h"
 #include "dropdown_type.h"
 
 struct Window *ShowBuildRailToolbar(RailType railtype);
@@ -18,6 +20,23 @@ void ReinitGuiAfterToggleElrail(bool disable);
 void ResetSignalVariant(int32_t = 0);
 void InitializeRailGUI();
 DropDownList GetRailTypeDropDownList(bool for_replacement = false, bool all_option = false);
+
+/** What the signal tool builds; see GetSignalToolSelection. */
+struct SignalToolSelection {
+	SignalType type;          ///< Type of new or converted signals.
+	SignalVariant variant;    ///< Variant of new or converted signals.
+	bool convert;             ///< The convert button of the signal selection window is down.
+	SignalType cycle_start;   ///< First type Ctrl+click cycles through.
+	SignalType cycle_end;     ///< Last type Ctrl+click cycles through.
+};
+
+RailType PickRailTypeAtTile(TileIndex tile, std::optional<int16_t> depth);
+void ShowBuildRailToolbarWithPicker();
+
+/** Value of the "copy track type from a tile" item in the rail type menu of the main toolbar. */
+static constexpr int RAILTYPE_MENU_PICK = 0x100;
+bool CheckPickedRailType(RailType rt, TileIndex tile);
+SignalToolSelection GetSignalToolSelection(std::optional<SignalType> signal_on_tile);
 
 /** Settings for which signals are shown by the signal GUI. */
 enum SignalGUISettings : uint8_t {

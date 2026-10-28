@@ -23,6 +23,7 @@ add_files(
     linkgraph_sl.cpp
     map_sl.cpp
     misc_sl.cpp
+    multilayer_sl.cpp
     newgrf_sl.cpp
     newgrf_sl.h
     object_sl.cpp

@@ -12,10 +12,13 @@
 
 #include "video_driver.hpp"
 
+#include <vector>
+
 /** The null video driver. */
 class VideoDriver_Null : public VideoDriver {
 private:
 	uint ticks = 0; ///< Amount of ticks to run.
+	std::vector<uint8_t> headless_screen_buffer; ///< Backing for _screen when a real blitter is requested.
 
 public:
 	std::optional<std::string_view> Start(const StringList &param) override;

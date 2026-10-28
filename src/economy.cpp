@@ -56,6 +56,9 @@
 #include "timer/timer.h"
 #include "timer/timer_game_calendar.h"
 #include "timer/timer_game_economy.h"
+#include "economy_func.h"
+#include "multilayer/underground_cmd.h"
+#include "pedestrian_arrivals.h"
 
 #include "table/strings.h"
 #include "table/pricebase.h"
@@ -502,6 +505,12 @@ void ChangeOwnershipOfCompanyItems(Owner old_owner, Owner new_owner)
 
 	/* Add airport infrastructure count of the old company to the new one. */
 	if (new_owner != INVALID_OWNER) Company::Get(new_owner)->infrastructure.airport += Company::Get(old_owner)->infrastructure.airport;
+
+	/* Underground slices (metro track, platforms, ramps, portals). The company's trains are
+	 * already deleted/transferred above, and its surface tiles (including portal surface rail)
+	 * have been handled by ChangeTileOwner. Do this before the station owners change below,
+	 * so emptied underground stations are treated like emptied surface stations. */
+	ChangeUndergroundOwnership(old_owner, new_owner);
 
 	/* convert owner of stations (including deleted ones, but excluding buoys) */
 	for (Station *st : Station::Iterate()) {
@@ -1590,7 +1599,8 @@ static void ReserveConsist(Station *st, Vehicle *u, CargoArray *consist_capleft,
  */
 static void UpdateLoadUnloadTicks(Vehicle *front, const Station *st, int ticks)
 {
-	if (front->type == VEH_TRAIN && _settings_game.order.station_length_loading_penalty) {
+	if (front->type == VEH_TRAIN && _settings_game.order.station_length_loading_penalty &&
+			!Train::From(front)->IsUnderground()) {
 		/* Each platform tile is worth 2 rail vehicles. */
 		int overhang = front->GetGroundVehicleCache()->cached_total_length - st->GetPlatformLength(front->tile) * TILE_SIZE;
 		if (overhang > 0) {
@@ -1627,12 +1637,22 @@ static void LoadUnloadVehicle(Vehicle *front)
 	/* We have not waited enough time till the next round of loading/unloading */
 	if (front->load_unload_ticks != 0) return;
 
-	if (front->type == VEH_TRAIN && (!IsTileType(front->tile, TileType::Station) || GetStationIndex(front->tile) != st->index)) {
-		/* The train reversed in the station. Take the "easy" way
-		 * out and let the train just leave as it always did. */
-		front->vehicle_flags.Set(VehicleFlag::LoadingFinished);
-		front->load_unload_ticks = 1;
-		return;
+	if (front->type == VEH_TRAIN) {
+		Train *t = Train::From(front);
+		bool on_station = false;
+		if (t->IsUnderground()) {
+			/* Underground train — check if on a StationTile matching the station. */
+			on_station = true; /* Trust last_station_visited set during entry. */
+		} else {
+			on_station = IsTileType(front->tile, TileType::Station) && GetStationIndex(front->tile) == st->index;
+		}
+		if (!on_station) {
+			/* The train reversed in the station. Take the "easy" way
+			 * out and let the train just leave as it always did. */
+			front->vehicle_flags.Set(VehicleFlag::LoadingFinished);
+			front->load_unload_ticks = 1;
+			return;
+		}
 	}
 
 	int new_load_unload_ticks = 0;
@@ -1702,7 +1722,9 @@ static void LoadUnloadVehicle(Vehicle *front)
 			}
 
 			assert(payment != nullptr);
+			uint to_deliver = v->cargo.ActionCount(VehicleCargoList::MTA_DELIVER);
 			amount_unloaded = v->cargo.Unload(amount_unloaded, &ge->GetOrCreateData().cargo, v->cargo_type, payment, v->GetCargoTile());
+			OnPedestrianPassengersDelivered(st, v, to_deliver - v->cargo.ActionCount(VehicleCargoList::MTA_DELIVER));
 			remaining = v->cargo.UnloadCount() > 0;
 			if (amount_unloaded > 0) {
 				dirty_vehicle = true;
@@ -1824,8 +1846,10 @@ static void LoadUnloadVehicle(Vehicle *front)
 
 	if (anything_loaded || anything_unloaded) {
 		if (front->type == VEH_TRAIN) {
-			TriggerStationRandomisation(st, front->tile, StationRandomTrigger::VehicleLoads);
-			TriggerStationAnimation(st, front->tile, StationAnimationTrigger::VehicleLoads);
+			if (IsTileType(front->tile, TileType::Station)) {
+				TriggerStationRandomisation(st, front->tile, StationRandomTrigger::VehicleLoads);
+				TriggerStationAnimation(st, front->tile, StationAnimationTrigger::VehicleLoads);
+			}
 		} else if (front->type == VEH_ROAD) {
 			TriggerRoadStopRandomisation(st, front->tile, StationRandomTrigger::VehicleLoads);
 			TriggerRoadStopAnimation(st, front->tile, StationAnimationTrigger::VehicleLoads);
@@ -1932,7 +1956,9 @@ void LoadUnloadStation(Station *st)
 		if (v->vehstatus.Any({VehState::Stopped, VehState::Crashed})) continue;
 
 		assert(v->load_unload_ticks != 0);
-		if (--v->load_unload_ticks == 0) last_loading = v;
+		if (--v->load_unload_ticks == 0) {
+			last_loading = v;
+		}
 	}
 
 	/* We only need to reserve and load/unload up to the last loading vehicle.
@@ -1977,7 +2003,12 @@ static const IntervalTimer<TimerGameEconomy> _economy_companies_monthly({ TimerG
 	HandleEconomyFluctuations();
 });
 
-static void DoAcquireCompany(Company *c, bool hostile_takeover)
+/**
+ * Let #_current_company take over another company (merger or hostile takeover).
+ * @param c The company being acquired; it is deleted afterwards.
+ * @param hostile_takeover Whether this is a hostile takeover (only affects the news).
+ */
+void DoAcquireCompany(Company *c, bool hostile_takeover)
 {
 	CompanyID ci = c->index;
 

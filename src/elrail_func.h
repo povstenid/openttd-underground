@@ -37,6 +37,7 @@ inline bool HasRailCatenaryDrawn(RailType rt)
 void DrawRailCatenary(const TileInfo *ti);
 void DrawRailCatenaryOnTunnel(const TileInfo *ti);
 void DrawRailCatenaryOnBridge(const TileInfo *ti);
+void DrawUndergroundCatenary(const TileInfo *ti, TrackBits tracks, RailType rt, int z);
 
 void SettingsDisableElrail(int32_t new_value);
 void UpdateDisableElrailSettingState(bool disable, bool update_vehicles);

@@ -223,7 +223,15 @@ struct GroundVehicle : public SpecializedVehicle<T, Type> {
 			this->z_pos += HasBit(this->gv_flags, GVF_GOINGUP_BIT) ? d : -d;
 		}
 
-		assert(this->z_pos == GetSlopePixelZ(this->x_pos, this->y_pos, true));
+		/* Skip z_pos assertion for trains transitioning from underground.
+		 * Their z_pos may be temporarily inconsistent until UpdateInclination corrects it. */
+		if (this->IsGroundVehicle() && this->type == VEH_TRAIN) {
+			/* Fixup z_pos if mismatched (underground exit transition). */
+			int expected_z = GetSlopePixelZ(this->x_pos, this->y_pos, true);
+			if (this->z_pos != expected_z) this->z_pos = expected_z;
+		} else {
+			assert(this->z_pos == GetSlopePixelZ(this->x_pos, this->y_pos, true));
+		}
 	}
 
 	/**

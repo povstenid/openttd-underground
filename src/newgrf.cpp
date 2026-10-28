@@ -45,6 +45,7 @@
 #include "newgrf/newgrf_internal_vehicle.h"
 #include "newgrf/newgrf_internal.h"
 #include "newgrf/newgrf_stringmapping.h"
+#include "multilayer/underground_rules.h"
 
 #include "table/strings.h"
 #include "table/pricebase.h"
@@ -1660,6 +1661,8 @@ static void AfterLoadGRFs()
 
 	/* Add all new houses to the house array. */
 	FinaliseHouseArray();
+	/* The foundation depths of the houses follow from the set of houses. */
+	InvalidateHouseFoundationDepths();
 
 	/* Add all new industries to the industry array. */
 	FinaliseIndustriesArray();

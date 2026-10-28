@@ -50,6 +50,7 @@
 #include "void_map.h"
 #include "station_func.h"
 #include "station_base.h"
+#include "pedestrians.h"
 
 #include "table/strings.h"
 #include "table/settings.h"
@@ -553,6 +554,66 @@ static bool CheckMaxHeightLevel(int32_t &new_value)
 	}
 
 	return true;
+}
+
+/**
+ * The game settings an underground setting is being changed in: those of the
+ * running game (a command, the same on every client) or those of a new game
+ * (console 'setting_newgame', only on this machine). The checks and follow-ups
+ * below compare with and adjust only that same object, never the other one,
+ * as the game logic clamps these settings on reading anyway.
+ * @return The settings object.
+ */
+static GameSettings &GetGameSettingsBeingChanged()
+{
+	const void *object = GetSettingObjectBeingChanged();
+	assert(object != nullptr);
+	return *static_cast<GameSettings *>(const_cast<void *>(object));
+}
+
+/** Stations are never allowed deeper than tunnels: clamp the new station level. */
+static bool CheckUndergroundStationLevel(int32_t &new_value)
+{
+	/* The tunnel level may still be 0 from a config file: never let the bounds cross. */
+	new_value = std::clamp<int32_t>(new_value, std::min<int32_t>(GetGameSettingsBeingChanged().underground.deepest_tunnel_level, -1), -1);
+	return true;
+}
+
+/** The deepest tunnel level is below the ground level 0 (the setting's range ends at 0 as a maximum must not be negative). */
+static bool CheckUndergroundTunnelLevel(int32_t &new_value)
+{
+	new_value = std::min<int32_t>(new_value, -1);
+	return true;
+}
+
+/** Raising the deepest tunnel level raises the deepest station level of the same settings with it. */
+static void UndergroundTunnelLevelChanged(int32_t new_value)
+{
+	int8_t &station = GetGameSettingsBeingChanged().underground.deepest_station_level;
+	station = static_cast<int8_t>(std::max<int32_t>(station, new_value));
+	InvalidateWindowClassesData(WC_BUILD_TOOLBAR);
+	/* The underground views reach down to the deepest tunnel level. */
+	MarkWholeScreenDirty();
+}
+
+/** The threshold of medium foundations is never above the one of the highest. */
+static bool CheckUndergroundFoundationMedium(int32_t &new_value)
+{
+	new_value = std::min<int32_t>(new_value, GetGameSettingsBeingChanged().underground.foundation_high_percent);
+	return true;
+}
+
+/** Lowering the threshold of the highest foundations lowers the medium one of the same settings with it. */
+static void UndergroundFoundationHighChanged(int32_t new_value)
+{
+	uint8_t &medium = GetGameSettingsBeingChanged().underground.foundation_medium_percent;
+	medium = static_cast<uint8_t>(std::min<int32_t>(medium, new_value));
+}
+
+/** Underground price multipliers are stored in tenths: show them as "x1.5". */
+static std::pair<StringParameter, StringParameter> UndergroundMultiplierValueParams(const IntSettingDesc &, int32_t value)
+{
+	return {STR_JUST_RAW_STRING, GetString(STR_CONFIG_SETTING_UNDERGROUND_MULTIPLIER_VALUE, value, 1)};
 }
 
 static void StationCatchmentChanged(int32_t)

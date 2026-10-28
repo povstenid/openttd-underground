@@ -380,6 +380,26 @@ enum class Commands : uint8_t {
 	UpdateLeagueTableElementScore, ///< update the score of a league table element
 	RemoveLeagueTableElement, ///< remove a league table element
 
+	BuildUndergroundRail, ///< build underground rail track at a given depth
+	BuildUndergroundRailroadTrack, ///< build a stretch of underground rail track (drag)
+	BuildUndergroundSignalTrack, ///< build underground signals along a stretch of track (drag)
+	RemoveUndergroundRail, ///< remove underground rail track
+	RemoveUndergroundRailroadTrack, ///< remove a stretch of underground rail track (drag)
+	BuildPortal, ///< build a portal entry/exit between surface and underground
+	BuildUndergroundStation, ///< build underground station platform
+	BuildExitSurface, ///< build surface exit for underground station
+	BuildRamp, ///< build underground ramp between depth levels
+	BuildUndergroundSignal, ///< build, turn round or convert a signal on underground track
+	RemoveUndergroundSignal, ///< remove the signals from an underground track
+	RemoveUndergroundSignalTrack, ///< remove underground signals along a stretch of track (drag)
+	RemoveUndergroundStation, ///< remove underground station platform
+	RemoveUndergroundArea, ///< remove all underground constructions in an area at a given depth
+	RemoveRamp, ///< remove an underground ramp between depth levels
+	RemovePortal, ///< remove a portal entry/exit together with its surface rail
+	RemoveExitSurface, ///< remove a surface exit (pavilion or underpass) of an underground station
+	ConvertUndergroundRail, ///< convert the rail type of underground track, stations, ramps and portals in an area
+	PasteUndergroundBlueprint, ///< build (a part of) a metro blueprint
+
 	End, ///< @important Must ALWAYS be on the end of this list!! (period)
 };
 

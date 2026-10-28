@@ -199,8 +199,8 @@ enum GlobalHotKeys : int32_t {
 	GHK_MONEY,
 	GHK_UPDATE_COORDS,
 	GHK_TOGGLE_TRANSPARENCY,
-	GHK_TOGGLE_INVISIBILITY = GHK_TOGGLE_TRANSPARENCY + 9,
-	GHK_TRANSPARENCY_TOOLBAR = GHK_TOGGLE_INVISIBILITY + 8,
+	GHK_TOGGLE_INVISIBILITY = GHK_TOGGLE_TRANSPARENCY + TO_END,
+	GHK_TRANSPARENCY_TOOLBAR = GHK_TOGGLE_INVISIBILITY + TO_END,
 	GHK_TRANSPARENCY,
 	GHK_CHAT,
 	GHK_CHAT_ALL,
@@ -360,6 +360,7 @@ struct MainWindow : Window
 			case GHK_TOGGLE_TRANSPARENCY + 6:
 			case GHK_TOGGLE_TRANSPARENCY + 7:
 			case GHK_TOGGLE_TRANSPARENCY + 8:
+			case GHK_TOGGLE_TRANSPARENCY + TO_PEDESTRIANS:
 				/* Transparency toggle hot keys */
 				ToggleTransparency((TransparencyOption)(hotkey - GHK_TOGGLE_TRANSPARENCY));
 				MarkWholeScreenDirty();
@@ -373,6 +374,7 @@ struct MainWindow : Window
 			case GHK_TOGGLE_INVISIBILITY + 5:
 			case GHK_TOGGLE_INVISIBILITY + 6:
 			case GHK_TOGGLE_INVISIBILITY + 7:
+			case GHK_TOGGLE_INVISIBILITY + TO_PEDESTRIANS:
 				/* Invisibility toggle hot keys */
 				ToggleInvisibilityWithTransparency((TransparencyOption)(hotkey - GHK_TOGGLE_INVISIBILITY));
 				MarkWholeScreenDirty();
@@ -506,6 +508,7 @@ struct MainWindow : Window
 		Hotkey('7' | WKC_CTRL, "transparency_structures", GHK_TOGGLE_TRANSPARENCY + 6),
 		Hotkey('8' | WKC_CTRL, "transparency_catenary", GHK_TOGGLE_TRANSPARENCY + 7),
 		Hotkey('9' | WKC_CTRL, "transparency_loading", GHK_TOGGLE_TRANSPARENCY + 8),
+		Hotkey('0' | WKC_CTRL, "transparency_pedestrians", GHK_TOGGLE_TRANSPARENCY + TO_PEDESTRIANS),
 		Hotkey('1' | WKC_CTRL | WKC_SHIFT, "invisibility_signs", GHK_TOGGLE_INVISIBILITY),
 		Hotkey('2' | WKC_CTRL | WKC_SHIFT, "invisibility_trees", GHK_TOGGLE_INVISIBILITY + 1),
 		Hotkey('3' | WKC_CTRL | WKC_SHIFT, "invisibility_houses", GHK_TOGGLE_INVISIBILITY + 2),
@@ -514,6 +517,7 @@ struct MainWindow : Window
 		Hotkey('6' | WKC_CTRL | WKC_SHIFT, "invisibility_bridges", GHK_TOGGLE_INVISIBILITY + 5),
 		Hotkey('7' | WKC_CTRL | WKC_SHIFT, "invisibility_structures", GHK_TOGGLE_INVISIBILITY + 6),
 		Hotkey('8' | WKC_CTRL | WKC_SHIFT, "invisibility_catenary", GHK_TOGGLE_INVISIBILITY + 7),
+		Hotkey('0' | WKC_CTRL | WKC_SHIFT, "invisibility_pedestrians", GHK_TOGGLE_INVISIBILITY + TO_PEDESTRIANS),
 		Hotkey('X' | WKC_CTRL, "transparency_toolbar", GHK_TRANSPARENCY_TOOLBAR),
 		Hotkey('X', "toggle_transparency", GHK_TRANSPARENCY),
 		Hotkey({WKC_RETURN, 'T'}, "chat", GHK_CHAT),

@@ -104,6 +104,8 @@ struct Waypoint;
 struct Town;
 
 void SetViewportCatchmentStation(const Station *st, bool sel);
+void ToggleViewportCompanyCoverage();
+bool IsViewportCompanyCoverageShown();
 void SetViewportStationRect(const Station *st, bool sel);
 void SetViewportCatchmentWaypoint(const Waypoint *wp, bool sel);
 void SetViewportWaypointRect(const Waypoint *wp, bool sel);

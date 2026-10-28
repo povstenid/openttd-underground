@@ -1,0 +1,34 @@
+add_files(
+    blueprint.cpp
+    blueprint.h
+    blueprint_cmd.cpp
+    blueprint_cmd.h
+    blueprint_gui.cpp
+    blueprint_gui.h
+    multilayer_map.cpp
+    multilayer_map.h
+    multilayer_types.h
+    portal_registry.cpp
+    portal_registry.h
+    station_complex.cpp
+    station_complex.h
+    underground_cmd.cpp
+    underground_cmd.h
+    underground_conflict.cpp
+    underground_conflict.h
+    underground_cost.cpp
+    underground_cost.h
+    underground_gui.cpp
+    underground_gui.h
+    underground_render.cpp
+    underground_render.h
+    underground_rules.cpp
+    underground_rules.h
+    underground_signal.h
+    underground_soil.cpp
+    underground_soil.h
+    underground_train.cpp
+    underground_train.h
+    underground_view.cpp
+    underground_view.h
+)

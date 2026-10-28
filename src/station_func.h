@@ -26,6 +26,18 @@ void ShowStationViewWindow(StationID station);
 void UpdateAllStationVirtCoords();
 void ClearAllStationCachedNames();
 
+/** Station types a station could be named after. */
+enum class StationNaming : uint8_t {
+	Rail, ///< Railway station.
+	Road, ///< Truck or bus stop.
+	Airport, ///< Airport for fixed wing aircraft.
+	Oilrig, ///< Heliport of an oilrig.
+	Dock, ///< Ship dock.
+	Heliport, ///< Standalone heliport.
+};
+
+StringID GenerateStationName(Station *st, TileIndex tile, StationNaming name_class);
+
 CargoArray GetProductionAroundTiles(TileIndex tile, int w, int h, int rad);
 std::pair<CargoArray, CargoTypes> GetAcceptanceAroundTiles(TileIndex tile, int w, int h, int rad);
 

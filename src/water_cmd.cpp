@@ -20,6 +20,7 @@
 #include "newgrf_canal.h"
 #include "strings_func.h"
 #include "vehicle_func.h"
+#include "train.h"
 #include "sound_func.h"
 #include "company_func.h"
 #include "clear_map.h"
@@ -41,6 +42,7 @@
 #include "landscape_cmd.h"
 #include "pathfinder/water_regions.h"
 #include "town_type.h"
+#include "multilayer/underground_rules.h"
 
 #include "table/strings.h"
 
@@ -340,6 +342,15 @@ static CommandCost DoBuildLock(TileIndex tile, DiagDirection dir, DoCommandFlags
 	if (ret.Succeeded()) ret = EnsureNoVehicleOnGround(tile - delta);
 	if (ret.Failed()) return ret;
 
+	/* The land of the lock becomes canal; it must not reach down to underground construction. */
+	std::vector<TileIndex> new_water;
+	for (TileIndex t : {tile, tile - delta, tile + delta}) {
+		if (!IsUndergroundWaterTile(t)) new_water.push_back(t);
+	}
+	CommandCost underground = CheckNewWaterOverUnderground(new_water, false);
+	/* Reported after the other errors of the lock; the execution must not start at all. */
+	if (underground.Failed() && flags.Test(DoCommandFlag::Execute)) return underground;
+
 	/* middle tile */
 	WaterClass wc_middle = HasTileWaterGround(tile) ? GetWaterClass(tile) : WaterClass::Canal;
 	ret = Command<Commands::LandscapeClear>::Do(flags, tile);
@@ -377,6 +388,8 @@ static CommandCost DoBuildLock(TileIndex tile, DiagDirection dir, DoCommandFlags
 		}
 		++lock_part;
 	}
+
+	if (underground.Failed()) return underground;
 
 	if (flags.Test(DoCommandFlag::Execute)) {
 		/* Update company infrastructure counts. */
@@ -505,6 +518,16 @@ CommandCost CmdBuildCanal(DoCommandFlags flags, TileIndex tile, TileIndex start_
 
 	CommandCost cost(EXPENSES_CONSTRUCTION);
 
+	/* The new water must not reach down to underground construction. All of it
+	 * is checked at once, so the test run sees the water the execution builds;
+	 * the other errors of the tiles are reported first. */
+	std::vector<TileIndex> new_water;
+	for (std::unique_ptr<TileIterator> it = TileIterator::Create(tile, start_tile, diagonal); **it != INVALID_TILE; ++(*it)) {
+		if (!IsWaterTile(**it)) new_water.push_back(**it);
+	}
+	CommandCost underground = CheckNewWaterOverUnderground(new_water, wc == WaterClass::Sea);
+	if (underground.Failed() && flags.Test(DoCommandFlag::Execute)) return underground;
+
 	std::unique_ptr<TileIterator> iter = TileIterator::Create(tile, start_tile, diagonal);
 	for (; *iter != INVALID_TILE; ++(*iter)) {
 		TileIndex current_tile = *iter;
@@ -567,6 +590,8 @@ CommandCost CmdBuildCanal(DoCommandFlags flags, TileIndex tile, TileIndex start_
 
 		cost.AddCost(_price[Price::BuildCanal]);
 	}
+
+	if (underground.Failed()) return underground;
 
 	if (cost.GetCost() == 0) {
 		return CommandCost(STR_ERROR_ALREADY_BUILT);
@@ -1090,6 +1115,8 @@ static void FloodVehicleProc(Vehicle *v, int z)
 		case VEH_TRAIN:
 		case VEH_ROAD: {
 			if (v->z_pos > z) break;
+			/* Underground trains are not on the flooded surface. */
+			if (!IsVehicleOnSurfaceLayer(v)) break;
 			FloodVehicle(v->First());
 			break;
 		}
@@ -1217,11 +1244,15 @@ static void DoFloodTile(TileIndex target)
 				break;
 		}
 	} else {
+		/* The sea does not come over underground construction it would reach. */
+		std::array<TileIndex, 1> new_sea{target};
+		bool may_flood = CheckNewWaterOverUnderground(new_sea, true).Succeeded();
+
 		/* Flood vehicles */
-		FloodVehicles(target);
+		if (may_flood) FloodVehicles(target);
 
 		/* flood flat tile */
-		if (Command<Commands::LandscapeClear>::Do(DoCommandFlag::Execute, target).Succeeded()) {
+		if (may_flood && Command<Commands::LandscapeClear>::Do(DoCommandFlag::Execute, target).Succeeded()) {
 			MakeSea(target);
 			MarkTileDirtyByTile(target);
 			flooded = true;

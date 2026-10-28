@@ -16,6 +16,7 @@
 #include "train.h"
 #include "company_base.h"
 #include "pbs.h"
+#include "multilayer/underground_train.h"
 
 #include "table/signal_data.h"
 
@@ -198,9 +199,34 @@ static SmallSet<DiagDirection, SIG_GLOB_SIZE> _globset("_globset"); ///< set of 
  * @param v The vehicle to check.
  * @return \c true when the vehicle is a train that's not in a depot.
  */
+/** A train the exploration of a segment does not see, see GetSignalSegmentStateWithout(). */
+static const Vehicle *_signal_ignored_consist = nullptr;
+
+/** Only work out the state of the first segment, change no signal, see GetSignalSegmentStateWithout(). */
+static bool _signal_dry_run = false;
+
 static bool IsTrainAndNotInDepot(const Vehicle *v)
 {
-	return v->type == VEH_TRAIN && Train::From(v)->track != TRACK_BIT_DEPOT;
+	/* Underground trains do not occupy the surface signal block above them. */
+	return v->type == VEH_TRAIN && Train::From(v)->track != TRACK_BIT_DEPOT && IsVehicleOnSurfaceLayer(v) && v->First() != _signal_ignored_consist;
+}
+
+/**
+ * Whether a train (but the ignored one) uses track overlapping some track bits
+ * of a tile, like EnsureNoTrainOnTrackBits().
+ * @param tile The tile.
+ * @param track_bits The track bits.
+ * @return True if such a train is there.
+ */
+static bool HasTrainOnTrackBits(TileIndex tile, TrackBits track_bits)
+{
+	return HasVehicleOnTile(tile, [track_bits](const Vehicle *v) {
+		if (v->type != VEH_TRAIN || v->First() == _signal_ignored_consist) return false;
+		const Train *t = Train::From(v);
+		/* An underground train does not use the surface track bits above it. */
+		if (!t->IsOnSurfaceLayer()) return false;
+		return t->track == track_bits || TracksOverlap(t->track | track_bits);
+	});
 }
 
 
@@ -307,10 +333,15 @@ static SigFlags ExploreSegment(Owner owner)
 				if (tracks == TRACK_BIT_HORZ || tracks == TRACK_BIT_VERT) { // there is exactly one incidating track, no need to check
 					tracks = tracks_masked;
 					/* If no train detected yet, and there is not no train -> there is a train -> set the flag */
-					if (!flags.Test(SigFlag::Train) && EnsureNoTrainOnTrackBits(tile, tracks).Failed()) flags. Set(SigFlag::Train);
+					if (!flags.Test(SigFlag::Train) && HasTrainOnTrackBits(tile, tracks)) flags.Set(SigFlag::Train);
 				} else {
 					if (tracks_masked == TRACK_BIT_NONE) continue; // no incidating track
 					if (!flags.Test(SigFlag::Train) && HasVehicleOnTile(tile, IsTrainAndNotInDepot)) flags.Set(SigFlag::Train);
+				}
+				/* A train below ground on its way out of a metro portal here
+				 * occupies the block, like a train in a vanilla tunnel. */
+				if (!flags.Test(SigFlag::Train) && IsPortalExitClaimed(tile, _signal_ignored_consist != nullptr ? _signal_ignored_consist->index : VehicleID::Invalid())) {
+					flags.Set(SigFlag::Train);
 				}
 
 				/* Is this a track merge or split? */
@@ -558,7 +589,7 @@ static SigSegState UpdateSignalsInBuffer(Owner owner)
 		}
 
 		/* do not do anything when some buffer was full */
-		if (flags.Test(SigFlag::Full)) {
+		if (flags.Test(SigFlag::Full) || _signal_dry_run) {
 			ResetSets(); // free all sets
 			break;
 		}
@@ -659,6 +690,29 @@ SigSegState UpdateSignalsOnSegment(TileIndex tile, DiagDirection side, Owner own
 	return UpdateSignalsInBuffer(owner);
 }
 
+
+/**
+ * Work out the state of a signal segment as if a train was not there, without
+ * changing any signal. A train coming out of a metro portal asks this before
+ * it enters the surface block in front of the mouth: its own tail may still be
+ * on the surface (behind the tunnel it is leaving), and must not count.
+ * @param tile The tile to start at.
+ * @param side The side of the tile the segment lies at.
+ * @param owner The owner of the track.
+ * @param ignore The train not to see (any part of it), or nullptr.
+ * @return The state of the segment.
+ */
+SigSegState GetSignalSegmentStateWithout(TileIndex tile, DiagDirection side, Owner owner, const Vehicle *ignore)
+{
+	assert(_globset.IsEmpty());
+	_signal_ignored_consist = ignore != nullptr ? ignore->First() : nullptr;
+	_signal_dry_run = true;
+	_globset.Add(tile, side);
+	SigSegState state = UpdateSignalsInBuffer(owner);
+	_signal_dry_run = false;
+	_signal_ignored_consist = nullptr;
+	return state;
+}
 
 /**
  * Update signals at segments that are at both ends of

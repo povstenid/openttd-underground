@@ -490,6 +490,27 @@ static void DrawRailCatenaryRailway(const TileInfo *ti)
 }
 
 /**
+ * Draws the wires over underground track. In a tunnel they hang from the
+ * vault, so there are no pylons: every wire is drawn as if held at both ends.
+ * @param ti The surface tile the underground level is drawn for.
+ * @param tracks The tracks on the level.
+ * @param rt The rail type of the tracks.
+ * @param z Height of the level's floor.
+ */
+void DrawUndergroundCatenary(const TileInfo *ti, TrackBits tracks, RailType rt, int z)
+{
+	if (!HasRailCatenaryDrawn(rt)) return;
+
+	SpriteID wire_base = GetCustomRailSprite(GetRailTypeInfo(rt), INVALID_TILE, RTSG_WIRES);
+	if (wire_base == 0) wire_base = SPR_WIRE_BASE;
+
+	for (Track t : SetTrackBitIterator(tracks)) {
+		const SortableSpriteStruct &sss = _rail_catenary_sprite_data[_rail_wires[0][t][3]];
+		AddSortableSpriteToDraw(wire_base + sss.image_offset, PAL_NONE, ti->x, ti->y, z, sss, IsTransparencySet(TO_CATENARY));
+	}
+}
+
+/**
  * Draws wires on a tunnel tile
  *
  * DrawTile_TunnelBridge() calls this function to draw the wires on the bridge.

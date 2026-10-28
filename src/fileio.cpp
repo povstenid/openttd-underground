@@ -7,6 +7,8 @@
 
 /** @file fileio.cpp Standard in/out file operations. */
 
+#include <sstream>
+
 #include "stdafx.h"
 #include "core/string_consumer.hpp"
 #include "fileio_func.h"
@@ -53,6 +55,7 @@ static const std::string_view _subdirs[] = {
 	"screenshot" PATHSEP,
 	"social_integration" PATHSEP,
 	"docs" PATHSEP,
+	"blueprint" PATHSEP,
 };
 static_assert(lengthof(_subdirs) == NUM_SUBDIRS);
 
@@ -981,7 +984,7 @@ void DeterminePaths(std::string_view exe, bool only_local_path)
 	Debug(misc, 1, "{} found as personal directory", _personal_dir);
 
 	static const Subdirectory default_subdirs[] = {
-		SAVE_DIR, AUTOSAVE_DIR, SCENARIO_DIR, HEIGHTMAP_DIR, BASESET_DIR, NEWGRF_DIR, AI_DIR, AI_LIBRARY_DIR, GAME_DIR, GAME_LIBRARY_DIR, SCREENSHOT_DIR, SOCIAL_INTEGRATION_DIR
+		SAVE_DIR, AUTOSAVE_DIR, SCENARIO_DIR, HEIGHTMAP_DIR, BASESET_DIR, NEWGRF_DIR, AI_DIR, AI_LIBRARY_DIR, GAME_DIR, GAME_LIBRARY_DIR, SCREENSHOT_DIR, SOCIAL_INTEGRATION_DIR, BLUEPRINT_DIR
 	};
 
 	for (const auto &default_subdir : default_subdirs) {

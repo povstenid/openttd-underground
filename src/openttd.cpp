@@ -80,6 +80,7 @@
 #include "timer/timer_game_realtime.h"
 #include "timer/timer_game_tick.h"
 #include "social_integration.h"
+#include "pedestrians.h"
 #include "core/string_consumer.hpp"
 
 #include "linkgraph/linkgraphschedule.h"
@@ -1265,6 +1266,7 @@ void StateGameLoop()
 		CallVehicleTicks();
 		CallLandscapeTick();
 		BasePersistentStorageArray::SwitchMode(PSM_LEAVE_GAMELOOP);
+		PedestriansTick();
 
 #ifndef DEBUG_DUMP_COMMANDS
 		{

@@ -54,11 +54,15 @@ inline uint TileHeightOutsideMap(int x, int y)
  * @pre tile < Map::Size()
  * @pre height <= MAX_TILE_HEIGHT
  */
+/** Set whenever the height of a tile changes; the metro caches the highest land (GetMetroGlobalMaxZ). */
+extern bool _tile_heights_changed;
+
 inline void SetTileHeight(Tile tile, uint height)
 {
 	assert(tile < Map::Size());
 	assert(height <= MAX_TILE_HEIGHT);
 	tile.height() = height;
+	_tile_heights_changed = true;
 }
 
 /**

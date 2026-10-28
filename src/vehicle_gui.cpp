@@ -3175,6 +3175,18 @@ public:
 
 	std::string GetVehicleStatusString(const Vehicle *v, TextColour &text_colour) const
 	{
+		std::string status = this->GetVehicleOrderStatusString(v, text_colour);
+
+		/* A train below ground shows its ordinary status (destination, speed,
+		 * loading, stuck) with the level it runs at. */
+		if (v->type == VEH_TRAIN && Train::From(v)->IsUnderground() && !v->vehstatus.Test(VehState::Crashed)) {
+			return GetString(STR_VEHICLE_STATUS_UNDERGROUND_LEVEL, status, -Train::From(v)->underground_depth);
+		}
+		return status;
+	}
+
+	std::string GetVehicleOrderStatusString(const Vehicle *v, TextColour &text_colour) const
+	{
 		text_colour = TC_BLACK;
 
 		if (v->vehstatus.Test(VehState::Crashed)) return GetString(STR_VEHICLE_STATUS_CRASHED);

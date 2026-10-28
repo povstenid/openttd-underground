@@ -27,6 +27,8 @@
 #include "landscape.h"
 #include "video/video_driver.hpp"
 #include "smallmap_gui.h"
+#include "multilayer/multilayer_map.h"
+#include "multilayer/underground_view.h"
 #include "screenshot_type.h"
 
 #include "table/strings.h"
@@ -492,6 +494,24 @@ static void MinimapScreenCallback(void *buf, uint y, uint pitch, uint n)
 
 		TileIndex tile = TileXY(col, row);
 		uint8_t val = GetSmallMapOwnerPixels(tile, GetTileType(tile), IncludeHeightmap::Never) & 0xFF;
+
+		/* Overlay the metro network of the viewed depth, like the smallmap
+		 * window does, when the underground slice view is active. */
+		if (IsUndergroundViewActive() && _multilayer_map.IsAllocated()) {
+			SliceID ug_sid = _multilayer_map.FindSliceAt(tile, GetUndergroundViewDepth());
+			if (ug_sid != INVALID_SLICE_ID) {
+				const TileSlice &ug_s = _multilayer_map.GetSlice(ug_sid);
+				switch (ug_s.kind) {
+					case SliceKind::Track:
+						val = static_cast<uint8_t>(0xCD - (Clamp<int>(-GetUndergroundViewDepth(), 1, 8) - 1));
+						break;
+					case SliceKind::StationTile: val = 0x0F; break; /* white */
+					case SliceKind::Portal:
+					case SliceKind::Ramp:        val = 0xBE; break; /* yellow */
+					default: break;
+				}
+			}
+		}
 
 		uint32_t colour_buf = 0;
 		colour_buf  = (_cur_palette.palette[val].b << 0);

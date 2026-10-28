@@ -38,6 +38,35 @@ add_custom_target(ai_compat_files
         DEPENDS ${AI_COMPAT_BINARY_FILES}
 )
 
+file(GLOB_RECURSE AI_LIBRARY_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/library/*.nut")
+
+foreach(AI_LIBRARY_SOURCE_FILE IN LISTS AI_LIBRARY_SOURCE_FILES)
+    string(REPLACE "${CMAKE_SOURCE_DIR}/bin/" "" AI_LIBRARY_SOURCE_FILE_NAME "${AI_LIBRARY_SOURCE_FILE}")
+    string(CONCAT AI_LIBRARY_BINARY_FILE "${CMAKE_BINARY_DIR}/" "${AI_LIBRARY_SOURCE_FILE_NAME}")
+    get_filename_component(AI_LIBRARY_BINARY_DIR "${AI_LIBRARY_BINARY_FILE}" DIRECTORY)
+
+    add_custom_command(OUTPUT ${AI_LIBRARY_BINARY_FILE}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${AI_LIBRARY_BINARY_DIR}
+            COMMAND ${CMAKE_COMMAND} -E copy
+                    ${AI_LIBRARY_SOURCE_FILE}
+                    ${AI_LIBRARY_BINARY_FILE}
+            MAIN_DEPENDENCY ${AI_LIBRARY_SOURCE_FILE}
+            COMMENT "Copying ${AI_LIBRARY_SOURCE_FILE_NAME}"
+    )
+
+    list(APPEND AI_LIBRARY_BINARY_FILES ${AI_LIBRARY_BINARY_FILE})
+endforeach()
+
+if(AI_LIBRARY_BINARY_FILES)
+    add_custom_target(ai_library_files
+            DEPENDS ${AI_LIBRARY_BINARY_FILES}
+    )
+
+    add_dependencies(openttd
+        ai_library_files
+    )
+endif()
+
 add_dependencies(openttd
     ai_compat_files
 )

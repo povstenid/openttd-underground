@@ -33,6 +33,8 @@
 #include "object_map.h"
 #include "rail_cmd.h"
 #include "landscape_cmd.h"
+#include "multilayer/underground_cmd.h"
+#include "multilayer/underground_render.h"
 
 #include "table/strings.h"
 #include "table/railtypes.h"
@@ -428,6 +430,10 @@ CommandCost CmdBuildSingleRail(DoCommandFlags flags, TileIndex tile, RailType ra
 
 	if (!ValParamRailType(railtype) || !ValParamTrackOrientation(track)) return CMD_ERROR;
 
+	/* A metro portal tile only carries the portal's own track. */
+	CommandCost portal_ret = CheckPortalSurfaceRailBuild(tile, track);
+	if (portal_ret.Failed()) return portal_ret;
+
 	Slope tileh = GetTileSlope(tile);
 	TrackBits trackbit = TrackToTrackBits(track);
 
@@ -631,6 +637,11 @@ CommandCost CmdRemoveSingleRail(DoCommandFlags flags, TileIndex tile, Track trac
 		case TileType::Road: {
 			if (!IsLevelCrossing(tile) || GetCrossingRailBits(tile) != trackbit) return CommandCost(STR_ERROR_THERE_IS_NO_RAILROAD_TRACK);
 
+			{
+				CommandCost ret = CheckPortalSurfaceRailRemoval(tile, trackbit, flags);
+				if (ret.Failed()) return ret;
+			}
+
 			if (_current_company != OWNER_WATER) {
 				CommandCost ret = CheckTileOwnership(tile);
 				if (ret.Failed()) return ret;
@@ -676,6 +687,10 @@ CommandCost CmdRemoveSingleRail(DoCommandFlags flags, TileIndex tile, Track trac
 			present = GetTrackBits(tile);
 			if ((present & trackbit) == 0) return CommandCost(STR_ERROR_THERE_IS_NO_RAILROAD_TRACK);
 			if (present == (TRACK_BIT_X | TRACK_BIT_Y)) crossing = true;
+
+			/* The surface rail of a metro portal goes away only with the portal itself. */
+			ret = CheckPortalSurfaceRailRemoval(tile, trackbit, flags);
+			if (ret.Failed()) return ret;
 
 			cost.AddCost(RailClearCost(GetRailType(tile)));
 
@@ -1793,6 +1808,12 @@ static CommandCost ClearTile_Rail(TileIndex tile, DoCommandFlags flags)
 {
 	CommandCost cost(EXPENSES_CONSTRUCTION);
 
+	/* Demolishing a metro portal's surface rail would orphan the portal. */
+	if (IsPlainRail(tile)) {
+		CommandCost ret = CheckPortalSurfaceRailRemoval(tile, TRACK_BIT_ALL, flags);
+		if (ret.Failed()) return ret;
+	}
+
 	if (flags.Test(DoCommandFlag::Auto)) {
 		if (!IsTileOwner(tile, _current_company)) {
 			return CommandCost(STR_ERROR_AREA_IS_OWNED_BY_ANOTHER);
@@ -1886,8 +1907,12 @@ static void DrawSingleSignal(TileIndex tile, const RailTypeInfo *rti, Track trac
 		}
 	};
 
-	uint x = TileX(tile) * TILE_SIZE + SignalPositions[side][pos].x;
-	uint y = TileY(tile) * TILE_SIZE + SignalPositions[side][pos].y;
+	uint sx = SignalPositions[side][pos].x;
+	uint sy = SignalPositions[side][pos].y;
+	/* On a dive portal of the metro the signal stands at the surface end of the cut. */
+	bool on_portal = (track == TRACK_X || track == TRACK_Y) && PlaceDivePortalSignal(tile, track == TRACK_X ? AXIS_X : AXIS_Y, sx, sy);
+	uint x = TileX(tile) * TILE_SIZE + sx;
+	uint y = TileY(tile) * TILE_SIZE + sy;
 
 	SignalType type       = GetSignalType(tile, track);
 	SignalVariant variant = GetSignalVariant(tile, track);
@@ -1901,6 +1926,12 @@ static void DrawSingleSignal(TileIndex tile, const RailTypeInfo *rti, Track trac
 		sprite += type * 16 + variant * 64 + image * 2 + condition + (type > SIGTYPE_LAST_NOPBS ? 64 : 0);
 	}
 
+	if (on_portal) {
+		/* Sort it above the walls of the portal (see DrawPortalOverlay), so they never hide it. */
+		static constexpr int8_t ABOVE_PORTAL = BB_Z_SEPARATOR + 1;
+		AddSortableSpriteToDraw(sprite, PAL_NONE, x, y, GetSafeSlopeZ(x, y, track), {{0, 0, ABOVE_PORTAL}, {1, 1, BB_HEIGHT_UNDER_BRIDGE}, {0, 0, -ABOVE_PORTAL}});
+		return;
+	}
 	AddSortableSpriteToDraw(sprite, PAL_NONE, x, y, GetSafeSlopeZ(x, y, track), {{}, {1, 1, BB_HEIGHT_UNDER_BRIDGE}, {}});
 }
 

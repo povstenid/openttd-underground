@@ -62,6 +62,8 @@
 #include "core/string_consumer.hpp"
 
 #include "widgets/toolbar_widget.h"
+#include "multilayer/underground_view.h"
+#include "multilayer/underground_gui.h"
 
 #include "network/network.h"
 #include "network/network_gui.h"
@@ -260,6 +262,7 @@ enum class OptionMenuEntries : uint8_t {
 	FullDetails, ///< Toggle full details.
 	TransparentBuildings, ///< Toggle buildings transparency.
 	TransparentStationSigns, ///< Toggle transparency of signs and names.
+	TransparentPedestrians, ///< Toggle transparency of pedestrians.
 };
 
 /**
@@ -300,6 +303,7 @@ static CallBackFunction ToolbarOptionsClick(Window *w)
 	list.push_back(MakeDropDownListCheckedItem(HasBit(_display_opt, DO_FULL_DETAIL), STR_SETTINGS_MENU_FULL_DETAIL, OptionMenuEntries::FullDetails));
 	list.push_back(MakeDropDownListCheckedItem(IsTransparencySet(TO_HOUSES), STR_SETTINGS_MENU_TRANSPARENT_BUILDINGS, OptionMenuEntries::TransparentBuildings));
 	list.push_back(MakeDropDownListCheckedItem(IsTransparencySet(TO_SIGNS), STR_SETTINGS_MENU_TRANSPARENT_SIGNS, OptionMenuEntries::TransparentStationSigns));
+	list.push_back(MakeDropDownListCheckedItem(IsTransparencySet(TO_PEDESTRIANS), STR_SETTINGS_MENU_TRANSPARENT_PEDESTRIANS, OptionMenuEntries::TransparentPedestrians));
 
 	ShowDropDownList(w, std::move(list), 0, WID_TN_SETTINGS, 140, GetToolbarDropDownOptions());
 	return CallBackFunction::None;
@@ -339,6 +343,7 @@ static CallBackFunction MenuClickSettings(int index)
 		case OptionMenuEntries::FullDetails: ToggleBit(_display_opt, DO_FULL_DETAIL); break;
 		case OptionMenuEntries::TransparentBuildings: ToggleTransparency(TO_HOUSES); break;
 		case OptionMenuEntries::TransparentStationSigns: ToggleTransparency(TO_SIGNS); break;
+		case OptionMenuEntries::TransparentPedestrians: ToggleTransparency(TO_PEDESTRIANS); break;
 	}
 	MarkWholeScreenDirty();
 	return CallBackFunction::None;
@@ -887,7 +892,11 @@ static std::string _tramtype_filter; ///< Persistent filter text for tramtype dr
 
 static CallBackFunction ToolbarBuildRailClick(Window *w)
 {
-	ShowDropDownList(w, GetRailTypeDropDownList(), _last_built_railtype, WID_TN_RAILS, 140, GetToolbarDropDownOptions(DropDownOption::Filterable), &_railtype_filter);
+	DropDownList list = GetRailTypeDropDownList();
+	/* Last: pick the track type by clicking a track. */
+	list.push_back(MakeDropDownListDividerItem());
+	list.push_back(MakeDropDownListStringItem(STR_RAIL_MENU_PICK_RAILTYPE, RAILTYPE_MENU_PICK));
+	ShowDropDownList(w, std::move(list), _last_built_railtype, WID_TN_RAILS, 140, GetToolbarDropDownOptions(DropDownOption::Filterable), &_railtype_filter);
 	return CallBackFunction::None;
 }
 
@@ -899,6 +908,10 @@ static CallBackFunction ToolbarBuildRailClick(Window *w)
  */
 static CallBackFunction MenuClickBuildRail(int index)
 {
+	if (index == RAILTYPE_MENU_PICK) {
+		ShowBuildRailToolbarWithPicker();
+		return CallBackFunction::None;
+	}
 	_last_built_railtype = (RailType)index;
 	ShowBuildRailToolbar(_last_built_railtype);
 	return CallBackFunction::None;
@@ -1512,8 +1525,8 @@ public:
 class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 	const WidgetID *GetButtonArrangement(uint &width, uint &arrangeable_count, uint &button_count, uint &spacer_count) const override
 	{
-		static const uint SMALLEST_ARRANGEMENT = 14;
-		static const uint BIGGEST_ARRANGEMENT  = 20;
+		static const uint SMALLEST_ARRANGEMENT = 15;
+		static const uint BIGGEST_ARRANGEMENT  = 21;
 
 		/* The number of buttons of each row of the toolbar should match the number of items which we want to be visible.
 		 * The total number of buttons should be equal to arrangeable_count * 2.
@@ -1521,58 +1534,26 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 		 * pause button appearing on the right of the lower toolbar and weird resizing of the widgets even if there is
 		 * enough space.
 		 */
-		static const WidgetID arrange14[] = {
-			WID_TN_PAUSE,
-			WID_TN_FAST_FORWARD,
-			WID_TN_TRAINS,
-			WID_TN_ROADVEHS,
-			WID_TN_SHIPS,
-			WID_TN_AIRCRAFT,
-			WID_TN_ZOOM_IN,
-			WID_TN_ZOOM_OUT,
-			WID_TN_RAILS,
-			WID_TN_ROADS,
-			WID_TN_WATER,
-			WID_TN_AIR,
-			WID_TN_LANDSCAPE,
-			WID_TN_SWITCH_BAR,
-			/* lower toolbar */
-			WID_TN_SETTINGS,
-			WID_TN_SAVE,
-			WID_TN_SMALL_MAP,
-			WID_TN_TOWNS,
-			WID_TN_SUBSIDIES,
-			WID_TN_STATIONS,
-			WID_TN_FINANCES,
-			WID_TN_COMPANIES,
-			WID_TN_GRAPHS,
-			WID_TN_INDUSTRIES,
-			WID_TN_MUSIC_SOUND,
-			WID_TN_MESSAGES,
-			WID_TN_HELP,
-			WID_TN_SWITCH_BAR,
-		};
 		static const WidgetID arrange15[] = {
 			WID_TN_PAUSE,
 			WID_TN_FAST_FORWARD,
-			WID_TN_SMALL_MAP,
 			WID_TN_TRAINS,
 			WID_TN_ROADVEHS,
 			WID_TN_SHIPS,
 			WID_TN_AIRCRAFT,
+			WID_TN_ZOOM_IN,
+			WID_TN_ZOOM_OUT,
 			WID_TN_RAILS,
 			WID_TN_ROADS,
 			WID_TN_WATER,
 			WID_TN_AIR,
+			WID_TN_UNDERGROUND,
 			WID_TN_LANDSCAPE,
-			WID_TN_ZOOM_IN,
-			WID_TN_ZOOM_OUT,
 			WID_TN_SWITCH_BAR,
 			/* lower toolbar */
-			WID_TN_PAUSE,
 			WID_TN_SETTINGS,
-			WID_TN_SMALL_MAP,
 			WID_TN_SAVE,
+			WID_TN_SMALL_MAP,
 			WID_TN_TOWNS,
 			WID_TN_SUBSIDIES,
 			WID_TN_STATIONS,
@@ -1582,13 +1563,13 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_INDUSTRIES,
 			WID_TN_MUSIC_SOUND,
 			WID_TN_MESSAGES,
+			WID_TN_UNDERGROUND,
 			WID_TN_HELP,
 			WID_TN_SWITCH_BAR,
 		};
 		static const WidgetID arrange16[] = {
 			WID_TN_PAUSE,
 			WID_TN_FAST_FORWARD,
-			WID_TN_SETTINGS,
 			WID_TN_SMALL_MAP,
 			WID_TN_TRAINS,
 			WID_TN_ROADVEHS,
@@ -1598,13 +1579,15 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_ROADS,
 			WID_TN_WATER,
 			WID_TN_AIR,
+			WID_TN_UNDERGROUND,
 			WID_TN_LANDSCAPE,
 			WID_TN_ZOOM_IN,
 			WID_TN_ZOOM_OUT,
 			WID_TN_SWITCH_BAR,
 			/* lower toolbar */
 			WID_TN_PAUSE,
-			WID_TN_FAST_FORWARD,
+			WID_TN_SETTINGS,
+			WID_TN_SMALL_MAP,
 			WID_TN_SAVE,
 			WID_TN_TOWNS,
 			WID_TN_SUBSIDIES,
@@ -1615,9 +1598,8 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_INDUSTRIES,
 			WID_TN_MUSIC_SOUND,
 			WID_TN_MESSAGES,
+			WID_TN_UNDERGROUND,
 			WID_TN_HELP,
-			WID_TN_ZOOM_IN,
-			WID_TN_ZOOM_OUT,
 			WID_TN_SWITCH_BAR,
 		};
 		static const WidgetID arrange17[] = {
@@ -1625,7 +1607,6 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_FAST_FORWARD,
 			WID_TN_SETTINGS,
 			WID_TN_SMALL_MAP,
-			WID_TN_SUBSIDIES,
 			WID_TN_TRAINS,
 			WID_TN_ROADVEHS,
 			WID_TN_SHIPS,
@@ -1634,6 +1615,7 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_ROADS,
 			WID_TN_WATER,
 			WID_TN_AIR,
+			WID_TN_UNDERGROUND,
 			WID_TN_LANDSCAPE,
 			WID_TN_ZOOM_IN,
 			WID_TN_ZOOM_OUT,
@@ -1642,9 +1624,8 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_PAUSE,
 			WID_TN_FAST_FORWARD,
 			WID_TN_SAVE,
-			WID_TN_SMALL_MAP,
-			WID_TN_SUBSIDIES,
 			WID_TN_TOWNS,
+			WID_TN_SUBSIDIES,
 			WID_TN_STATIONS,
 			WID_TN_FINANCES,
 			WID_TN_COMPANIES,
@@ -1652,6 +1633,7 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_INDUSTRIES,
 			WID_TN_MUSIC_SOUND,
 			WID_TN_MESSAGES,
+			WID_TN_UNDERGROUND,
 			WID_TN_HELP,
 			WID_TN_ZOOM_IN,
 			WID_TN_ZOOM_OUT,
@@ -1662,16 +1644,16 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_FAST_FORWARD,
 			WID_TN_SETTINGS,
 			WID_TN_SMALL_MAP,
-			WID_TN_TOWNS,
 			WID_TN_SUBSIDIES,
-			WID_TN_STATIONS,
-			WID_TN_FINANCES,
-			WID_TN_COMPANIES,
-			WID_TN_INDUSTRIES,
+			WID_TN_TRAINS,
+			WID_TN_ROADVEHS,
+			WID_TN_SHIPS,
+			WID_TN_AIRCRAFT,
 			WID_TN_RAILS,
 			WID_TN_ROADS,
 			WID_TN_WATER,
 			WID_TN_AIR,
+			WID_TN_UNDERGROUND,
 			WID_TN_LANDSCAPE,
 			WID_TN_ZOOM_IN,
 			WID_TN_ZOOM_OUT,
@@ -1681,16 +1663,16 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_FAST_FORWARD,
 			WID_TN_SAVE,
 			WID_TN_SMALL_MAP,
-			WID_TN_TOWNS,
 			WID_TN_SUBSIDIES,
+			WID_TN_TOWNS,
 			WID_TN_STATIONS,
+			WID_TN_FINANCES,
+			WID_TN_COMPANIES,
 			WID_TN_GRAPHS,
-			WID_TN_TRAINS,
-			WID_TN_ROADVEHS,
-			WID_TN_SHIPS,
-			WID_TN_AIRCRAFT,
+			WID_TN_INDUSTRIES,
 			WID_TN_MUSIC_SOUND,
 			WID_TN_MESSAGES,
+			WID_TN_UNDERGROUND,
 			WID_TN_HELP,
 			WID_TN_ZOOM_IN,
 			WID_TN_ZOOM_OUT,
@@ -1703,16 +1685,16 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_SMALL_MAP,
 			WID_TN_TOWNS,
 			WID_TN_SUBSIDIES,
-			WID_TN_TRAINS,
-			WID_TN_ROADVEHS,
-			WID_TN_SHIPS,
-			WID_TN_AIRCRAFT,
+			WID_TN_STATIONS,
+			WID_TN_FINANCES,
+			WID_TN_COMPANIES,
+			WID_TN_INDUSTRIES,
 			WID_TN_RAILS,
 			WID_TN_ROADS,
 			WID_TN_WATER,
 			WID_TN_AIR,
+			WID_TN_UNDERGROUND,
 			WID_TN_LANDSCAPE,
-			WID_TN_MUSIC_SOUND,
 			WID_TN_ZOOM_IN,
 			WID_TN_ZOOM_OUT,
 			WID_TN_SWITCH_BAR,
@@ -1721,17 +1703,17 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_FAST_FORWARD,
 			WID_TN_SAVE,
 			WID_TN_SMALL_MAP,
+			WID_TN_TOWNS,
+			WID_TN_SUBSIDIES,
 			WID_TN_STATIONS,
-			WID_TN_FINANCES,
-			WID_TN_COMPANIES,
 			WID_TN_GRAPHS,
-			WID_TN_INDUSTRIES,
+			WID_TN_TRAINS,
+			WID_TN_ROADVEHS,
+			WID_TN_SHIPS,
+			WID_TN_AIRCRAFT,
+			WID_TN_MUSIC_SOUND,
 			WID_TN_MESSAGES,
-			WID_TN_RAILS,
-			WID_TN_ROADS,
-			WID_TN_WATER,
-			WID_TN_AIR,
-			WID_TN_LANDSCAPE,
+			WID_TN_UNDERGROUND,
 			WID_TN_HELP,
 			WID_TN_ZOOM_IN,
 			WID_TN_ZOOM_OUT,
@@ -1752,6 +1734,50 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_ROADS,
 			WID_TN_WATER,
 			WID_TN_AIR,
+			WID_TN_UNDERGROUND,
+			WID_TN_LANDSCAPE,
+			WID_TN_MUSIC_SOUND,
+			WID_TN_ZOOM_IN,
+			WID_TN_ZOOM_OUT,
+			WID_TN_SWITCH_BAR,
+			/* lower toolbar */
+			WID_TN_PAUSE,
+			WID_TN_FAST_FORWARD,
+			WID_TN_SAVE,
+			WID_TN_SMALL_MAP,
+			WID_TN_STATIONS,
+			WID_TN_FINANCES,
+			WID_TN_COMPANIES,
+			WID_TN_GRAPHS,
+			WID_TN_INDUSTRIES,
+			WID_TN_MESSAGES,
+			WID_TN_RAILS,
+			WID_TN_ROADS,
+			WID_TN_WATER,
+			WID_TN_AIR,
+			WID_TN_UNDERGROUND,
+			WID_TN_LANDSCAPE,
+			WID_TN_HELP,
+			WID_TN_ZOOM_IN,
+			WID_TN_ZOOM_OUT,
+			WID_TN_SWITCH_BAR,
+		};
+		static const WidgetID arrange21[] = {
+			WID_TN_PAUSE,
+			WID_TN_FAST_FORWARD,
+			WID_TN_SETTINGS,
+			WID_TN_SMALL_MAP,
+			WID_TN_TOWNS,
+			WID_TN_SUBSIDIES,
+			WID_TN_TRAINS,
+			WID_TN_ROADVEHS,
+			WID_TN_SHIPS,
+			WID_TN_AIRCRAFT,
+			WID_TN_RAILS,
+			WID_TN_ROADS,
+			WID_TN_WATER,
+			WID_TN_AIR,
+			WID_TN_UNDERGROUND,
 			WID_TN_LANDSCAPE,
 			WID_TN_MUSIC_SOUND,
 			WID_TN_GOAL,
@@ -1773,6 +1799,7 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_ROADS,
 			WID_TN_WATER,
 			WID_TN_AIR,
+			WID_TN_UNDERGROUND,
 			WID_TN_LANDSCAPE,
 			WID_TN_STORY,
 			WID_TN_HELP,
@@ -1807,6 +1834,11 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 			WID_TN_TRAMS,
 			WID_TN_WATER,
 			WID_TN_AIR,
+			WID_TN_UNDERGROUND,
+			WID_TN_UNDERGROUND_XRAY,
+			WID_TN_UNDERGROUND_BELOW,
+			WID_TN_UNDERGROUND_ABOVE,
+			WID_TN_STATION_COVERAGE,
 			WID_TN_LANDSCAPE,
 			WID_TN_MUSIC_SOUND,
 			WID_TN_MESSAGES,
@@ -1823,7 +1855,7 @@ class NWidgetMainToolbarContainer : public NWidgetToolbarContainer {
 		}
 
 		/* Introduce the split toolbar */
-		static const WidgetID * const arrangements[] = { arrange14, arrange15, arrange16, arrange17, arrange18, arrange19, arrange20 };
+		static const WidgetID * const arrangements[] = { arrange15, arrange16, arrange17, arrange18, arrange19, arrange20, arrange21 };
 
 		button_count = arrangeable_count = full_buttons;
 		spacer_count = this->spacers;
@@ -1958,6 +1990,46 @@ class NWidgetScenarioToolbarContainer : public NWidgetToolbarContainer {
  */
 using ToolbarButtonProc = CallBackFunction(Window *w);
 
+/* --- Underground view toggle --- */
+
+static CallBackFunction ToolbarUndergroundClick(Window *)
+{
+	ShowUndergroundToolbar();
+	return CallBackFunction::None;
+}
+
+/* --- Underground X-ray view toggle, available without the underground toolbar --- */
+
+static CallBackFunction ToolbarUndergroundXRayClick(Window *)
+{
+	ToggleUndergroundViewButton(UndergroundViewMode::XRay);
+	return CallBackFunction::None;
+}
+
+/* --- Views of the underground levels below / above the viewed one, without the surface --- */
+
+static CallBackFunction ToolbarUndergroundBelowClick(Window *)
+{
+	ToggleUndergroundViewButton(UndergroundViewMode::Below);
+	return CallBackFunction::None;
+}
+
+static CallBackFunction ToolbarUndergroundAboveClick(Window *)
+{
+	ToggleUndergroundViewButton(UndergroundViewMode::Above);
+	return CallBackFunction::None;
+}
+
+/* --- Coverage overlay of all own stations --- */
+
+static CallBackFunction ToolbarStationCoverageClick(Window *w)
+{
+	ToggleViewportCompanyCoverage();
+	w->SetWidgetLoweredState(WID_TN_STATION_COVERAGE, IsViewportCompanyCoverageShown());
+	w->SetWidgetDirty(WID_TN_STATION_COVERAGE);
+	return CallBackFunction::None;
+}
+
 static ToolbarButtonProc * const _toolbar_button_procs[] = {
 	ToolbarPauseClick,
 	ToolbarFastForwardClick,
@@ -1989,6 +2061,11 @@ static ToolbarButtonProc * const _toolbar_button_procs[] = {
 	ToolbarMusicClick,
 	ToolbarNewspaperClick,
 	ToolbarHelpClick,
+	ToolbarUndergroundClick,
+	ToolbarUndergroundXRayClick,
+	ToolbarUndergroundBelowClick,
+	ToolbarUndergroundAboveClick,
+	ToolbarStationCoverageClick,
 	ToolbarSwitchClick,
 };
 
@@ -2023,7 +2100,19 @@ struct MainToolbarWindow : Window {
 		this->SetWidgetDisabledState(WID_TN_GOAL, Goal::GetNumItems() == 0);
 		this->SetWidgetDisabledState(WID_TN_STORY, StoryPage::GetNumItems() == 0);
 
+		this->SetWidgetLoweredState(WID_TN_UNDERGROUND_XRAY, IsUndergroundXRayMode());
+		this->SetWidgetLoweredState(WID_TN_UNDERGROUND_BELOW, IsUndergroundBelowMode());
+		this->SetWidgetLoweredState(WID_TN_UNDERGROUND_ABOVE, IsUndergroundAboveMode());
+		this->SetWidgetLoweredState(WID_TN_STATION_COVERAGE, IsViewportCompanyCoverageShown());
+
 		this->DrawWidgets();
+	}
+
+	void DrawWidget(const Rect &r, WidgetID widget) const override
+	{
+		if (widget == WID_TN_UNDERGROUND_BELOW || widget == WID_TN_UNDERGROUND_ABOVE) {
+			DrawUndergroundViewButtonArrow(r, widget == WID_TN_UNDERGROUND_ABOVE);
+		}
 	}
 
 	void OnClick([[maybe_unused]] Point pt, WidgetID widget, [[maybe_unused]] int click_count) override
@@ -2081,6 +2170,10 @@ struct MainToolbarWindow : Window {
 			case MTHK_CLIENT_LIST: if (_networking) ShowClientList(); break;
 			case MTHK_SIGN_LIST: ShowSignList(); break;
 			case MTHK_LANDINFO: cbf = PlaceLandBlockInfo(); break;
+			case MTHK_UNDERGROUND: ShowUndergroundToolbar(); break;
+			case MTHK_UNDERGROUND_XRAY: ToolbarUndergroundXRayClick(this); break;
+			case MTHK_UNDERGROUND_BELOW: ToolbarUndergroundBelowClick(this); break;
+			case MTHK_UNDERGROUND_ABOVE: ToolbarUndergroundAboveClick(this); break;
 			default: return ES_NOT_HANDLED;
 		}
 		if (cbf != CallBackFunction::None) _last_started_action = cbf;
@@ -2172,6 +2265,10 @@ struct MainToolbarWindow : Window {
 		Hotkey(0, "client_list", MTHK_CLIENT_LIST),
 		Hotkey(0, "sign_list", MTHK_SIGN_LIST),
 		Hotkey(0, "land_info", MTHK_LANDINFO),
+		Hotkey(WKC_CTRL | 'U', "underground", MTHK_UNDERGROUND),
+		Hotkey(WKC_CTRL | WKC_HOME, "underground_xray", MTHK_UNDERGROUND_XRAY),
+		Hotkey(WKC_CTRL | WKC_PAGEDOWN, "underground_below", MTHK_UNDERGROUND_BELOW),
+		Hotkey(WKC_CTRL | WKC_PAGEUP, "underground_above", MTHK_UNDERGROUND_ABOVE),
 	}};
 };
 
@@ -2209,6 +2306,11 @@ static std::unique_ptr<NWidgetBase> MakeMainToolbar()
 		{WID_TN_MUSIC_SOUND,  WWT_IMGBTN,     SPR_IMG_MUSIC},
 		{WID_TN_MESSAGES,     WWT_IMGBTN,     SPR_IMG_MESSAGES},
 		{WID_TN_HELP,         WWT_IMGBTN,     SPR_IMG_QUERY},
+		{WID_TN_UNDERGROUND,  WWT_IMGBTN,     SPR_IMG_TUNNEL_RAIL},
+		{WID_TN_UNDERGROUND_XRAY, WWT_IMGBTN, SPR_METRO_ICON_XRAY},
+		{WID_TN_UNDERGROUND_BELOW, WWT_IMGBTN, SPR_METRO_ICON_XRAY},
+		{WID_TN_UNDERGROUND_ABOVE, WWT_IMGBTN, SPR_METRO_ICON_XRAY},
+		{WID_TN_STATION_COVERAGE, WWT_IMGBTN, SPR_IMG_RAIL_STATION},
 		{WID_TN_SWITCH_BAR,   WWT_IMGBTN,     SPR_IMG_SWITCH_TOOLBAR},
 	};
 

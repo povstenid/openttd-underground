@@ -190,26 +190,38 @@ static ScriptOrder::OrderPosition RealOrderPositionToScriptOrderPosition(Vehicle
 }
 
 
+/**
+ * Are the order flags valid for an order of the given type?
+ * @param ot The type of the order.
+ * @param order_flags The flags to check.
+ * @return True iff the flags can be used for that order type.
+ */
+static bool AreOrderFlagsValidForType(OrderType ot, ScriptOrder::ScriptOrderFlags order_flags)
+{
+	using SO = ScriptOrder;
+	switch (ot) {
+		case OT_GOTO_STATION:
+			return (order_flags & ~(SO::OF_NON_STOP_FLAGS | SO::OF_UNLOAD_FLAGS | SO::OF_LOAD_FLAGS)) == 0 &&
+					/* Test the different mutual exclusive flags. */
+					HasAtMostOneBit(order_flags & (SO::OF_TRANSFER | SO::OF_UNLOAD | SO::OF_NO_UNLOAD)) &&
+					HasAtMostOneBit(order_flags & (SO::OF_NO_UNLOAD | SO::OF_NO_LOAD)) &&
+					HasAtMostOneBit(order_flags & (SO::OF_FULL_LOAD | SO::OF_NO_LOAD)) &&
+					/* "Full load any" is "Full load" plus a bit. On its own that bit is invalid. */
+					((order_flags & SO::OF_FULL_LOAD_ANY) != (SO::OF_FULL_LOAD_ANY & ~SO::OF_FULL_LOAD));
+
+		case OT_GOTO_DEPOT:
+			return (order_flags & ~(SO::OF_NON_STOP_FLAGS | SO::OF_DEPOT_FLAGS)) == 0 &&
+					((order_flags & SO::OF_SERVICE_IF_NEEDED) == 0 || (order_flags & SO::OF_STOP_IN_DEPOT) == 0);
+
+		case OT_GOTO_WAYPOINT: return (order_flags & ~(SO::OF_NON_STOP_FLAGS)) == 0;
+		default:               return false;
+	}
+}
+
 /* static */ bool ScriptOrder::AreOrderFlagsValid(TileIndex destination, ScriptOrderFlags order_flags)
 {
 	OrderType ot = (order_flags & OF_GOTO_NEAREST_DEPOT) ? OT_GOTO_DEPOT : ::GetOrderTypeByTile(destination);
-	switch (ot) {
-		case OT_GOTO_STATION:
-			return (order_flags & ~(OF_NON_STOP_FLAGS | OF_UNLOAD_FLAGS | OF_LOAD_FLAGS)) == 0 &&
-					/* Test the different mutual exclusive flags. */
-					HasAtMostOneBit(order_flags & (OF_TRANSFER | OF_UNLOAD | OF_NO_UNLOAD)) &&
-					HasAtMostOneBit(order_flags & (OF_NO_UNLOAD | OF_NO_LOAD)) &&
-					HasAtMostOneBit(order_flags & (OF_FULL_LOAD | OF_NO_LOAD)) &&
-					/* "Full load any" is "Full load" plus a bit. On its own that bit is invalid. */
-					((order_flags & OF_FULL_LOAD_ANY) != (OF_FULL_LOAD_ANY & ~OF_FULL_LOAD));
-
-		case OT_GOTO_DEPOT:
-			return (order_flags & ~(OF_NON_STOP_FLAGS | OF_DEPOT_FLAGS)) == 0 &&
-					((order_flags & OF_SERVICE_IF_NEEDED) == 0 || (order_flags & OF_STOP_IN_DEPOT) == 0);
-
-		case OT_GOTO_WAYPOINT: return (order_flags & ~(OF_NON_STOP_FLAGS)) == 0;
-		default:               return false;
-	}
+	return AreOrderFlagsValidForType(ot, order_flags);
 }
 
 /* static */ bool ScriptOrder::IsValidConditionalOrder(OrderCondition condition, CompareFunction compare)
@@ -602,9 +614,12 @@ static void _DoCommandReturnSetOrderFlags(class ScriptInstance &instance)
 
 	EnforceCompanyModeValid(false);
 	EnforcePrecondition(false, IsValidVehicleOrder(vehicle_id, order_position));
-	EnforcePrecondition(false, AreOrderFlagsValid(GetOrderDestination(vehicle_id, order_position), order_flags));
 
 	const Order *order = ::ResolveOrder(vehicle_id, order_position);
+	/* Validate against the type of the existing order rather than the type of
+	 * the tile GetOrderDestination() returns: a station whose only platforms
+	 * are underground has no surface station tile (INVALID_TILE). */
+	EnforcePrecondition(false, AreOrderFlagsValidForType((order_flags & OF_GOTO_NEAREST_DEPOT) ? OT_GOTO_DEPOT : order->GetType(), order_flags));
 	int order_pos = ScriptOrderPositionToRealOrderPosition(vehicle_id, order_position);
 
 	ScriptOrderFlags current = GetOrderFlags(vehicle_id, order_position);

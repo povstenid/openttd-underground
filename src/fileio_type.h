@@ -103,6 +103,7 @@ enum Subdirectory : uint8_t {
 	SCREENSHOT_DIR,   ///< Subdirectory for all screenshots
 	SOCIAL_INTEGRATION_DIR, ///< Subdirectory for all social integration plugins
 	DOCS_DIR,      ///< Subdirectory for documentation
+	BLUEPRINT_DIR, ///< Subdirectory for metro blueprints
 	NUM_SUBDIRS,   ///< Number of subdirectories
 	NO_DIRECTORY,  ///< A path without any base directory
 };

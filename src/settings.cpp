@@ -52,6 +52,8 @@
 #include "fios.h"
 #include "fileio_func.h"
 #include "settings_cmd.h"
+#include "transparency.h"
+#include "multilayer/underground_view.h"
 
 #include "table/strings.h"
 
@@ -1521,7 +1523,11 @@ void SaveToConfig()
 		}
 	}
 
+	/* Save the transparency as the player set it, not the one of the X-ray view. */
+	TransparencyOptionBits transparency = _transparency_opt;
+	_transparency_opt = GetPlayerTransparencyOptions();
 	HandleSettingDescs(generic_ini, private_ini, secrets_ini, IniSaveSettings, IniSaveSettingList);
+	_transparency_opt = transparency;
 	GraphicsSetSaveConfig(generic_ini);
 	GRFSaveConfig(generic_ini, "newgrf", _grfconfig_newgame);
 	GRFSaveConfig(generic_ini, "newgrf-static", _grfconfig_static);
@@ -1606,6 +1612,20 @@ void DeleteGRFPresetFromConfig(std::string_view config_name)
 	ini.SaveToDisk(_config_file);
 }
 
+/** The object IntSettingDesc::ChangeValue is changing a setting in, while it runs. */
+static const void *_setting_object_being_changed = nullptr;
+
+/**
+ * The object a setting is being changed in, for the pre-change checks and
+ * post-change callbacks that look at other settings of that same object:
+ * the settings of the running game, or those of a new game ('setting_newgame').
+ * @return The object, or nullptr when no setting is being changed.
+ */
+const void *GetSettingObjectBeingChanged()
+{
+	return _setting_object_being_changed;
+}
+
 /**
  * Handle changing a value. This performs validation of the input value and
  * calls the appropriate callbacks, and saves it when the value is changed.
@@ -1614,6 +1634,7 @@ void DeleteGRFPresetFromConfig(std::string_view config_name)
  */
 void IntSettingDesc::ChangeValue(const void *object, int32_t newval) const
 {
+	AutoRestoreBackup object_backup(_setting_object_being_changed, object);
 	int32_t oldval = this->Read(object);
 	this->MakeValueValid(newval);
 	if (this->pre_check != nullptr && !this->pre_check(newval)) return;

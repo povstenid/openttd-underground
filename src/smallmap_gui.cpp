@@ -19,6 +19,8 @@
 #include "tunnelbridge_map.h"
 #include "core/endian_func.hpp"
 #include "vehicle_base.h"
+#include "multilayer/multilayer_map.h"
+#include "multilayer/underground_view.h"
 #include "sound_func.h"
 #include "window_func.h"
 #include "company_base.h"
@@ -1370,6 +1372,26 @@ protected:
 				importance = _tiletype_importance[ttype];
 				tile = ti;
 				et = ttype;
+			}
+		}
+
+		/* When the underground slice view is active, overlay the metro network
+		 * of the viewed depth on top of whatever mode is selected: tracks in
+		 * the depth-graded blue, stations white, portals/ramps yellow. */
+		if (IsUndergroundViewActive() && _multilayer_map.IsAllocated()) {
+			SliceID ug_sid = _multilayer_map.FindSliceAt(tile, GetUndergroundViewDepth());
+			if (ug_sid != INVALID_SLICE_ID) {
+				const TileSlice &ug_s = _multilayer_map.GetSlice(ug_sid);
+				switch (ug_s.kind) {
+					case SliceKind::Track: {
+						uint shade = static_cast<uint>(Clamp<int>(-GetUndergroundViewDepth(), 1, 8));
+						return MKCOLOUR_XXXX(PixelColour(static_cast<uint8_t>(0xCD - (shade - 1)))); /* blue ramp 0xC6..0xCD, light..dark */
+					}
+					case SliceKind::StationTile: return MKCOLOUR_XXXX(PC_WHITE);
+					case SliceKind::Portal:
+					case SliceKind::Ramp:        return MKCOLOUR_XXXX(PC_YELLOW);
+					default: break;
+				}
 			}
 		}
 

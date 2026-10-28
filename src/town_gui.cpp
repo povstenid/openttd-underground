@@ -7,6 +7,8 @@
 
 /** @file town_gui.cpp GUI for towns. */
 
+#include <sstream>
+
 #include "stdafx.h"
 #include "town.h"
 #include "viewport_func.h"

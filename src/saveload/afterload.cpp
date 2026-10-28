@@ -68,6 +68,9 @@
 #include "../picker_func.h"
 
 #include "saveload_internal.h"
+#include "../multilayer/underground_cmd.h"
+#include "../pbs.h"
+#include "../track_func.h"
 
 #include <signal.h>
 
@@ -3032,6 +3035,53 @@ bool AfterLoadGame()
 
 	/* Beyond this point, tile types which can be accessed by vehicles must be in a valid state. */
 
+	/* Sanitize underground train state. Slice IDs are pool indices that are
+	 * REBUILT from scratch on load, so the saved underground_slice of a train
+	 * is meaningless as an ID — it must be re-resolved by position. Without
+	 * this, loaded underground trains follow a foreign slice and the consist
+	 * derails within seconds. This must happen before the vehicle caches are
+	 * computed in phase 2: power and track speed of an underground part come
+	 * from the rail type of its slice.
+	 * Everything else a live game holds is saved since SLV_METRO_RUNTIME_STATE
+	 * and must be kept as it is: a client joining a network game loads the
+	 * server's game and has to run on exactly like the server does. */
+	const bool metro_state_saved = !IsSavegameVersionBefore(SLV_METRO_RUNTIME_STATE);
+	for (Train *t : Train::Iterate()) {
+		bool dropped_to_surface = false;
+		if (t->underground_slice != 0 || t->underground_depth != 0) {
+			SliceID sid = INVALID_SLICE_ID;
+			if (t->underground_tile_raw != 0 && IsValidTile(TileIndex(t->underground_tile_raw)) && _multilayer_map.IsAllocated()) {
+				sid = _multilayer_map.FindSliceAt(TileIndex(t->underground_tile_raw), t->underground_depth);
+				if (sid != INVALID_SLICE_ID) {
+					const TileSlice &s = _multilayer_map.GetSlice(sid);
+					if (s.kind == SliceKind::Surface || s.kind == SliceKind::End) sid = INVALID_SLICE_ID;
+				}
+			}
+			if (sid != INVALID_SLICE_ID) {
+				t->underground_slice = sid;
+			} else {
+				/* No underground content at the recorded position — drop the
+				 * part back to plain surface state. */
+				t->underground_depth = 0;
+				t->underground_slice = 0;
+				t->underground_tile_raw = 0;
+				dropped_to_surface = true;
+			}
+		}
+
+		/* Keep Hidden in sync with what the movement code does: a part is hidden
+		 * from its first step off the portal column; on the portal column it is
+		 * visible while diving and hidden while coming out, which only the saved
+		 * flag tells. Parts that are neither underground nor in a wormhole/depot
+		 * are visible. */
+		if (metro_state_saved && !dropped_to_surface) continue;
+		if (t->IsUnderground()) {
+			if (_multilayer_map.GetSlice(static_cast<SliceID>(t->underground_slice)).kind != SliceKind::Portal) t->vehstatus.Set(VehState::Hidden);
+		} else if (t->track != TRACK_BIT_WORMHOLE && t->track != TRACK_BIT_DEPOT) {
+			t->vehstatus.Reset(VehState::Hidden);
+		}
+	}
+
 	/* Update all vehicles: Phase 2 */
 	AfterLoadVehiclesPhase2(true);
 
@@ -3329,6 +3379,58 @@ bool AfterLoadGame()
 		}
 	}
 
+	/* Savegames rebuild multilayer slices from scratch, so underground station complexes
+	 * must re-resolve their slice references before any catchment/runtime logic touches them. */
+	ResolveStationComplexesAfterLoad();
+
+	/* Underground PBS reservations of older saves are rebuilt from the trains:
+	 * their reserved bits come without (all of) their owners (every reservation
+	 * would look like train 0's), ramp reservations were not saved at all, and
+	 * portal exit claims and the paths trains held for diving into a portal
+	 * were lost. Every underground train holds the tiles it stands on, then
+	 * every front engine reserves its path again, so two loaded trains cannot
+	 * grab the same block on their first post-load tick. */
+	if (!metro_state_saved && _multilayer_map.IsAllocated()) {
+		for (SliceID sid = 0; sid < _multilayer_map.SlicePoolSize(); sid++) {
+			if (!_multilayer_map.IsValidSlice(sid)) continue;
+			TileSlice &s = _multilayer_map.GetSlice(sid);
+			if (s.kind == SliceKind::Track) {
+				s.track.reserved = 0;
+				s.track.reserved_by = 0;
+				s.track.reserved_by2 = 0;
+			} else if (s.kind == SliceKind::StationTile) {
+				s.station.reserved = 0;
+				s.station.reserved_by = 0;
+			} else if (s.kind == SliceKind::Ramp) {
+				s.ramp.reserved = 0;
+				s.ramp.reserved_by = 0;
+			}
+		}
+		for (Train *t : Train::Iterate()) {
+			if (!t->IsUnderground() || t->vehstatus.Test(VehState::Crashed) || t->underground_slice == 0) continue;
+			if (!_multilayer_map.IsValidSlice(static_cast<SliceID>(t->underground_slice))) continue;
+			Track track = FindFirstTrack(t->track);
+			if (!IsValidTrack(track)) continue;
+			TryReserveUndergroundTrack(TileRef{TileIndex(t->underground_tile_raw), static_cast<SliceID>(t->underground_slice)}, track, t->First()->index);
+		}
+		for (Train *t : Train::Iterate()) {
+			if (t->IsFrontEngine() && t->IsUnderground() && !t->vehstatus.Test(VehState::Crashed)) {
+				TryPathReserve(t, false, false);
+			}
+		}
+	}
+
+	/* Earlier metro builds let a train running below a level crossing count as
+	 * "on the crossing", which could leave it barred with no surface train
+	 * around to ever reopen it. Crossing checks are layer-aware now, so one
+	 * re-evaluation with the underground train state resolved above fixes up
+	 * any such crossing. Games saved by this build already have them right. */
+	if (!IsSavegameVersionBefore(SLV_MULTILAYER_MAP) && !metro_state_saved) {
+		for (const auto tile : Map::Iterate()) {
+			if (IsLevelCrossingTile(tile)) UpdateLevelCrossing(tile, false);
+		}
+	}
+
 	/* Compute station catchment areas. This is needed here in case UpdateStationAcceptance is called below. */
 	Station::RecomputeCatchmentForAll();
 
@@ -3409,6 +3511,15 @@ bool AfterLoadGame()
 	}
 
 	AfterLoadLabelMaps();
+
+	/* The map heights were loaded without SetTileHeight. */
+	_tile_heights_changed = true;
+
+	/* Underground portals did not store their rail type; it is needed for infrastructure counts. */
+	if (IsSavegameVersionBefore(SLV_METRO_PORTAL_RAILTYPE)) AfterLoadUndergroundPortalRailtypes();
+
+	/* Infrastructure counts are not saved but rebuilt here from the map, which also adds the
+	 * underground slices (see AfterLoadCompanyStats), so older saves get correct counts too. */
 	AfterLoadCompanyStats();
 	AfterLoadStoryBook();
 

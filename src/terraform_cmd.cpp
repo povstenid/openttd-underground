@@ -19,6 +19,7 @@
 #include "core/backup_type.hpp"
 #include "terraform_cmd.h"
 #include "landscape_cmd.h"
+#include "multilayer/underground_conflict.h"
 
 #include "table/strings.h"
 
@@ -121,6 +122,28 @@ static std::tuple<CommandCost, TileIndex> TerraformTileHeight(TerraformerState *
 		if (x == 1) x = 0;
 		if (y == 1) y = 0;
 		return { CommandCost(STR_ERROR_TOO_CLOSE_TO_EDGE_OF_MAP), TileXY(x, y) };
+	}
+
+	/*
+	 * Lowering must not uncover the underground network. A slice is valid while
+	 * it lies strictly below the lowest corner of its column (IsValidMetroZ, the
+	 * vanilla tunnel rule), so check the planned lowest corner of every column
+	 * that shares this corner. Raising can never conflict.
+	 */
+	if (height < static_cast<int>(TileHeight(tile))) {
+		static const TileIndexDiffC corner_owners[] = {{0, 0}, {-1, 0}, {0, -1}, {-1, -1}};
+		static const TileIndexDiffC corners[] = {{0, 0}, {1, 0}, {0, 1}, {1, 1}};
+		for (const TileIndexDiffC &d : corner_owners) {
+			TileIndex t = AddTileIndexDiffCWrap(tile, d);
+			if (t == INVALID_TILE) continue;
+			int planned_min = INT_MAX;
+			for (const TileIndexDiffC &c : corners) {
+				TileIndex ct = AddTileIndexDiffCWrap(t, c);
+				if (ct == INVALID_TILE) continue;
+				planned_min = std::min(planned_min, ct == tile ? height : TerraformGetHeightOfTile(ts, ct));
+			}
+			if (planned_min != INT_MAX && HasUndergroundBelowHeight(t, planned_min)) return { CommandCost(STR_ERROR_UNDERGROUND_IN_THE_WAY), t };
+		}
 	}
 
 	/* Mark incident tiles that are involved in the terraforming. */

@@ -7,6 +7,8 @@
 
 /** @file cargotype.cpp Implementation of cargoes. */
 
+#include <sstream>
+
 #include "stdafx.h"
 #include "cargotype.h"
 #include "core/geometry_func.hpp"

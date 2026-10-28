@@ -7,6 +7,8 @@
 
 /** @file engine_gui.cpp GUI to show engine related information. */
 
+#include <sstream>
+
 #include "stdafx.h"
 #include "dropdown_func.h"
 #include "window_gui.h"

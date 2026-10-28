@@ -558,7 +558,8 @@ static bool DisasterTick_Big_Ufo(DisasterVehicle *v)
 		v->state = 2;
 
 		for (Vehicle *target : Vehicle::Iterate()) {
-			if (target->IsGroundVehicle()) {
+			/* Underground trains are shielded from the UFO. */
+			if (target->IsGroundVehicle() && IsVehicleOnSurfaceLayer(target)) {
 				if (Delta(target->x_pos, v->x_pos) + Delta(target->y_pos, v->y_pos) <= 12 * (int)TILE_SIZE) {
 					target->breakdown_ctr = 5;
 					target->breakdown_delay = 0xF0;
@@ -595,6 +596,7 @@ static bool DisasterTick_Big_Ufo(DisasterVehicle *v)
 		const auto is_valid_target = [](const Train *t) {
 			return t->IsFrontEngine() // Only the engines
 				&& Company::IsHumanID(t->owner) // Don't break AIs
+				&& t->IsOnSurfaceLayer() // Not underground
 				&& IsPlainRailTile(t->tile) // No tunnels
 				&& !t->vehstatus.Test(VehState::Crashed); // Not crashed
 		};

@@ -13,8 +13,14 @@
 #include "error_func.h"
 #include "string_func.h"
 #include "pathfinder/water_regions.h"
+#include "multilayer/multilayer_map.h"
+#include "multilayer/portal_registry.h"
+#include "multilayer/station_complex.h"
+#include "multilayer/underground_train.h"
 
 #include "safeguards.h"
+
+bool _tile_heights_changed = true; ///< Set whenever the height of a tile changes, see SetTileHeight.
 
 /* static */ uint Map::log_x;     ///< 2^_map_log_x == _map_size_x
 /* static */ uint Map::log_y;     ///< 2^_map_log_y == _map_size_y
@@ -56,6 +62,16 @@
 
 	Tile::base_tiles = std::make_unique<Tile::TileBase[]>(Map::size);
 	Tile::extended_tiles = std::make_unique<Tile::TileExtended[]>(Map::size);
+
+	_multilayer_map.Allocate(Map::size);
+	_tile_heights_changed = true;
+	/* All slice references are gone now; drop dependent metro registries too,
+	 * so a new game doesn't inherit them from a previously loaded one.
+	 * On savegame load the MLSL/STCX/MLUT/MLPC chunks repopulate them afterwards. */
+	ClearPortalConnections();
+	_station_complexes.clear();
+	InvalidateStationExitCache();
+	ClearUndergroundTrainRuntimeState();
 
 	AllocateWaterRegions();
 }

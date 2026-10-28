@@ -11,6 +11,7 @@
 #define YAPF_DESTRAIL_HPP
 
 #include "../../train.h"
+#include "../../multilayer/station_complex.h"
 #include "../pathfinder_func.h"
 #include "../pathfinder_type.h"
 
@@ -146,6 +147,17 @@ public:
 				[[fallthrough]];
 
 			case OT_GOTO_STATION:
+				/* Underground-only metro stations have no surface rail tiles to
+				 * target; aim at the portal tile chosen by GetOrderStationLocation
+				 * (stored in dest_tile) instead. */
+				if (v->current_order.IsType(OT_GOTO_STATION) &&
+						StationUsesPortalRouting(v->current_order.GetDestination().ToStationID().base()) &&
+						v->dest_tile != INVALID_TILE) {
+					this->dest_tile = v->dest_tile;
+					this->dest_station_id = StationID::Invalid();
+					this->dest_trackdirs = TrackStatusToTrackdirBits(GetTileTrackStatus(this->dest_tile, TRANSPORT_RAIL, 0));
+					break;
+				}
 				this->dest_tile = CalcClosestStationTile(v->current_order.GetDestination().ToStationID(), v->tile, v->current_order.IsType(OT_GOTO_STATION) ? StationType::Rail : StationType::RailWaypoint);
 				this->dest_station_id = v->current_order.GetDestination().ToStationID();
 				this->dest_trackdirs = INVALID_TRACKDIR_BIT;

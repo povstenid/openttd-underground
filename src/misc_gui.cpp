@@ -19,6 +19,12 @@
 #include "town.h"
 #include "string_func.h"
 #include "company_base.h"
+#include "multilayer/multilayer_map.h"
+#include "multilayer/underground_rules.h"
+#include "multilayer/underground_cmd.h"
+#include "multilayer/underground_soil.h"
+#include "multilayer/underground_view.h"
+#include "rail.h"
 #include "station_base.h"
 #include "waypoint_base.h"
 #include "texteff.hpp"
@@ -267,6 +273,87 @@ public:
 		/* NewGRF name */
 		if (td.grf.has_value()) {
 			this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_NEWGRF_NAME, std::move(*td.grf)));
+		}
+
+		/* How deep a house foundation or water takes the ground below the tile. */
+		if (IsTileType(tile, TileType::House)) {
+			this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_HOUSE_FOUNDATION, GetHouseFoundationDepth(tile)));
+		} else if (IsUndergroundWaterTile(tile)) {
+			this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_WATER_DEPTH, GetWaterDepth(tile)));
+		}
+
+		/* Underground content of this tile column (multilayer metro). */
+		if (_multilayer_map.IsAllocated()) {
+			const TileColumn &col = _multilayer_map.GetColumn(tile);
+			/* The track type and its speed limit, like for surface rail. */
+			auto add_rail_type = [this](uint8_t raw) {
+				if (raw >= RAILTYPE_END) return;
+				const RailTypeInfo *rti = GetRailTypeInfo(static_cast<RailType>(raw));
+				this->landinfo_data.push_back(GetString(STR_LANG_AREA_INFORMATION_RAIL_TYPE, rti->strings.name));
+				if (rti->max_speed != 0) {
+					this->landinfo_data.push_back(GetString(STR_LANG_AREA_INFORMATION_RAIL_SPEED_LIMIT, PackVelocity(rti->max_speed, VEH_TRAIN)));
+				}
+			};
+			/* Depth below the surface and soil of a level of this tile. */
+			auto depth_of = [this](int16_t level) { return GetDepthBelowSurface(this->tile, level); };
+			auto soil_of = [this](int16_t level) { return GetSoilLayerName(GetSoilLayer(this->tile, level)); };
+			for (SliceID sid : col.slices) {
+				if (!_multilayer_map.IsValidSlice(sid)) continue;
+				const TileSlice &s = _multilayer_map.GetSlice(sid);
+				switch (s.kind) {
+					case SliceKind::Track:
+						this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_UNDERGROUND_TRACK, s.span.z_bot, depth_of(s.span.z_bot), soil_of(s.span.z_bot)));
+						add_rail_type(s.track.railtype);
+						if (s.track.signal_mask != 0) this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_UNDERGROUND_SIGNALS));
+						break;
+					case SliceKind::StationTile:
+						if (Station::IsValidID(s.station.station_id)) {
+							this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_UNDERGROUND_PLATFORM_OF, s.span.z_bot, depth_of(s.span.z_bot), soil_of(s.span.z_bot), StationID(s.station.station_id)));
+						} else {
+							this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_UNDERGROUND_PLATFORM, s.span.z_bot, depth_of(s.span.z_bot), soil_of(s.span.z_bot)));
+						}
+						add_rail_type(s.station.railtype);
+						break;
+					case SliceKind::Portal:
+						/* The mouth of a hillside portal lies at the foot of the slope, in no soil. */
+						if (depth_of(s.span.z_bot) < 1) {
+							this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_UNDERGROUND_PORTAL_MOUTH, s.span.z_bot));
+						} else {
+							this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_UNDERGROUND_PORTAL, s.span.z_bot, depth_of(s.span.z_bot), soil_of(s.span.z_bot)));
+						}
+						add_rail_type(s.portal.railtype);
+						break;
+					case SliceKind::Ramp:
+						this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_UNDERGROUND_RAMP, s.ramp.entry_depth, s.ramp.exit_depth, depth_of(s.span.z_bot), soil_of(s.span.z_bot)));
+						add_rail_type(s.ramp.railtype);
+						if (s.ramp.signal_mask != 0) this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_UNDERGROUND_SIGNALS));
+						break;
+					default: continue;
+				}
+			}
+		}
+
+		/* In the cut-plane view: the soil of the viewed level where nothing is built on it. */
+		if (IsUndergroundSliceMode()) {
+			int16_t level = GetUndergroundViewDepth();
+			bool built = _multilayer_map.IsAllocated() && _multilayer_map.FindSliceAt(tile, level) != INVALID_SLICE_ID;
+			if (!built && level < GetMetroSurfaceZ(tile)) {
+				uint obstacle_depth = 0;
+				switch (GetUndergroundObstacle(tile, level, &obstacle_depth)) {
+					case UndergroundObstacle::HouseFoundation:
+						this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_UNDERGROUND_FOUNDATION_AT_LEVEL, level, GetDepthBelowSurface(tile, level), obstacle_depth));
+						break;
+					case UndergroundObstacle::Water:
+						this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_UNDERGROUND_WATER_AT_LEVEL, level, GetDepthBelowSurface(tile, level), obstacle_depth));
+						break;
+					case UndergroundObstacle::SeaForbidden:
+						this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_UNDERGROUND_SEA_AT_LEVEL, level, GetDepthBelowSurface(tile, level)));
+						break;
+					case UndergroundObstacle::None:
+						this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_UNDERGROUND_SOIL_AT_LEVEL, level, GetDepthBelowSurface(tile, level), GetSoilLayerName(GetSoilLayer(tile, level))));
+						break;
+				}
+			}
 		}
 
 		/* Cargo acceptance is displayed in a extra multiline */

@@ -63,6 +63,7 @@
 #include "landscape_cmd.h"
 #include "rail_cmd.h"
 #include "newgrf_roadstop.h"
+#include "multilayer/station_complex.h"
 #include "timer/timer.h"
 #include "timer/timer_game_calendar.h"
 #include "timer/timer_game_economy.h"
@@ -70,6 +71,8 @@
 #include "cheat_type.h"
 #include "road_func.h"
 #include "station_layout_type.h"
+#include "pedestrian_crowd.h"
+#include "pedestrians.h"
 
 #include "widgets/station_widget.h"
 #include "widgets/misc_widget.h"
@@ -215,16 +218,6 @@ static bool CMSATree(TileIndex tile)
 	return IsTileType(tile, TileType::Trees);
 }
 
-/** Station types a station could be named after. */
-enum StationNaming : uint8_t {
-	Rail, ///< Railway station.
-	Road, ///< Truck or bus stop.
-	Airport, ///< Airport for fixed wing aircraft.
-	Oilrig, ///< Heliport of an oilrig.
-	Dock, ///< Ship dock.
-	Heliport, ///< Standalone heliport.
-};
-
 /** Information to handle station action 0 property 24 correctly */
 struct StationNameInformation {
 	std::bitset<STR_SV_STNAME_FALLBACK - STR_SV_STNAME> used_names; ///< Used default station suffixes.
@@ -260,7 +253,7 @@ struct StationNameInformation {
  * @param name_class The type of station that is being built.
  * @return The \c StringID with the name of the station.
  */
-static StringID GenerateStationName(Station *st, TileIndex tile, StationNaming name_class)
+StringID GenerateStationName(Station *st, TileIndex tile, StationNaming name_class)
 {
 	const Town *t = st->town;
 
@@ -1848,6 +1841,16 @@ CommandCost RemoveFromRailBaseStation(TileArea ta, std::vector<T *> &affected_st
 		MakeRailStationAreaSmaller(st);
 		UpdateStationSignCoord(st);
 
+		/* Underground platforms keep the train facility (and the station) alive,
+		 * whether or not the station has any surface exit. */
+		if (st->train_station.tile == INVALID_TILE) {
+			auto sc_it = _station_complexes.find(st->index.base());
+			if (sc_it != _station_complexes.end()) {
+				auto platforms = sc_it->second.GetPlatforms();
+				if (!platforms.empty()) st->train_station = TileArea(platforms.front()->ref.tile, 1, 1);
+			}
+		}
+
 		/* if we deleted the whole station, delete the train facility. */
 		if (st->train_station.tile == INVALID_TILE) {
 			st->facilities.Reset(StationFacility::Train);
@@ -2240,6 +2243,131 @@ CommandCost CmdBuildRoadStop(DoCommandFlags flags, TileIndex tile, uint8_t width
 	return cost;
 }
 
+/** Set while CmdRemoveExitSurface removes the bus station tile of a pavilion exit. */
+static bool _removing_station_exit_pavilion = false;
+
+/**
+ * Pick a road type the current company can build a bay bus stop with.
+ * @return A road type, or INVALID_ROADTYPE when none is available.
+ */
+static RoadType GetStationExitPavilionRoadType()
+{
+	if (HasRoadTypeAvail(_current_company, ROADTYPE_ROAD)) return ROADTYPE_ROAD;
+	for (RoadType rt = ROADTYPE_BEGIN; rt < ROADTYPE_END; rt++) {
+		if (RoadTypeIsRoad(rt) && HasRoadTypeAvail(_current_company, rt)) return rt;
+	}
+	return INVALID_ROADTYPE;
+}
+
+/**
+ * Build the surface building of an underground station exit pavilion: a plain
+ * (default spec) bay bus stop tile that belongs to the underground station.
+ * This is the vanilla road stop machinery of #CmdBuildRoadStop, restricted to
+ * one tile and always joining @a station_id (no distant-join setting, no
+ * search for neighbouring stations). The entrance faces an adjacent road when
+ * there is one.
+ * @param flags      Command flags.
+ * @param tile       Surface tile of the pavilion.
+ * @param station_id Station the pavilion belongs to.
+ * @return Cost or error.
+ */
+CommandCost BuildStationExitPavilion(DoCommandFlags flags, TileIndex tile, StationID station_id)
+{
+	Station *st = Station::GetIfValid(station_id);
+	/* Without a station only a test of the tile: a blueprint paste tests the exits of stations it is still to build. */
+	if (st == nullptr && (station_id != StationID::Invalid() || flags.Test(DoCommandFlag::Execute))) return CMD_ERROR;
+	if (!IsValidTile(tile)) return CMD_ERROR;
+	if (st != nullptr && st->owner != _current_company) return CMD_ERROR;
+	if (IsTileType(tile, TileType::Station)) return CommandCost(STR_ERROR_SITE_UNSUITABLE);
+
+	RoadType rt = GetStationExitPavilionRoadType();
+	if (rt == INVALID_ROADTYPE) return CommandCost(STR_ERROR_SITE_UNSUITABLE);
+
+	CommandCost ret = CheckIfAuthorityAllowsNewStation(tile, flags);
+	if (ret.Failed()) return ret;
+
+	if (!RoadStop::CanAllocateItem()) return CommandCost(STR_ERROR_TOO_MANY_BUS_STOPS);
+	if (st != nullptr) {
+		ret = st->rect.BeforeAddRect(tile, 1, 1, StationRect::ADD_TEST);
+		if (ret.Failed()) return ret;
+	}
+
+	/* Entrance towards an adjacent road if possible, else any direction the slope allows. */
+	std::vector<DiagDirection> dirs;
+	for (DiagDirection d = DIAGDIR_BEGIN; d < DIAGDIR_END; d++) {
+		TileIndex n = TileAddByDiagDir(tile, d);
+		if (IsValidTile(n) && IsTileType(n, TileType::Road)) dirs.push_back(d);
+	}
+	for (DiagDirection d = DIAGDIR_BEGIN; d < DIAGDIR_END; d++) {
+		if (std::find(dirs.begin(), dirs.end(), d) == dirs.end()) dirs.push_back(d);
+	}
+
+	/* A town house on the tile is demolished as part of building the pavilion
+	 * (with its cost, the town's rating change and the authority's consent);
+	 * anything else that DoCommandFlag::Auto refuses to clear stays an error. */
+	DoCommandFlags stop_flags = flags;
+	if (IsTileType(tile, TileType::House)) stop_flags.Reset(DoCommandFlag::Auto);
+
+	TileArea area(tile, 1, 1);
+	Money unit_cost = _price[Price::BuildStationBus];
+	DiagDirection ddir = INVALID_DIAGDIR;
+	CommandCost cost;
+	for (DiagDirection d : dirs) {
+		StationID est = StationID::Invalid();
+		cost = CalculateRoadStopCost(area, DoCommandFlags{stop_flags}.Reset(DoCommandFlag::Execute), false, StationType::Bus, nullptr, DiagDirToAxis(d), d, &est, rt, unit_cost);
+		if (cost.Succeeded()) {
+			ddir = d;
+			break;
+		}
+	}
+	if (ddir == INVALID_DIAGDIR) return cost;
+	if (st == nullptr) return cost;
+
+	auto specindex = AllocateSpecToRoadStop(nullptr, st);
+	if (!specindex.has_value()) return CommandCost(STR_ERROR_TOO_MANY_STATION_SPECS);
+
+	if (flags.Test(DoCommandFlag::Execute)) {
+		StationID est = StationID::Invalid();
+		cost = CalculateRoadStopCost(area, stop_flags, false, StationType::Bus, nullptr, DiagDirToAxis(ddir), ddir, &est, rt, unit_cost);
+		if (cost.Failed()) return cost;
+
+		AssignSpecToRoadStop(nullptr, st, *specindex);
+
+		RoadStop *road_stop = RoadStop::Create(tile);
+		RoadStop **currstop = FindRoadStopSpot(false, st);
+		*currstop = road_stop;
+		st->bus_station.Add(tile);
+		st->AddFacility(StationFacility::BusStop, tile);
+		st->rect.BeforeAddTile(tile, StationRect::ADD_TRY);
+
+		MakeRoadStop(tile, st->owner, st->index, RoadStopType::Bus, rt, INVALID_ROADTYPE, ddir);
+		UpdateCompanyRoadInfrastructure(rt, _current_company, ROAD_STOP_TRACKBIT_FACTOR);
+		Company::Get(st->owner)->infrastructure.station++;
+		SetCustomRoadStopSpecIndex(tile, *specindex);
+
+		MarkTileDirtyByTile(tile);
+		st->AfterStationTileSetChange(true, StationType::Bus);
+	}
+	return cost;
+}
+
+/**
+ * Remove the bus station tile of a pavilion exit. Only this path (and
+ * bankruptcy / flooding) may remove such a tile, see #RemoveRoadStop.
+ * @param flags Command flags.
+ * @param tile  Pavilion tile.
+ * @return Cost or error.
+ */
+CommandCost RemoveStationExitPavilion(DoCommandFlags flags, TileIndex tile)
+{
+	if (!IsTileType(tile, TileType::Station) || !IsBayRoadStopTile(tile) || !IsBusStop(tile)) return CMD_ERROR;
+	bool saved = _removing_station_exit_pavilion;
+	_removing_station_exit_pavilion = true;
+	CommandCost ret = RemoveRoadStop(tile, flags);
+	_removing_station_exit_pavilion = saved;
+	return ret;
+}
+
 /**
  * Remove a bus station/truck stop
  * @param tile TileIndex been queried
@@ -2254,6 +2382,14 @@ static CommandCost RemoveRoadStop(TileIndex tile, DoCommandFlags flags, int repl
 	if (_current_company != OWNER_WATER) {
 		CommandCost ret = CheckOwnership(st->owner);
 		if (ret.Failed()) return ret;
+	}
+
+	/* The bus station tile of a metro exit pavilion goes only with its exit. Bankruptcy
+	 * and flooding still remove it; the exit node is then dropped with it. A spec
+	 * replacement keeps the tile a bus stop of the same station. */
+	bool is_exit_pavilion = replacement_spec_index < 0 && IsStationExitPavilionTile(tile);
+	if (is_exit_pavilion && !_removing_station_exit_pavilion && !flags.Test(DoCommandFlag::Bankrupt) && _current_company != OWNER_WATER) {
+		return CommandCost(STR_ERROR_UNDERGROUND_MUST_REMOVE_EXIT_FIRST);
 	}
 
 	bool is_truck = IsTruckStop(tile);
@@ -2294,6 +2430,8 @@ static CommandCost RemoveRoadStop(TileIndex tile, DoCommandFlags flags, int repl
 	const RoadStopSpec *spec = GetRoadStopSpec(tile);
 
 	if (flags.Test(DoCommandFlag::Execute)) {
+		if (is_exit_pavilion && !_removing_station_exit_pavilion) ForgetExplicitStationExitAt(tile);
+
 		if (*primary_stop == cur_stop) {
 			/* removed the first stop in the list */
 			*primary_stop = cur_stop->next;
@@ -3287,6 +3425,22 @@ static bool DrawCustomStationFoundations(const StationSpec *statspec, BaseStatio
 	return true;
 }
 
+/** Metro entrance building of an underground station exit pavilion, door towards an X road. */
+static const DrawTileSeqStruct _metro_pavilion_seq_x[] = {
+	{0, 0, 0, TILE_SIZE, TILE_SIZE, 20, {SPR_METRO_PAVILION_X | (1U << PALETTE_MODIFIER_COLOUR), PAL_NONE}},
+};
+
+/** Metro entrance building of an underground station exit pavilion, door towards a Y road. */
+static const DrawTileSeqStruct _metro_pavilion_seq_y[] = {
+	{0, 0, 0, TILE_SIZE, TILE_SIZE, 20, {SPR_METRO_PAVILION_Y | (1U << PALETTE_MODIFIER_COLOUR), PAL_NONE}},
+};
+
+/** Layouts of exit pavilions (plain bay bus stop tiles of an underground station), per axis of the entrance. */
+static const DrawTileSpriteSpan _metro_pavilion_layouts[] = {
+	DrawTileSpriteSpan({SPR_METRO_PAVILION_GROUND, PAL_NONE}, _metro_pavilion_seq_x),
+	DrawTileSpriteSpan({SPR_METRO_PAVILION_GROUND, PAL_NONE}, _metro_pavilion_seq_y),
+};
+
 /** @copydoc DrawTileProc */
 static void DrawTile_Station(TileInfo *ti)
 {
@@ -3378,6 +3532,11 @@ static void DrawTile_Station(TileInfo *ti)
 	}
 
 	if (layout == nullptr && t == nullptr) t = GetStationTileLayout(GetStationType(ti->tile), gfx);
+
+	/* Exit pavilion of an underground station: the metro entrance building instead of the bus shelter. */
+	if (IsBayRoadStopTile(ti->tile) && GetRoadStopSpec(ti->tile) == nullptr && IsStationExitPavilionTile(ti->tile)) {
+		t = &_metro_pavilion_layouts[DiagDirToAxis(GetBayRoadStopDir(ti->tile))];
+	}
 
 	/* don't show foundation for docks */
 	if (ti->tileh != SLOPE_FLAT && !IsDock(ti->tile)) {
@@ -3535,6 +3694,7 @@ static void DrawTile_Station(TileInfo *ti)
 	}
 
 	DrawRailTileSeq(ti, t, TO_BUILDINGS, total_offset, relocation, palette);
+	DrawPedestrianCrowd(ti);
 	DrawBridgeMiddle(ti, GetStationBlockedPillars(bridgeable_info, GetStationGfx(ti->tile)));
 }
 
@@ -4434,6 +4594,8 @@ static uint UpdateStationWaiting(Station *st, CargoType cargo, uint amount, Sour
 	amount >>= 8;
 	/* No new "real" cargo item yet. */
 	if (amount == 0) return 0;
+
+	OnPedestrianPassengersGenerated(st, cargo, amount);
 
 	StationID next = ge.GetVia(st->index);
 	ge.GetOrCreateData().cargo.Append(CargoPacket::Create(st->index, amount, source), next);

@@ -7,6 +7,9 @@
 
 /** @file console_cmds.cpp Implementation of the console hooks. */
 
+#include <fstream>
+#include <sstream>
+
 #include "stdafx.h"
 #include "core/string_consumer.hpp"
 #include "console_internal.h"
@@ -45,6 +48,18 @@
 #include "3rdparty/fmt/chrono.h"
 #include "company_cmd.h"
 #include "misc_cmd.h"
+#include "multilayer/underground_gui.h"
+#include "multilayer/underground_view.h"
+#include "multilayer/underground_cmd.h"
+#include "multilayer/blueprint_gui.h"
+#include "multilayer/multilayer_map.h"
+#include "multilayer/station_complex.h"
+#include "order_base.h"
+#include "order_cmd.h"
+#include "station_base.h"
+#include "train.h"
+#include "pedestrian_arrivals.h"
+#include "pedestrians.h"
 
 #if defined(WITH_ZLIB)
 #include "network/network_content.h"
@@ -1719,6 +1734,31 @@ static bool ConGetSeed(std::span<std::string_view> argv)
 	return true;
 }
 
+/** Show the counters of the visual pedestrians. @copydoc IConsoleCmdProc */
+static bool ConPedestrians(std::span<std::string_view> argv)
+{
+	if (argv.empty()) {
+		IConsolePrint(CC_HELP, "Show statistics of the pedestrians walking to stations. Usage: 'pedestrians [reset]'.");
+		return true;
+	}
+
+	if (argv.size() > 1 && argv[1] == "reset") {
+		ResetPedestrians();
+		ResetPedestrianArrivals();
+		MarkWholeScreenDirty();
+		IConsolePrint(CC_DEFAULT, "Pedestrians removed.");
+		return true;
+	}
+
+	const PedestrianStats &stats = GetPedestrianStats();
+	IConsolePrint(CC_DEFAULT, "Walking now: {}", GetPedestrianCount());
+	IConsolePrint(CC_DEFAULT, "Passengers from houses: {} ({} too far from the viewports)", stats.passengers_seen, stats.passengers_offscreen);
+	IConsolePrint(CC_DEFAULT, "Pedestrians spawned: {}, arrived: {}, dropped at the limit: {}", stats.spawned, stats.arrived, stats.dropped);
+	const PedestrianArrivalStats &arrivals = GetPedestrianArrivalStats();
+	IConsolePrint(CC_DEFAULT, "Passengers delivered by vehicles: {} ({} too far from the viewports, {} without houses), walking to houses: {}", arrivals.passengers_delivered, arrivals.passengers_offscreen, arrivals.no_house, arrivals.spawned);
+	return true;
+}
+
 /** Get the current game date. @copydoc IConsoleCmdProc */
 static bool ConGetDate(std::span<std::string_view> argv)
 {
@@ -2564,6 +2604,7 @@ static bool ConListDirs(std::span<std::string_view> argv)
 		{ "autosave", AUTOSAVE_DIR, true },
 		{ "screenshot", SCREENSHOT_DIR, true },
 		{ "social_integration", SOCIAL_INTEGRATION_DIR, true },
+		{ "blueprint", BLUEPRINT_DIR, true },
 	};
 
 	if (argv.size() != 2) {
@@ -2958,6 +2999,343 @@ static bool ConDumpInfo(std::span<std::string_view> argv)
 	return false;
 }
 
+/* === Underground / Metro console commands === */
+
+static bool ConUnderground([[maybe_unused]] std::span<std::string_view> argv)
+{
+	if (argv.size() == 1 || argv.empty()) {
+		IConsolePrint(CC_HELP, "Underground metro commands:");
+		IConsolePrint(CC_HELP, "  'underground toolbar' - Open underground construction toolbar");
+		IConsolePrint(CC_HELP, "  'underground view'    - Toggle the underground slice (cut-plane) view");
+		IConsolePrint(CC_HELP, "  'underground xray'    - Toggle the X-ray view (surface with the level drawn through it)");
+		IConsolePrint(CC_HELP, "  'underground down|up' - Toggle the view of the levels below/above the viewed one, without the surface");
+		IConsolePrint(CC_HELP, "  'underground build <x> <y> [z]' - Build underground rail at absolute z");
+		IConsolePrint(CC_HELP, "  'underground portal <x> <y> <dir> [z]' - Build portal (dir: 0-3) at absolute z");
+		IConsolePrint(CC_HELP, "  'underground info <x> <y>' - Show underground info for tile");
+		IConsolePrint(CC_HELP, "  'underground signal <x> <y> [z] [track]' - Place PBS signal (track: 0-5)");
+		IConsolePrint(CC_HELP, "  'underground station <x> <y> [z] [station_id] [x|y]' - Build station platform");
+		IConsolePrint(CC_HELP, "  'underground remove_station <x> <y> [z]' - Remove station platform");
+		IConsolePrint(CC_HELP, "  'underground order <vehicle_id> <station_id>' - Add go-to-station order");
+		IConsolePrint(CC_HELP, "  'underground start' - Start every stopped train outside a depot");
+		IConsolePrint(CC_HELP, "  'underground dump' - Write the underground slices and trains to underground_dump.txt");
+		IConsolePrint(CC_HELP, "build, portal, signal, station, remove_station, order and start are not available in network games.");
+		return true;
+	}
+
+	if (StrEqualsIgnoreCase(argv[1], "toolbar")) {
+		ShowUndergroundToolbar();
+		return true;
+	}
+
+	if (StrEqualsIgnoreCase(argv[1], "view")) {
+		ToggleUndergroundView();
+		IConsolePrint(CC_DEFAULT, "Underground view: {}", IsUndergroundSliceMode() ? "SLICE" : IsUndergroundXRayMode() ? "XRAY" : "OFF");
+		return true;
+	}
+
+	if (StrEqualsIgnoreCase(argv[1], "xray")) {
+		ToggleUndergroundXRay();
+		IConsolePrint(CC_DEFAULT, "Underground view: {}", IsUndergroundSliceMode() ? "SLICE" : IsUndergroundXRayMode() ? "XRAY" : "OFF");
+		return true;
+	}
+
+	if (StrEqualsIgnoreCase(argv[1], "down") || StrEqualsIgnoreCase(argv[1], "up")) {
+		ToggleUndergroundViewButton(StrEqualsIgnoreCase(argv[1], "down") ? UndergroundViewMode::Below : UndergroundViewMode::Above);
+		IConsolePrint(CC_DEFAULT, "Underground view: {}", IsUndergroundBelowMode() ? "BELOW" : IsUndergroundAboveMode() ? "ABOVE" : IsUndergroundSliceMode() ? "SLICE" : IsUndergroundXRayMode() ? "XRAY" : "OFF");
+		return true;
+	}
+
+	if (StrEqualsIgnoreCase(argv[1], "above")) {
+		_underground_show_above = !_underground_show_above;
+		MarkWholeScreenDirty();
+		IConsolePrint(CC_DEFAULT, "Show levels above: {}", _underground_show_above ? "ON" : "OFF");
+		return true;
+	}
+
+	if (StrEqualsIgnoreCase(argv[1], "below")) {
+		_underground_show_below = !_underground_show_below;
+		MarkWholeScreenDirty();
+		IConsolePrint(CC_DEFAULT, "Show levels below: {}", _underground_show_below ? "ON" : "OFF");
+		return true;
+	}
+
+	/* These change the game on this machine alone, outside the command queue:
+	 * in a network game the other clients would never see the change. */
+	static const std::array<std::string_view, 7> local_game_changes = {"build", "portal", "signal", "station", "remove_station", "order", "start"};
+	if (_networking && std::ranges::any_of(local_game_changes, [&argv](std::string_view sub) { return StrEqualsIgnoreCase(argv[1], sub); })) {
+		IConsolePrint(CC_ERROR, "'underground {}' changes the game only on this machine and is not available in network games.", argv[1]);
+		return true;
+	}
+
+	if (StrEqualsIgnoreCase(argv[1], "build") && argv.size() >= 4) {
+		auto x = ParseInteger<uint>(argv[2], 0);
+		auto y = ParseInteger<uint>(argv[3], 0);
+		if (!x || !y) { IConsolePrint(CC_ERROR, "Invalid coordinates."); return true; }
+		if (*x >= Map::MaxX() || *y >= Map::MaxY()) { IConsolePrint(CC_ERROR, "Coordinates out of bounds."); return true; }
+		int16_t depth = -1;
+		if (argv.size() >= 5) {
+			/* Parse negative depth from string. */
+			auto parsed = ParseInteger<int>(argv[4], 0);
+			if (parsed) depth = static_cast<int16_t>(*parsed);
+		}
+		TileIndex tile = TileXY(*x, *y);
+		IConsolePrint(CC_DEFAULT, "Building at ({},{}) depth={} company={}", *x, *y, depth, _current_company.base());
+		IConsolePrint(CC_DEFAULT, "ValidTile={} MapSize={} SurfaceZ={}", tile.base() < Map::Size(), Map::Size(), GetTileZ(tile));
+
+		/* Test phase first (without Execute flag). */
+		auto test_result = Command<Commands::BuildUndergroundRail>::Do({}, tile, RAILTYPE_RAIL, TRACK_X, depth);
+		IConsolePrint(test_result.Succeeded() ? CC_DEFAULT : CC_ERROR, "Test phase: {}", test_result.Succeeded() ? "OK" : "FAILED");
+		if (test_result.Failed()) {
+			EncodedString &msg = test_result.GetEncodedMessage();
+			IConsolePrint(CC_ERROR, "Refused: {}", msg.empty() ? GetString(test_result.GetErrorMessage()) : msg.GetDecodedString());
+		}
+
+		if (test_result.Succeeded()) {
+			/* Execute phase. */
+			auto result = Command<Commands::BuildUndergroundRail>::Do(DoCommandFlags{DoCommandFlag::Execute}, tile, RAILTYPE_RAIL, TRACK_X, depth);
+			if (result.Succeeded()) {
+				IConsolePrint(CC_DEFAULT, "Underground rail built! Cost: {}", result.GetCost());
+			} else {
+				IConsolePrint(CC_ERROR, "Execute phase failed!");
+			}
+		}
+		return true;
+	}
+
+	if (StrEqualsIgnoreCase(argv[1], "portal") && argv.size() >= 5) {
+		auto x = ParseInteger<uint>(argv[2], 0);
+		auto y = ParseInteger<uint>(argv[3], 0);
+		auto dir_parsed = ParseInteger<int>(argv[4], 0);
+		if (!x || !y || !dir_parsed) { IConsolePrint(CC_ERROR, "Invalid parameters."); return true; }
+		if (*x >= Map::MaxX() || *y >= Map::MaxY()) { IConsolePrint(CC_ERROR, "Coordinates out of bounds."); return true; }
+		if (*dir_parsed < 0 || *dir_parsed > 3) { IConsolePrint(CC_ERROR, "Dir must be 0-3 (NE/SE/SW/NW)."); return true; }
+		uint8_t dir_val = static_cast<uint8_t>(*dir_parsed);
+		int16_t depth = -1;
+		if (argv.size() >= 6) {
+			auto dp = ParseInteger<int>(argv[5], 0);
+			if (dp) depth = static_cast<int16_t>(*dp);
+		}
+		TileIndex tile = TileXY(*x, *y);
+		IConsolePrint(CC_DEFAULT, "Building portal at ({},{}) dir={} depth={}", *x, *y, dir_val, depth);
+		auto test = Command<Commands::BuildPortal>::Do({}, tile, RAILTYPE_RAIL, static_cast<DiagDirection>(dir_val), depth);
+		if (!test.Succeeded()) {
+			IConsolePrint(CC_ERROR, "Portal test phase failed.");
+			return true;
+		}
+		auto result = Command<Commands::BuildPortal>::Do(DoCommandFlags{DoCommandFlag::Execute}, tile, RAILTYPE_RAIL, static_cast<DiagDirection>(dir_val), depth);
+		IConsolePrint(result.Succeeded() ? CC_DEFAULT : CC_ERROR, result.Succeeded() ? "Portal built!" : "Portal execute failed.");
+		return true;
+	}
+
+	if (StrEqualsIgnoreCase(argv[1], "info") && argv.size() >= 4) {
+		auto x = ParseInteger<uint>(argv[2], 0);
+		auto y = ParseInteger<uint>(argv[3], 0);
+		if (!x || !y) { IConsolePrint(CC_ERROR, "Invalid coordinates."); return true; }
+		if (*x >= Map::MaxX() || *y >= Map::MaxY()) { IConsolePrint(CC_ERROR, "Coordinates out of bounds."); return true; }
+		TileIndex tile = TileXY(*x, *y);
+		const TileColumn &col = _multilayer_map.GetColumn(tile);
+		IConsolePrint(CC_DEFAULT, "Tile ({}, {}): {} slices", *x, *y, col.Count());
+		for (SliceID sid : col.slices) {
+			const TileSlice &s = _multilayer_map.GetSlice(sid);
+			const char *kind_str = "?";
+			switch (s.kind) {
+				case SliceKind::Surface: kind_str = "Surface"; break;
+				case SliceKind::Track: kind_str = "Track"; break;
+				case SliceKind::Portal: kind_str = "Portal"; break;
+				case SliceKind::StationTile: kind_str = "Station"; break;
+				case SliceKind::Ramp: kind_str = "Ramp"; break;
+				case SliceKind::End: kind_str = "Free"; break;
+			}
+			IConsolePrint(CC_DEFAULT, "  [{}] {} z=[{},{}] owner={}", sid, kind_str, s.span.z_bot, s.span.z_top, s.owner);
+			if (s.kind == SliceKind::Track) {
+				IConsolePrint(CC_DEFAULT, "      tracks=0x{:02X} signals=0x{:02X} reserved=0x{:02X} rt={}", s.track.tracks, s.track.signal_mask, s.track.reserved, s.track.railtype);
+			} else if (s.kind == SliceKind::StationTile) {
+				IConsolePrint(CC_DEFAULT, "      station_id={} role={} tracks=0x{:02X} reserved=0x{:02X} rt={}", s.station.station_id, s.station.role, s.station.tracks, s.station.reserved, s.station.railtype);
+			}
+		}
+		return true;
+	}
+
+	if (StrEqualsIgnoreCase(argv[1], "depth") && argv.size() >= 3) {
+		auto d = ParseInteger<int>(argv[2], 0);
+		if (!d || *d < GetMetroGlobalMinZ() || *d > GetMetroGlobalMaxZ()) {
+			IConsolePrint(CC_ERROR, "Z must be between {} and {}.", GetMetroGlobalMinZ(), GetMetroGlobalMaxZ());
+			return true;
+		}
+		SetUndergroundViewDepth(static_cast<int16_t>(*d));
+		MarkWholeScreenDirty();
+		IConsolePrint(CC_DEFAULT, "Underground view z set to {}", *d);
+		return true;
+	}
+
+	if (StrEqualsIgnoreCase(argv[1], "start")) {
+		/* Start every stopped train outside a depot: replaying a savegame
+		 * headlessly in which the player stopped the trains to show a situation. */
+		int started = 0;
+		for (Train *t : Train::Iterate()) {
+			if (!t->IsFrontEngine() || !t->vehstatus.Test(VehState::Stopped) || t->IsChainInDepot()) continue;
+			t->vehstatus.Reset(VehState::Stopped);
+			started++;
+		}
+		IConsolePrint(CC_DEFAULT, "Started {} trains.", started);
+		return true;
+	}
+
+	if (StrEqualsIgnoreCase(argv[1], "dump")) {
+		/* Dump all non-surface slices and underground trains to a file in the
+		 * current directory. Useful for headless debugging where the in-game
+		 * console output is not visible. */
+		std::ofstream f("underground_dump.txt");
+		uint count = 0;
+		for (uint i = 0; i < Map::Size(); i++) {
+			TileIndex tile(i);
+			const TileColumn &col = _multilayer_map.GetColumn(tile);
+			for (SliceID sid : col.slices) {
+				const TileSlice &s = _multilayer_map.GetSlice(sid);
+				if (s.kind == SliceKind::Surface || s.kind == SliceKind::End) continue;
+				count++;
+				switch (s.kind) {
+					case SliceKind::Track:
+						f << fmt::format("({},{}) z=[{},{}] Track sid={} tracks=0x{:02X} signals=0x{:02X} reserved=0x{:02X} rt={}\n",
+							TileX(tile), TileY(tile), s.span.z_bot, s.span.z_top, sid, s.track.tracks, s.track.signal_mask, s.track.reserved, s.track.railtype);
+						break;
+					case SliceKind::StationTile:
+						f << fmt::format("({},{}) z=[{},{}] Station sid={} station_id={} role={} tracks=0x{:02X} reserved=0x{:02X}\n",
+							TileX(tile), TileY(tile), s.span.z_bot, s.span.z_top, sid, s.station.station_id, s.station.role, s.station.tracks, s.station.reserved);
+						break;
+					case SliceKind::Portal:
+						f << fmt::format("({},{}) z=[{},{}] Portal sid={} dir={}\n",
+							TileX(tile), TileY(tile), s.span.z_bot, s.span.z_top, sid, s.portal.direction);
+						break;
+					case SliceKind::Ramp:
+						f << fmt::format("({},{}) z=[{},{}] Ramp sid={} dir={} entry={} exit={} rt={}\n",
+							TileX(tile), TileY(tile), s.span.z_bot, s.span.z_top, sid, s.ramp.direction, s.ramp.entry_depth, s.ramp.exit_depth, s.ramp.railtype);
+						break;
+					default:
+						break;
+				}
+			}
+		}
+		for (const Train *t : Train::Iterate()) {
+			if (!t->IsUnderground()) continue;
+			f << fmt::format("train {} part at ({},{}) depth={} slice={} hidden={}\n",
+				t->index.base(), TileX(TileIndex(t->underground_tile_raw)), TileY(TileIndex(t->underground_tile_raw)),
+				t->underground_depth, t->underground_slice, t->vehstatus.Test(VehState::Hidden));
+		}
+		/* Every train, part by part: where it is and the rail type it runs on,
+		 * the rail types it is powered on and its cached power. */
+		for (const Train *v : Train::Iterate()) {
+			if (!v->IsFrontEngine()) continue;
+			f << fmt::format("vehicle unit={} index={} power={} max_te={} speed={} stopped={} crashed={} breakdown={}\n",
+				v->unitnumber, v->index.base(), v->gcache.cached_power, v->gcache.cached_max_te, v->cur_speed,
+				v->vehstatus.Test(VehState::Stopped), v->vehstatus.Test(VehState::Crashed), v->breakdown_ctr);
+			for (const Train *u = v; u != nullptr; u = u->Next()) {
+				f << fmt::format("  part {} engine={} at ({},{}) underground={} depth={} on_rt={} railtypes=0x{:X} powered={}\n",
+					u->index.base(), u->engine_type.base(), TileX(u->tile), TileY(u->tile), u->IsUnderground(), u->underground_depth,
+					u->GetCurrentRailType(), u->railtypes.base(), HasPowerOnRail(u->railtypes, u->GetCurrentRailType()));
+			}
+		}
+		for (const auto &[sc_id, sc] : _station_complexes) {
+			f << fmt::format("complex station_id={} nodes={}\n", sc_id, sc.nodes.size());
+		}
+		IConsolePrint(CC_DEFAULT, "Dumped {} slices to underground_dump.txt", count);
+		return true;
+	}
+
+	if (StrEqualsIgnoreCase(argv[1], "station") && argv.size() >= 4) {
+		auto x = ParseInteger<uint>(argv[2], 0);
+		auto y = ParseInteger<uint>(argv[3], 0);
+		if (!x || !y) { IConsolePrint(CC_ERROR, "Invalid coordinates."); return true; }
+		if (*x >= Map::MaxX() || *y >= Map::MaxY()) { IConsolePrint(CC_ERROR, "Coordinates out of bounds."); return true; }
+		int16_t depth = -1;
+		if (argv.size() >= 5) { auto d = ParseInteger<int>(argv[4], 0); if (d) depth = static_cast<int16_t>(*d); }
+		uint16_t station_id = NEW_UNDERGROUND_STATION_ID;
+		if (argv.size() >= 6) {
+			auto s = ParseInteger<uint16_t>(argv[5], 0);
+			if (!s) { IConsolePrint(CC_ERROR, "Invalid station id."); return true; }
+			station_id = *s;
+		}
+		Axis axis = AXIS_X;
+		if (argv.size() >= 7 && StrEqualsIgnoreCase(argv[6], "y")) axis = AXIS_Y;
+		TileIndex tile = TileXY(*x, *y);
+		auto result = Command<Commands::BuildUndergroundStation>::Do(DoCommandFlags{DoCommandFlag::Execute}, tile, RAILTYPE_RAIL, depth, station_id, axis, 1, 1);
+		if (result.Succeeded()) {
+			IConsolePrint(CC_DEFAULT, "Station platform built! (axis={})", axis == AXIS_X ? "X" : "Y");
+		} else {
+			IConsolePrint(CC_ERROR, "Station build failed.");
+		}
+		return true;
+	}
+
+	if (StrEqualsIgnoreCase(argv[1], "signal") && argv.size() >= 4) {
+		auto x = ParseInteger<uint>(argv[2], 0);
+		auto y = ParseInteger<uint>(argv[3], 0);
+		if (!x || !y) { IConsolePrint(CC_ERROR, "Invalid coordinates."); return true; }
+		if (*x >= Map::MaxX() || *y >= Map::MaxY()) { IConsolePrint(CC_ERROR, "Coordinates out of bounds."); return true; }
+		int16_t depth = -1;
+		if (argv.size() >= 5) { auto d = ParseInteger<int>(argv[4], 0); if (d) depth = static_cast<int16_t>(*d); }
+		Track track = TRACK_X;
+		if (argv.size() >= 6) {
+			auto t = ParseInteger<int>(argv[5], 0);
+			if (t && *t >= 0 && *t < 6) track = static_cast<Track>(*t);
+		}
+		TileIndex tile = TileXY(*x, *y);
+		auto test = Command<Commands::BuildUndergroundSignal>::Do({}, tile, track, depth, SIGTYPE_PBS_ONEWAY, SIG_ELECTRIC, false, false, SIGTYPE_BLOCK, SIGTYPE_LAST, 0);
+		if (!test.Succeeded()) {
+			IConsolePrint(CC_ERROR, "Signal test failed (no track at depth?).");
+			return true;
+		}
+		auto result = Command<Commands::BuildUndergroundSignal>::Do(DoCommandFlags{DoCommandFlag::Execute}, tile, track, depth, SIGTYPE_PBS_ONEWAY, SIG_ELECTRIC, false, false, SIGTYPE_BLOCK, SIGTYPE_LAST, 0);
+		IConsolePrint(result.Succeeded() ? CC_DEFAULT : CC_ERROR, result.Succeeded() ? "Underground signal placed!" : "Signal execute failed.");
+		return true;
+	}
+
+	if (StrEqualsIgnoreCase(argv[1], "order") && argv.size() >= 4) {
+		auto vid = ParseInteger<uint32_t>(argv[2], 0);
+		auto sid = ParseInteger<uint32_t>(argv[3], 0);
+		if (!vid || !sid) { IConsolePrint(CC_ERROR, "Usage: underground order <vehicle_id> <station_id>"); return true; }
+		Train *tr = Train::GetIfValid(VehicleID(*vid));
+		if (tr == nullptr || !tr->IsFrontEngine()) {
+			IConsolePrint(CC_ERROR, "Vehicle {} not found or not a front engine.", *vid);
+			return true;
+		}
+		StationID dest_sid(static_cast<uint16_t>(*sid));
+		if (!Station::IsValidID(dest_sid)) {
+			IConsolePrint(CC_ERROR, "Station {} not found.", *sid);
+			return true;
+		}
+		Order order;
+		order.MakeGoToStation(dest_sid);
+		auto result = Command<Commands::InsertOrder>::Do(
+			DoCommandFlags{DoCommandFlag::Execute},
+			tr->index,
+			VehicleOrderID(tr->GetNumOrders()),
+			order);
+		if (result.Succeeded()) {
+			IConsolePrint(CC_DEFAULT, "Added order: go to station {} for train {}", *sid, *vid);
+		} else {
+			IConsolePrint(CC_ERROR, "Failed to add order.");
+		}
+		return true;
+	}
+
+	if (StrEqualsIgnoreCase(argv[1], "remove_station") && argv.size() >= 4) {
+		auto x = ParseInteger<uint>(argv[2], 0);
+		auto y = ParseInteger<uint>(argv[3], 0);
+		if (!x || !y) { IConsolePrint(CC_ERROR, "Invalid coordinates."); return true; }
+		if (*x >= Map::MaxX() || *y >= Map::MaxY()) { IConsolePrint(CC_ERROR, "Coordinates out of bounds."); return true; }
+		int16_t depth = -1;
+		if (argv.size() >= 5) { auto d = ParseInteger<int>(argv[4], 0); if (d) depth = static_cast<int16_t>(*d); }
+		TileIndex tile = TileXY(*x, *y);
+		auto result = Command<Commands::RemoveUndergroundStation>::Do(DoCommandFlags{DoCommandFlag::Execute}, tile, depth);
+		IConsolePrint(result.Succeeded() ? CC_DEFAULT : CC_ERROR, result.Succeeded() ? "Station removed!" : "Remove failed.");
+		return true;
+	}
+
+	IConsolePrint(CC_ERROR, "Unknown underground subcommand. Try 'underground' for help.");
+	return true;
+}
+
 /** Console command registration. */
 void IConsoleStdLibRegister()
 {
@@ -2976,6 +3354,7 @@ void IConsoleStdLibRegister()
 	IConsole::CmdRegister("restart",                 ConRestart);
 	IConsole::CmdRegister("reload",                  ConReload);
 	IConsole::CmdRegister("getseed",                 ConGetSeed);
+	IConsole::CmdRegister("pedestrians",             ConPedestrians);
 	IConsole::CmdRegister("getdate",                 ConGetDate);
 	IConsole::CmdRegister("getsysdate",              ConGetSysDate);
 	IConsole::CmdRegister("quit",                    ConExit);
@@ -3101,4 +3480,8 @@ void IConsoleStdLibRegister()
 	IConsole::CmdRegister("newgrf_profile",          ConNewGRFProfile,    ConHookNewGRFDeveloperTool);
 
 	IConsole::CmdRegister("dump_info",               ConDumpInfo);
+
+	/* Underground / Metro */
+	IConsole::CmdRegister("underground",             ConUnderground);
+	IConsole::CmdRegister("blueprint",               ConBlueprint);
 }

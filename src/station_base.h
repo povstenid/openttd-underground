@@ -19,6 +19,7 @@
 #include "linkgraph/linkgraph_type.h"
 #include "newgrf_storage.h"
 #include "bitmap_type.h"
+#include "multilayer/station_complex.h"
 
 static const uint8_t INITIAL_STATION_RATING = 175;
 static const uint8_t MAX_STATION_RATING = 255;
@@ -664,6 +665,19 @@ void ForAllStationsAroundTiles(const TileArea &ta, Func func)
 	for (TileIndex tile : ta_ext) {
 		if (!IsTileType(tile, TileType::Station)) continue;
 		seen_stations.insert(GetStationIndex(tile));
+	}
+
+	/* Underground station complexes can serve tiles via explicit surface exits without
+	 * having any actual TileType::Station surface tile at that location. Include those
+	 * stations explicitly so towns/industries founded after metro construction can still
+	 * discover them through the normal catchment checks below. */
+	for (const auto &[station_index, complex] : _station_complexes) {
+		for (const auto *exit_node : complex.GetExits()) {
+			if (!exit_node->ref.IsValid()) continue;
+			if (!ta_ext.Contains(exit_node->ref.tile)) continue;
+			seen_stations.insert(StationID(station_index));
+			break;
+		}
 	}
 
 	for (StationID stationid : seen_stations) {

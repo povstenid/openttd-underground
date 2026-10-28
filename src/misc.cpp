@@ -32,6 +32,8 @@
 #include "town_kdtree.h"
 #include "viewport_kdtree.h"
 #include "newgrf_profiling.h"
+#include "pedestrian_arrivals.h"
+#include "pedestrians.h"
 #include "3rdparty/monocypher/monocypher.h"
 
 #include "safeguards.h"
@@ -125,6 +127,8 @@ void InitializeGame(uint size_x, uint size_y, bool reset_date, bool reset_settin
 
 	LinkGraphSchedule::Clear();
 	PoolBase::Clean(PoolType::Normal);
+	ResetPedestrians();
+	ResetPedestrianArrivals();
 
 	RebuildStationKdtree();
 	RebuildTownKdtree();

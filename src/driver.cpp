@@ -7,6 +7,8 @@
 
 /** @file driver.cpp Base for all driver handling. */
 
+#include <sstream>
+
 #include "stdafx.h"
 #include "core/string_consumer.hpp"
 #include "debug.h"

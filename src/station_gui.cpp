@@ -40,6 +40,7 @@
 #include "table/strings.h"
 
 #include "dropdown_common_type.h"
+#include "multilayer/station_complex.h"
 
 #include "safeguards.h"
 
@@ -1493,7 +1494,18 @@ struct StationViewWindow : public Window {
 	{
 		if (widget == WID_SV_CAPTION) {
 			const Station *st = Station::Get(this->window_number);
-			return GetString(STR_STATION_VIEW_CAPTION, st->index, st->facilities);
+			std::string caption = GetString(STR_STATION_VIEW_CAPTION, st->index, st->facilities);
+
+			/* Append underground level info if this station has a StationComplex. */
+			auto sc_it = _station_complexes.find(st->index.base());
+			if (sc_it != _station_complexes.end() && !sc_it->second.nodes.empty()) {
+				const StationComplex &sc = sc_it->second;
+				int16_t deepest = sc.GetDeepestLevel();
+				size_t platforms = sc.GetPlatforms().size();
+				size_t exits = sc.GetExits().size();
+				caption += fmt::format(" [UG: {}P {}E z={}]", platforms, exits, deepest);
+			}
+			return caption;
 		}
 
 		return this->Window::GetWidgetString(widget, stringid);
@@ -2308,12 +2320,14 @@ static constexpr std::initializer_list<NWidgetPart> _nested_select_station_widge
 template <class T>
 struct SelectStationWindow : Window {
 	StationPickerCmdProc select_station_proc{};
+	StationCandidateProc candidate_proc{}; ///< Custom list of stations to offer; empty for the nearby surface stations.
 	TileArea area{}; ///< Location of new station
 	Scrollbar *vscroll = nullptr;
 
-	SelectStationWindow(WindowDesc &desc, TileArea ta, StationPickerCmdProc&& proc) :
+	SelectStationWindow(WindowDesc &desc, TileArea ta, StationPickerCmdProc&& proc, StationCandidateProc&& candidates = {}) :
 		Window(desc),
 		select_station_proc(std::move(proc)),
+		candidate_proc(std::move(candidates)),
 		area(ta)
 	{
 		this->CreateNestedTree();
@@ -2408,7 +2422,11 @@ struct SelectStationWindow : Window {
 	void OnInvalidateData([[maybe_unused]] int data = 0, [[maybe_unused]] bool gui_scope = true) override
 	{
 		if (!gui_scope) return;
-		FindStationsNearby<T>(this->area, true);
+		if (this->candidate_proc) {
+			_stations_nearby_list = this->candidate_proc();
+		} else {
+			FindStationsNearby<T>(this->area, true);
+		}
 		this->vscroll->SetCount(_stations_nearby_list.size());
 		this->SetDirty();
 	}
@@ -2487,6 +2505,24 @@ void ShowSelectBaseStationIfNeeded(TileArea ta, StationPickerCmdProc&& proc)
 void ShowSelectStationIfNeeded(TileArea ta, StationPickerCmdProc proc)
 {
 	ShowSelectBaseStationIfNeeded<StationTypeFilter>(ta, std::move(proc));
+}
+
+/**
+ * Show the station selection window with a caller supplied list of stations,
+ * e.g. underground stations whose platforms are not station tiles on the map.
+ * Picking an entry calls \a proc with test == false and the picked station;
+ * an entry NEW_STATION in the list is shown as "Build a separate station".
+ * @param ta Area to build in (for the window's bookkeeping and highlighting).
+ * @param candidates Function returning the stations to offer; called again when station data changes.
+ * @param proc Function called to execute the build command.
+ */
+void ShowSelectStationFromCandidates(TileArea ta, StationCandidateProc candidates, StationPickerCmdProc proc)
+{
+	CloseWindowById(WC_SELECT_STATION, 0);
+	UpdateTileSelection();
+	if (!_settings_client.gui.persistent_buildingtools) ResetObjectToPlace();
+	_stations_nearby_list = candidates();
+	new SelectStationWindow<StationTypeFilter>(_select_station_desc, ta, std::move(proc), std::move(candidates));
 }
 
 /**

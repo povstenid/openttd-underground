@@ -19,6 +19,7 @@
 #include "../tunnelbridge.h"
 #include "../station_base.h"
 #include "../strings_func.h"
+#include "../multilayer/underground_cmd.h"
 
 #include "table/strings.h"
 
@@ -267,6 +268,9 @@ void AfterLoadCompanyStats()
 				break;
 		}
 	}
+
+	/* Underground slices (metro) are not part of the flat map; add them separately. */
+	AddUndergroundInfrastructureCounts();
 }
 
 /** We do need to read this single value, as the bigger it gets, the more data is stored. */

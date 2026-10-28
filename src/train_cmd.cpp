@@ -14,6 +14,7 @@
 #include "error_func.h"
 #include "pathfinder/yapf/yapf.hpp"
 #include "news_func.h"
+#include "depot_base.h"
 #include "company_func.h"
 #include "newgrf_sound.h"
 #include "newgrf_text.h"
@@ -37,11 +38,55 @@
 #include "misc_cmd.h"
 #include "timer/timer_game_calendar.h"
 #include "timer/timer_game_economy.h"
+#include "timer/timer_game_tick.h"
+#include "landscape.h"
+#include "multilayer/multilayer_map.h"
+#include "multilayer/station_complex.h"
+#include "multilayer/underground_train.h"
+#include "multilayer/underground_view.h"
+#include "multilayer/underground_render.h"
+#include "multilayer/underground_signal.h"
+#include "pathfinder/yapf/yapf3d_rail.h"
+#include "pbs.h"
 
 #include "table/strings.h"
 #include "table/train_sprites.h"
 
 #include "safeguards.h"
+
+#include <queue>
+#include <unordered_set>
+
+static void FreeUndergroundEntryReservation(Train *v);
+
+/** Train destructor: also cleans up underground state. */
+Train::~Train()
+{
+	/* A path held for a dive this train will never make (sold or removed
+	 * while waiting at or approaching a portal). */
+	if (this->IsFrontEngine()) {
+		/* While the pool is cleaned (loading a game, leaving it) other parts
+		 * of the consist may already be freed and the map is going away:
+		 * only forget the exit claims, touch nothing else. */
+		if (!Train::CleaningPool()) FreeUndergroundEntryReservation(this);
+		ReleasePortalExits(this->index);
+	}
+	if (this->IsFrontEngine() && !Train::CleaningPool()) {
+		/* Removed below ground (say, with its company): the path ahead and the
+		 * tiles under the consist would stay held for good, and a new train
+		 * given the same index would "own" them. */
+		if (this->IsUnderground() && !this->vehstatus.Test(VehState::Crashed)) FreeTrainTrackReservation(this);
+		for (const Train *u = this; u != nullptr; u = u->Next()) {
+			if (!u->IsUnderground() || u->underground_slice == 0) continue;
+			SliceID sid = static_cast<SliceID>(u->underground_slice);
+			if (!_multilayer_map.IsValidSlice(sid)) continue;
+			TileRef ref{TileIndex(u->underground_tile_raw), sid};
+			for (Track t : SetTrackBitIterator(GetUndergroundReservedTrackbits(ref, this->index))) UnreserveUndergroundTrack(ref, t);
+		}
+	}
+	ClearUndergroundState(this);
+	this->PreDestructor();
+}
 
 static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, TrackBits tracks, bool force_res, bool *got_reservation, bool mark_stuck);
 static bool TrainCheckIfLineEnds(Train *v, bool reverse = true);
@@ -49,6 +94,621 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse = true); // Also us
 static TileIndex TrainApproachingCrossingTile(const Train *v);
 static void CheckIfTrainNeedsService(Train *v);
 static void CheckNextTrainTile(Train *v);
+
+static bool ShouldDrawUndergroundTrainPart(const Train *v)
+{
+	return v->IsUnderground() && IsUndergroundTrainDepthShown(v->underground_depth);
+}
+
+static Track ChoosePortalSurfaceTrack(TileIndex tile, TrackBits tracks)
+{
+	if (tracks == TRACK_BIT_NONE) return INVALID_TRACK;
+
+	SliceID portal_sid = _multilayer_map.FindSliceByKind(tile, SliceKind::Portal);
+	if (portal_sid != INVALID_SLICE_ID) {
+		const TileSlice &portal = _multilayer_map.GetSlice(portal_sid);
+		Track preferred = AxisToTrack(DiagDirToAxis(static_cast<DiagDirection>(portal.portal.direction)));
+		if ((tracks & TrackToTrackBits(preferred)) != TRACK_BIT_NONE) return preferred;
+	}
+
+	return FindFirstTrack(tracks);
+}
+
+static TileIndex GetUndergroundOrderTargetTile(const Train *v)
+{
+	if (!v->current_order.IsType(OT_GOTO_STATION)) return INVALID_TILE;
+
+	auto it = _station_complexes.find(v->current_order.GetDestination().ToStationID().base());
+	if (it == _station_complexes.end()) return INVALID_TILE;
+
+	TileIndex origin = v->IsUnderground() && v->underground_tile_raw != 0 ? TileIndex(v->underground_tile_raw) : v->tile;
+	TileIndex best_tile = INVALID_TILE;
+	int best_distance = INT_MAX;
+
+	for (const StationComplexNode *platform : it->second.GetPlatforms()) {
+		if (platform == nullptr || !platform->ref.IsValid()) continue;
+
+		int distance = DistanceManhattan(origin, platform->ref.tile);
+		if (best_tile == INVALID_TILE || distance < best_distance) {
+			best_tile = platform->ref.tile;
+			best_distance = distance;
+		}
+	}
+
+	return best_tile;
+}
+
+/** The station of the train's current order, for underground path searches; any of its platforms is a target. */
+static StationID GetUndergroundOrderTargetStation(const Train *v)
+{
+	return v->current_order.IsType(OT_GOTO_STATION) ? v->current_order.GetDestination().ToStationID() : StationID::Invalid();
+}
+
+/**
+ * Update the surface signal block of a portal mouth after a train dived out of
+ * it or came up onto it. A train leaves or enters the surface block there
+ * without passing a signal, so the vanilla signal update that runs when a
+ * train passes a signal never sees it (like for a train leaving a depot):
+ * without this, block and pre-signals in front of the mouth stay red for good
+ * once a train has dived.
+ * @param portal_tile The portal tile.
+ * @param ps Its portal slice.
+ */
+static void UpdatePortalMouthSignals(TileIndex portal_tile, const TileSlice &ps)
+{
+	if (!IsTileType(portal_tile, TileType::Railway)) return;
+	Track surf_track = (DiagDirToAxis(static_cast<DiagDirection>(ps.portal.direction)) == AXIS_X) ? TRACK_X : TRACK_Y;
+	AddTrackToSignalBuffer(portal_tile, surf_track, GetTileOwner(portal_tile));
+	UpdateSignalsInBuffer();
+}
+
+/**
+ * Claim the mouth of an exit portal for a train below ground whose reservation
+ * runs out of it, so the surface block in front of it counts as occupied.
+ * @param v The front engine.
+ * @param portal_tile The exit portal.
+ */
+static void ClaimUndergroundExit(const Train *v, TileIndex portal_tile)
+{
+	ClaimPortalExit(portal_tile, v->index);
+	SliceID sid = _multilayer_map.FindSliceByKind(portal_tile, SliceKind::Portal);
+	if (sid != INVALID_SLICE_ID) UpdatePortalMouthSignals(portal_tile, _multilayer_map.GetSlice(sid));
+}
+
+/**
+ * The direction a train moves in when it comes out of the portal on a tile.
+ * @param portal_tile The portal tile.
+ * @return The direction, or INVALID_DIAGDIR if there is no portal.
+ */
+static DiagDirection GetPortalOutwardDirection(TileIndex portal_tile)
+{
+	SliceID sid = _multilayer_map.FindSliceByKind(portal_tile, SliceKind::Portal);
+	if (sid == INVALID_SLICE_ID) return INVALID_DIAGDIR;
+	DiagDirection dive = GetPortalDiveDirection(portal_tile, _multilayer_map.GetSlice(sid));
+	return IsValidDiagDirection(dive) ? ReverseDiagDir(dive) : INVALID_DIAGDIR;
+}
+
+/**
+ * Puts a train for a moment on the surface track of a portal mouth, facing out
+ * of it, as if its front had just come out there, and back. The surface path
+ * functions (TryPathReserve, FreeTrainTrackReservation) work from the tile and
+ * track of the front: this lets them reserve or free the way on from the
+ * mouth for a train that is still below ground (or still in front of the
+ * portal it dives into). The front stays where it is in the vehicle hash: it is
+ * not seen anywhere while it is moved.
+ */
+struct TrainAtPortalMouth {
+	Train *v;
+	TileIndex tile;
+	TrackBits track;
+	Direction direction;
+	int16_t depth;
+	uint32_t slice;
+	uint32_t tile_raw;
+	TileIndex entry_reserved_portal = INVALID_TILE;
+
+	TrainAtPortalMouth(Train *v, TileIndex mouth, DiagDirection outward) : v(v), tile(v->tile), track(v->track), direction(v->direction),
+			depth(v->underground_depth), slice(v->underground_slice), tile_raw(v->underground_tile_raw)
+	{
+		/* The dive this train may still have ahead of it is not given up meanwhile. */
+		if (UndergroundTrainState *st = GetUndergroundState(v); st != nullptr) {
+			this->entry_reserved_portal = st->entry_reserved_portal;
+			st->entry_reserved_portal = INVALID_TILE;
+		}
+		v->tile = mouth;
+		v->track = DiagDirToDiagTrackBits(outward);
+		v->direction = DiagDirToDir(outward);
+		v->underground_depth = 0;
+		v->underground_slice = 0;
+		v->underground_tile_raw = 0;
+	}
+
+	~TrainAtPortalMouth()
+	{
+		this->v->tile = this->tile;
+		this->v->track = this->track;
+		this->v->direction = this->direction;
+		this->v->underground_depth = this->depth;
+		this->v->underground_slice = this->slice;
+		this->v->underground_tile_raw = this->tile_raw;
+		if (this->entry_reserved_portal != INVALID_TILE) GetOrCreateUndergroundState(this->v).entry_reserved_portal = this->entry_reserved_portal;
+	}
+};
+
+/** Whether a train other than v (any part of it) stands on the surface track of a tile. */
+static bool HasOtherSurfaceTrainOnTile(const Train *v, TileIndex tile)
+{
+	return HasVehicleOnTile(tile, [v](const Vehicle *u) {
+		return u->type == VEH_TRAIN && !u->vehstatus.Test(VehState::Crashed) && u->First() != v->First() && IsVehicleOnSurfaceLayer(u);
+	});
+}
+
+/**
+ * Reserve the surface path of a train from a portal mouth on to the next safe
+ * waiting position, as a train passing a path signal at the mouth would. Only
+ * a free mouth and a free first tile beyond it are a start: a reservation
+ * there is another train's, and the reservation functions follow reserved
+ * track whatever train it belongs to.
+ * @param v The front engine (below ground, or in front of the portal it dives into).
+ * @param mouth The exit portal.
+ * @param outward The direction of travel out of the portal.
+ * @return Whether the path was reserved (it then starts with the mouth).
+ */
+static bool TryReserveSurfacePathFromMouth(Train *v, TileIndex mouth, DiagDirection outward)
+{
+	Track mouth_track = DiagDirToDiagTrack(outward);
+	if (HasReservedTracks(mouth, TrackToTrackBits(mouth_track))) return false;
+	if (HasOtherSurfaceTrainOnTile(v, mouth)) return false;
+	TileIndex next = TileAddByDiagDir(mouth, outward);
+	if (!IsValidTile(next)) return false;
+	TrackBits reachable = TrackStatusToTrackBits(GetTileTrackStatus(next, TRANSPORT_RAIL, 0)) & DiagdirReachesTracks(outward);
+	if (HasReservedTracks(next, reachable)) return false;
+
+	bool ok;
+	{
+		TrainAtPortalMouth at_mouth(v, mouth, outward);
+		ok = TryPathReserve(v, false, false);
+	}
+	/* The search starts by holding the tile of the front: let go of it. */
+	if (!ok && HasReservedTracks(mouth, TrackToTrackBits(mouth_track))) UnreserveRailTrack(mouth, mouth_track);
+	return ok;
+}
+
+/**
+ * Free the surface path a train reserved on from an exit portal before it came
+ * out (see MayComeOutOfPortal), when it will not come out there now.
+ * @param v The front engine.
+ * @param mouth The exit portal.
+ */
+static void FreeSurfacePathFromMouth(Train *v, TileIndex mouth)
+{
+	if (!IsTileType(mouth, TileType::Railway)) return;
+	DiagDirection outward = GetPortalOutwardDirection(mouth);
+	if (!IsValidDiagDirection(outward)) return;
+	Track mouth_track = DiagDirToDiagTrack(outward);
+	/* Not reserved: nothing held (a block without path signals). Another train
+	 * on it: the reservation is that train's. */
+	if (!HasReservedTracks(mouth, TrackToTrackBits(mouth_track)) || HasOtherSurfaceTrainOnTile(v, mouth)) return;
+	/* A part of the train itself on the mouth: it is coming out, the path is in use. */
+	if (HasVehicleOnTile(mouth, [v](const Vehicle *u) { return u->type == VEH_TRAIN && u->First() == v->First() && IsVehicleOnSurfaceLayer(u); })) return;
+	{
+		TrainAtPortalMouth at_mouth(v, mouth, outward);
+		FreeTrainTrackReservation(v);
+	}
+	UnreserveRailTrack(mouth, mouth_track);
+}
+
+/**
+ * Give up the exit claims of a train (it turned round, crashed or is gone) and
+ * let the signals in front of those mouths show the change. A surface path it
+ * reserved on from such a mouth is freed too.
+ * @param v The front engine.
+ */
+static void ReleaseUndergroundExitClaims(const Train *v)
+{
+	for (TileIndex tile : ReleasePortalExits(v->index)) {
+		FreeSurfacePathFromMouth(const_cast<Train *>(v), tile);
+		SliceID sid = _multilayer_map.FindSliceByKind(tile, SliceKind::Portal);
+		if (sid != INVALID_SLICE_ID) UpdatePortalMouthSignals(tile, _multilayer_map.GetSlice(sid));
+	}
+}
+
+/**
+ * Whether a train may come out of an exit portal, asked before it enters the
+ * last underground block in front of the portal (or before it comes out, when
+ * no signal is in between). The mouth works like a signal into the surface
+ * block in front of it: the train comes out only into a free block (block
+ * signals), or along a surface path it holds up to the next safe waiting
+ * position (path signals, or paths always reserved). That path is reserved
+ * now, like a train passing a path signal in front of a vanilla tunnel holds
+ * its way through the tunnel and on. A train below ground is not seen by the
+ * surface signal blocks: without this it came out into the tail of a train
+ * standing in front of the mouth, or stood half out of the mouth for good
+ * where the way on was held by a train that waited for it to clear the tunnel.
+ * @param v The front engine.
+ * @param mouth The exit portal.
+ * @return True if the train may come out there.
+ */
+static bool MayComeOutOfPortal(Train *v, TileIndex mouth)
+{
+	if (!IsTileType(mouth, TileType::Railway)) return true;
+	DiagDirection outward = GetPortalOutwardDirection(mouth);
+	if (!IsValidDiagDirection(outward)) return true;
+	Track mouth_track = DiagDirToDiagTrack(outward);
+
+	bool mouth_reserved = HasReservedTracks(mouth, TrackToTrackBits(mouth_track));
+	/* Its way out is held already: the mouth is reserved under its claim
+	 * (nobody else reserves a claimed mouth). */
+	if (mouth_reserved && GetPortalExitClaimant(mouth) == v->index && !HasOtherSurfaceTrainOnTile(v, mouth)) return true;
+
+	/* Another train on the mouth, or about to dive into it (holding it). */
+	if (mouth_reserved || HasOtherSurfaceTrainOnTile(v, mouth)) return false;
+	/* Another train is on its way out there. */
+	if (IsPortalExitClaimed(mouth, v->index)) return false;
+
+	SigSegState seg = GetSignalSegmentStateWithout(mouth, outward, GetTileOwner(mouth), v);
+	if (seg == SIGSEG_FULL) return false;
+	if (seg == SIGSEG_PBS || _settings_game.pf.reserve_paths) return TryReserveSurfacePathFromMouth(v, mouth, outward);
+	return true;
+}
+
+/**
+ * Reserve an underground path for a train and claim the exit portal when the
+ * reservation runs out of one. A reservation out of a portal the train may not
+ * come out of yet (see MayComeOutOfPortal) is not made.
+ * @param v The front engine.
+ * @param path The path.
+ * @param skip_first_tile Do not reserve the first tile of the path.
+ * @return Whether the reservation succeeded.
+ */
+static bool ReserveUndergroundPathFor(const Train *v, const Yapf3DResult &path, bool skip_first_tile)
+{
+	TileIndex exit = INVALID_TILE;
+	Train *t = const_cast<Train *>(v);
+	if (!Yapf3DReservePath(path, skip_first_tile, v->index, &exit, [t](TileIndex mouth) { return MayComeOutOfPortal(t, mouth); })) return false;
+	if (exit != INVALID_TILE) ClaimUndergroundExit(v, exit);
+	return true;
+}
+
+/**
+ * Keep the "lost" flag of a train up to date with an underground path search,
+ * as ChooseTrainTrack does for the surface pathfinder. Only a train with a
+ * destination can be lost; a way held by another train is no lost train.
+ * @param v The front engine.
+ * @param path_found Whether the search found a way.
+ * @param target Target tile of the search.
+ * @param target_station Target station of the search.
+ */
+static void HandleUndergroundPathfindingResult(Train *v, bool path_found, TileIndex target, StationID target_station)
+{
+	v->HandlePathfindingResult(path_found || (target == INVALID_TILE && target_station == StationID::Invalid()));
+}
+
+/**
+ * Whether a waiting underground train may try again to reserve its way. A
+ * failed attempt is repeated only every path_backoff_interval ticks, as the
+ * surface stuck handler does: a path search per tick per waiting train would
+ * be wasted.
+ * @param v The front engine.
+ * @return True if an attempt may be made now.
+ */
+static bool UndergroundRetryDue(const Train *v)
+{
+	const UndergroundTrainState *st = GetUndergroundState(v);
+	return st == nullptr || TimerGameTick::counter >= st->retry_after_tick;
+}
+
+/**
+ * Note that a reservation attempt of a waiting underground train failed, so
+ * the next one waits for the backoff interval.
+ * @param v The front engine.
+ */
+static void UndergroundRetryLater(const Train *v)
+{
+	GetOrCreateUndergroundState(v).retry_after_tick = TimerGameTick::counter + _settings_game.pf.path_backoff_interval;
+}
+
+/**
+ * Reserve the block behind an underground signal the train is about to pass:
+ * the path from the tile after (ref, td) up to and including the next signal.
+ * Checking only the tile right after the signal is not enough, a train
+ * standing further on in the block (e.g. at a platform) holds tiles there.
+ * @param v The front engine.
+ * @param ref The signal tile the train is leaving.
+ * @param td The trackdir the train passes the signal with.
+ * @return False when the block is held by another train; true when it was
+ *         reserved, or when there is no path to reserve at all.
+ */
+static bool ReserveUndergroundSignalBlock(Train *v, const TileRef &ref, Trackdir td)
+{
+	TileIndex target = GetUndergroundOrderTargetTile(v);
+	if (target == INVALID_TILE && (v->current_order.IsType(OT_GOTO_STATION) || v->current_order.IsType(OT_GOTO_WAYPOINT))) {
+		target = v->dest_tile;
+	}
+
+	StationID target_station = GetUndergroundOrderTargetStation(v);
+	Yapf3DResult path = Yapf3DFindPathFromRef(ref, td, target, target_station, v);
+	HandleUndergroundPathfindingResult(v, path.path_found, target, target_station);
+	if (path.path_found) return ReserveUndergroundPathFor(v, path, true);
+	/* No path at all (lost): like a lost surface train, move on to the next
+	 * safe position only when that stretch can be held; never pass the
+	 * signal on unreserved track. */
+	return Yapf3DReserveToNextSignal(ref, td, v);
+}
+
+/**
+ * Whether the tile behind an underground signal is already held by the train
+ * about to pass it (the block was reserved when the train reached the signal
+ * or earlier).
+ * @param v The train.
+ * @param ref The signal tile.
+ * @param td The trackdir the train passes the signal with.
+ * @return True if the train holds the track behind the signal.
+ */
+static bool UndergroundBlockBeyondHeld(const Train *v, const TileRef &ref, Trackdir td)
+{
+	DiagDirection exitdir = TrackdirToExitdir(td);
+	/* Past a signal on a ramp the track goes on at the ramp's other level. */
+	int16_t depth = GetUndergroundLeaveDepth(_multilayer_map.GetSlice(ref.slice), exitdir);
+	TileIndex next = AddTileIndexDiffCWrap(ref.tile, TileIndexDiffCByDiagDir(exitdir));
+	if (next == INVALID_TILE) return false;
+	SliceID sid = _multilayer_map.FindSliceAt(next, depth);
+	if (sid == INVALID_SLICE_ID) return false;
+	const TileSlice &s = _multilayer_map.GetSlice(sid);
+	/* A ramp carries its one track, held like any other. */
+	if (s.kind == SliceKind::Ramp) {
+		return s.ramp.reserved != 0 && VehicleID(s.ramp.reserved_by) == v->index;
+	}
+	/* Portals carry no reservation: nothing to hold there. */
+	if (s.kind != SliceKind::Track && s.kind != SliceKind::StationTile) return true;
+	return (GetUndergroundReservedTrackbits(TileRef{next, sid}, v->index) & DiagdirReachesTracks(exitdir)) != TRACK_BIT_NONE;
+}
+
+/**
+ * How far from the tile edge an underground front must stop when it has to
+ * wait there: with its centre half its length away, its bumper then is at the
+ * edge; half a vehicle more when a part of another train stands on the next
+ * tile, whose tail may hang over the edge.
+ * @param v The front engine.
+ * @param ref The tile the front is on.
+ * @param td The trackdir it runs along.
+ * @return The distance of the front's centre from the tile exit to stop at.
+ */
+static int UndergroundStopDistance(const Train *v, const TileRef &ref, Trackdir td)
+{
+	int half = (v->gcache.cached_veh_length + 1) / 2;
+	DiagDirection exitdir = TrackdirToExitdir(td);
+	int16_t depth = GetUndergroundLeaveDepth(_multilayer_map.GetSlice(ref.slice), exitdir);
+	TileIndex next = AddTileIndexDiffCWrap(ref.tile, TileIndexDiffCByDiagDir(exitdir));
+	if (next == INVALID_TILE) return half;
+	SliceID sid = _multilayer_map.FindSliceAt(next, depth);
+	if (sid == INVALID_SLICE_ID) return half;
+	bool other_there = HasVehicleOnTile(next, [v, sid](const Vehicle *u) {
+		if (u->type != VEH_TRAIN || u->vehstatus.Test(VehState::Crashed)) return false;
+		const Train *t = Train::From(u);
+		return t->First() != v && t->IsUnderground() && static_cast<SliceID>(t->underground_slice) == sid;
+	});
+	return other_there ? half + static_cast<int>(VEHICLE_LENGTH) / 2 + 1 : half;
+}
+
+/**
+ * Whether every way onto the next underground tile is held by another train
+ * while this one holds none of them: the front must then stay clear of the
+ * edge, the tail of the train there may hang over it.
+ * @param v The front engine.
+ * @param ref The tile the front is on.
+ * @param td The trackdir it runs along.
+ * @return True if the next tile is held against it.
+ */
+static bool UndergroundNextTileHeldByOther(const Train *v, const TileRef &ref, Trackdir td)
+{
+	DiagDirection exitdir = TrackdirToExitdir(td);
+	int16_t depth = GetUndergroundLeaveDepth(_multilayer_map.GetSlice(ref.slice), exitdir);
+	TileIndex next = AddTileIndexDiffCWrap(ref.tile, TileIndexDiffCByDiagDir(exitdir));
+	if (next == INVALID_TILE) return false;
+	SliceID sid = _multilayer_map.FindSliceAt(next, depth);
+	if (sid == INVALID_SLICE_ID) return false;
+	const TileSlice &s = _multilayer_map.GetSlice(sid);
+	TrackBits reach;
+	switch (s.kind) {
+		case SliceKind::Track: reach = static_cast<TrackBits>(s.track.tracks) & DiagdirReachesTracks(exitdir); break;
+		case SliceKind::StationTile: reach = static_cast<TrackBits>(s.station.tracks) & DiagdirReachesTracks(exitdir); break;
+		case SliceKind::Ramp: reach = TrackToTrackBits(AxisToTrack(DiagDirToAxis(static_cast<DiagDirection>(s.ramp.direction)))) & DiagdirReachesTracks(exitdir); break;
+		case SliceKind::Portal:
+			/* Portals carry no reservation: the tail of a train coming out
+			 * may still stand on the portal column. */
+			return HasVehicleOnTile(next, [v, sid](const Vehicle *u) {
+				if (u->type != VEH_TRAIN || u->vehstatus.Test(VehState::Crashed)) return false;
+				const Train *t = Train::From(u);
+				if (t->First() == v) return false;
+				/* Underground parts are hashed by their column too: a train on a
+				 * deeper level under the mouth is not in the way. */
+				return !t->IsUnderground() || static_cast<SliceID>(t->underground_slice) == sid;
+			});
+		default: return false;
+	}
+	if (reach == TRACK_BIT_NONE) return false;
+	TileRef nref{next, sid};
+	if ((GetUndergroundReservedTrackbits(nref, v->index) & reach) != TRACK_BIT_NONE) return false;
+	for (Track t : SetTrackBitIterator(reach)) {
+		if (!IsUndergroundTrackReservedByOther(nref, t, v->index)) return false;
+	}
+	return true;
+}
+
+/**
+ * Reserve the underground path a surface train needs before it may dive into
+ * a portal, like the wormhole of a vanilla tunnel is reserved before the train
+ * enters it. Holding the path is remembered per train so repeated calls while
+ * the train waits or approaches do not try to reserve it twice.
+ * @param v The front engine, on the surface, about to enter the portal tile.
+ * @param portal_tile The portal tile.
+ * @param enterdir The direction it enters the tile with.
+ * @return True if the underground path is held by the train.
+ */
+static bool EnsureUndergroundEntryReservation(Train *v, TileIndex portal_tile, DiagDirection enterdir)
+{
+	UndergroundTrainState &st = GetOrCreateUndergroundState(v);
+	if (st.entry_reserved_portal == portal_tile) return true;
+	/* The train was re-routed to another portal: the path held through the
+	 * old one would otherwise stay reserved for a dive it never makes. */
+	if (st.entry_reserved_portal != INVALID_TILE) FreeUndergroundEntryReservation(v);
+	if (!UndergroundRetryDue(v)) return false;
+	/* A train below ground is on its way out of this mouth: the two would meet
+	 * head on in it. That one has the right of way, it cannot wait elsewhere. */
+	if (IsPortalExitClaimed(portal_tile, v->index)) {
+		UndergroundRetryLater(v);
+		return false;
+	}
+
+	SliceID portal_sid = _multilayer_map.FindSliceByKind(portal_tile, SliceKind::Portal);
+	if (portal_sid == INVALID_SLICE_ID) return true;
+
+	Track portal_track = AxisToTrack(DiagDirToAxis(enterdir));
+	Trackdir entry_td = TrackEnterdirToTrackdir(portal_track, enterdir);
+	TileIndex target = GetUndergroundOrderTargetTile(v);
+	if (target == INVALID_TILE && (v->current_order.IsType(OT_GOTO_STATION) || v->current_order.IsType(OT_GOTO_WAYPOINT))) {
+		target = v->dest_tile;
+	}
+
+	bool ok;
+	TileIndex exit = INVALID_TILE;
+	/* Any platform of the destination will do, not only the nearest one: it
+	 * may be held by another train while the one beside it is free. */
+	StationID target_station = GetUndergroundOrderTargetStation(v);
+	Yapf3DResult result = Yapf3DFindPath(v, portal_tile, entry_td, target, target_station);
+	HandleUndergroundPathfindingResult(v, result.path_found, target, target_station);
+	if (result.path_found) {
+		ok = Yapf3DReservePath(result, false, v->index, &exit, [v](TileIndex mouth) { return MayComeOutOfPortal(v, mouth); });
+	} else {
+		ok = Yapf3DReserveToNextSignal(TileRef{portal_tile, portal_sid}, entry_td, v);
+	}
+	if (ok) {
+		st.entry_reserved_portal = portal_tile;
+		/* A path straight through the tunnel already holds its way out. */
+		if (exit != INVALID_TILE) ClaimUndergroundExit(v, exit);
+	} else {
+		UndergroundRetryLater(v);
+	}
+	return ok;
+}
+
+/**
+ * Give up an underground path a surface train reserved for diving into a
+ * portal it has not entered (it reversed, crashed or was sold).
+ * @param v The front engine.
+ */
+static void FreeUndergroundEntryReservation(Train *v)
+{
+	UndergroundTrainState *st = GetUndergroundState(v);
+	if (st == nullptr || st->entry_reserved_portal == INVALID_TILE) return;
+	TileIndex portal_tile = st->entry_reserved_portal;
+	st->entry_reserved_portal = INVALID_TILE;
+
+	SliceID portal_sid = _multilayer_map.FindSliceByKind(portal_tile, SliceKind::Portal);
+	if (portal_sid == INVALID_SLICE_ID) return;
+	const TileSlice &ps = _multilayer_map.GetSlice(portal_sid);
+	DiagDirection dir = GetPortalDiveDirection(portal_tile, ps);
+	FreeUndergroundPathAhead(TileRef{portal_tile, portal_sid}, DiagDirToDiagTrackdir(dir), v->index);
+
+	/* A path straight through the tunnel also claimed its way out: the train
+	 * will not come out there now. A train whose tail is still coming out of
+	 * another tunnel keeps the claim of that one. */
+	bool any_underground = false;
+	for (const Train *u = v; u != nullptr; u = u->Next()) {
+		if (u->IsUnderground()) {
+			any_underground = true;
+			break;
+		}
+	}
+	if (!any_underground) ReleaseUndergroundExitClaims(v);
+}
+
+/**
+ * Check whether an underground train at (ref, td) faces a hard dead end:
+ * no reachable track at its depth and no portal on the next tile.
+ */
+static bool UndergroundDeadEndAhead(const TileRef &ref, Trackdir td)
+{
+	if (!ref.IsValid() || !_multilayer_map.IsValidSlice(ref.slice) || !IsValidTrackdir(td)) return false;
+
+	int16_t depth = _multilayer_map.GetSlice(ref.slice).span.z_bot;
+	DiagDirection exitdir = TrackdirToExitdir(td);
+	TileIndexDiffC diff = TileIndexDiffCByDiagDir(exitdir);
+	int nx = TileX(ref.tile) + diff.x;
+	int ny = TileY(ref.tile) + diff.y;
+	if (nx < 0 || ny < 0 || nx >= (int)Map::SizeX() || ny >= (int)Map::SizeY()) return true;
+
+	TileIndex next = TileXY(nx, ny);
+	if (GetUndergroundTrackBits(next, depth, exitdir) != TRACK_BIT_NONE) return false;
+	if (_multilayer_map.FindSliceByKind(next, SliceKind::Portal) != INVALID_SLICE_ID) return false;
+	return true;
+}
+
+static StationID GetOccupiedUndergroundStationToStopAt(const Train *front)
+{
+	for (const Train *part = front; part != nullptr; part = part->Next()) {
+		if (!part->IsUnderground() || part->underground_slice == 0) continue;
+		if (!_multilayer_map.IsValidSlice(static_cast<SliceID>(part->underground_slice))) continue;
+
+		const TileSlice &slice = _multilayer_map.GetSlice(static_cast<SliceID>(part->underground_slice));
+		if (slice.kind != SliceKind::StationTile) continue;
+
+		StationID station(slice.station.station_id);
+		if (front->current_order.ShouldStopAtStation(front, station)) return station;
+	}
+
+	return StationID::Invalid();
+}
+
+/**
+ * The station whose platform an underground front engine has to stop at the
+ * far end of: it stands on the last tile of a platform of a station its order
+ * stops at, the next tile ahead is no platform of that station.
+ * @param front The front engine.
+ * @return The station, or StationID::Invalid().
+ */
+static StationID GetUndergroundPlatformEndToStopAt(const Train *front)
+{
+	if (!front->IsUnderground() || front->underground_slice == 0) return StationID::Invalid();
+	if (!_multilayer_map.IsValidSlice(static_cast<SliceID>(front->underground_slice))) return StationID::Invalid();
+	const TileSlice &slice = _multilayer_map.GetSlice(static_cast<SliceID>(front->underground_slice));
+	if (slice.kind != SliceKind::StationTile) return StationID::Invalid();
+	StationID station(slice.station.station_id);
+	if (!front->current_order.ShouldStopAtStation(front, station)) return StationID::Invalid();
+
+	Track track = FindFirstTrack(front->track);
+	if (!IsValidTrack(track)) return StationID::Invalid();
+	TileIndex tile(front->underground_tile_raw);
+	TileIndex next = AddTileIndexDiffCWrap(tile, TileIndexDiffCByDiagDir(TrackdirToExitdir(TrackDirectionToTrackdir(track, front->direction))));
+	if (next != INVALID_TILE) {
+		SliceID next_sid = _multilayer_map.FindSliceAt(next, front->underground_depth);
+		if (next_sid != INVALID_SLICE_ID) {
+			const TileSlice &ns = _multilayer_map.GetSlice(next_sid);
+			if (ns.kind == SliceKind::StationTile && ns.station.station_id == slice.station.station_id) return StationID::Invalid();
+		}
+	}
+	return station;
+}
+
+/**
+ * Distance of a point in a tile to the edge a vehicle leaves the tile by.
+ * @param x World x of the point.
+ * @param y World y of the point.
+ * @param exitdir The edge.
+ * @return Distance in tile units, 0 at the edge.
+ */
+static int DistanceToTileExit(int x, int y, DiagDirection exitdir)
+{
+	int lx = x & (TILE_SIZE - 1);
+	int ly = y & (TILE_SIZE - 1);
+	switch (exitdir) {
+		case DIAGDIR_NE: return lx;
+		case DIAGDIR_SW: return TILE_SIZE - 1 - lx;
+		case DIAGDIR_NW: return ly;
+		default:         return TILE_SIZE - 1 - ly;
+	}
+}
 
 static const uint8_t _vehicle_initial_x_fract[4] = {10, 8, 4,  8};
 static const uint8_t _vehicle_initial_y_fract[4] = { 8, 4, 8, 10};
@@ -358,7 +1018,7 @@ uint16_t Train::GetCurveSpeedLimit() const
 
 	if (max_speed != absolute_max_speed) {
 		/* Apply the current railtype's curve speed advantage */
-		const RailTypeInfo *rti = GetRailTypeInfo(GetRailType(this->tile));
+		const RailTypeInfo *rti = GetRailTypeInfo(this->GetCurrentRailType());
 		max_speed += (max_speed / 2) * rti->curve_speed;
 
 		if (this->tcache.cached_tilt) {
@@ -410,6 +1070,33 @@ int Train::GetCurrentMaxSpeed() const
 		}
 	}
 
+	/* Underground station approach: the same rule as on the surface above,
+	 * from the number of platform tiles still ahead of the front up to its
+	 * stop at the far end of the platform. (The original model brakes on the
+	 * last platform tile in TrainController, as VehicleEnter_Station does.) */
+	if (_settings_game.vehicle.train_acceleration_model == AM_REALISTIC && this->IsUnderground() && this->underground_slice != 0 &&
+			_multilayer_map.IsValidSlice(static_cast<SliceID>(this->underground_slice))) {
+		const TileSlice &slice = _multilayer_map.GetSlice(static_cast<SliceID>(this->underground_slice));
+		if (slice.kind == SliceKind::StationTile && this->current_order.ShouldStopAtStation(this, StationID(slice.station.station_id))) {
+			Track t = FindFirstTrack(this->track);
+			Trackdir td = IsValidTrack(t) ? TrackDirectionToTrackdir(t, this->direction) : INVALID_TRACKDIR;
+			if (IsValidTrackdir(td)) {
+				int distance_to_go = GetUndergroundPlatformLength(TileIndex(this->underground_tile_raw), this->underground_depth, slice.station.station_id, TrackdirToExitdir(td));
+				if (distance_to_go > 0) {
+					int st_max_speed = 120;
+
+					int delta_v = this->cur_speed / (distance_to_go + 1);
+					if (max_speed > (this->cur_speed - delta_v)) {
+						st_max_speed = this->cur_speed - (delta_v / 10);
+					}
+
+					st_max_speed = std::max(st_max_speed, 25 * distance_to_go);
+					max_speed = std::min(max_speed, st_max_speed);
+				}
+			}
+		}
+	}
+
 	for (const Train *u = this; u != nullptr; u = u->Next()) {
 		if (_settings_game.vehicle.train_acceleration_model == AM_REALISTIC && u->track == TRACK_BIT_DEPOT) {
 			max_speed = std::min(max_speed, 61);
@@ -419,6 +1106,21 @@ int Train::GetCurrentMaxSpeed() const
 		/* Vehicle is on the middle part of a bridge. */
 		if (u->track == TRACK_BIT_WORMHOLE && !u->vehstatus.Test(VehState::Hidden)) {
 			max_speed = std::min<int>(max_speed, GetBridgeSpec(GetBridgeType(u->tile))->speed);
+		}
+	}
+
+	/* Underground speed limits. */
+	if (this->IsUnderground()) {
+		max_speed = std::min(max_speed, 200); /* 200 km/h max underground. */
+
+		/* Curve penalty: check if previous and current track differ (turning). */
+		const Train *prev_part = this->Previous();
+		if (prev_part != nullptr && prev_part->IsUnderground()) {
+			Track cur_t = FindFirstTrack(this->track);
+			Track prev_t = FindFirstTrack(prev_part->track);
+			if (IsValidTrack(cur_t) && IsValidTrack(prev_t) && cur_t != prev_t) {
+				max_speed = std::min(max_speed, 80); /* 80 km/h on curves. */
+			}
 		}
 	}
 
@@ -1621,6 +2323,14 @@ static void UpdateStatusAfterSwap(Train *v)
 	/* Reverse the direction. */
 	if (v->track != TRACK_BIT_DEPOT) v->direction = ReverseDir(v->direction);
 
+	/* Underground parts have no surface tile to "enter"; their position is
+	 * fully described by the swapped fields. */
+	if (v->IsUnderground()) {
+		v->UpdatePosition();
+		v->UpdateViewport(true, true);
+		return;
+	}
+
 	/* Call the proper EnterTile function unless we are in a wormhole. */
 	if (v->track != TRACK_BIT_WORMHOLE) {
 		VehicleEnterTile(v, v->tile, v->x_pos, v->y_pos);
@@ -1677,6 +2387,11 @@ void ReverseTrainSwapVeh(Train *v, int l, int r)
 		std::swap(a->tile,  b->tile);
 		std::swap(a->z_pos, b->z_pos);
 
+		/* The underground state belongs to the position, swap it along. */
+		std::swap(a->underground_depth, b->underground_depth);
+		std::swap(a->underground_slice, b->underground_slice);
+		std::swap(a->underground_tile_raw, b->underground_tile_raw);
+
 		SwapTrainFlags(&a->gv_flags, &b->gv_flags);
 
 		UpdateStatusAfterSwap(a);
@@ -1691,13 +2406,15 @@ void ReverseTrainSwapVeh(Train *v, int l, int r)
 }
 
 /**
- * Check if the vehicle is a train
+ * Check if the vehicle is a train on the surface layer.
+ * Underground trains share the tile hash with surface vehicles but must not
+ * occupy surface crossings or platforms.
  * @param v vehicle on tile
- * @return true if v is a train
+ * @return true if v is a train running on the surface
  */
-static bool IsTrain(const Vehicle *v)
+static bool IsSurfaceTrain(const Vehicle *v)
 {
-	return v->type == VEH_TRAIN;
+	return v->type == VEH_TRAIN && IsVehicleOnSurfaceLayer(v);
 }
 
 /**
@@ -1710,7 +2427,7 @@ bool TrainOnCrossing(TileIndex tile)
 {
 	assert(IsLevelCrossingTile(tile));
 
-	return HasVehicleOnTile(tile, IsTrain);
+	return HasVehicleOnTile(tile, IsSurfaceTrain);
 }
 
 /**
@@ -1722,6 +2439,8 @@ bool TrainOnCrossing(TileIndex tile)
 static bool TrainApproachingCrossingEnum(const Vehicle *v, TileIndex tile)
 {
 	if (v->type != VEH_TRAIN || v->vehstatus.Test(VehState::Crashed)) return false;
+	/* Underground trains never approach a surface crossing. */
+	if (!IsVehicleOnSurfaceLayer(v)) return false;
 
 	const Train *t = Train::From(v);
 	if (!t->IsFrontEngine()) return false;
@@ -1986,11 +2705,154 @@ static bool IsWholeTrainInsideDepot(const Train *v)
 }
 
 /**
+ * After a consist straddling a portal turned around, put the parts on the
+ * portal tile in the state of their new direction: a part on the surface
+ * that now heads into the tunnel dives, a part below that now heads out of
+ * it surfaces. Without this the dive / surface step, which only happens when
+ * a part enters the portal tile, is skipped and the part loses its rails.
+ * @param v Front of the consist.
+ */
+static void NormalizePortalStatesAfterReverse(Train *v)
+{
+	for (Train *u = v; u != nullptr; u = u->Next()) {
+		SliceID ps = _multilayer_map.FindSliceByKind(u->tile, SliceKind::Portal);
+		if (ps == INVALID_SLICE_ID) continue;
+		const TileSlice &portal = _multilayer_map.GetSlice(ps);
+		DiagDirection into = GetPortalDiveDirection(u->tile, portal);
+		DiagDirection heading = DirToDiagDir(u->direction);
+		if (!u->IsUnderground() && heading == into) {
+			u->underground_depth = portal.span.z_bot;
+			u->underground_slice = ps;
+			u->underground_tile_raw = u->tile.base();
+		} else if (u->IsUnderground() && u->underground_slice == ps && heading == ReverseDiagDir(into)) {
+			u->underground_depth = 0;
+			u->underground_slice = 0;
+			u->underground_tile_raw = 0;
+			u->vehstatus.Reset(VehState::Hidden);
+		}
+	}
+}
+
+/**
+ * After a train with its front on the surface turned round: update the signals
+ * and reserve a path from the new front, or mark the train stuck when there is
+ * none, like vanilla does.
+ * @param v The front engine, on the surface.
+ */
+static void ReserveSurfacePathAfterReverse(Train *v)
+{
+	/* If we are inside a depot after reversing, don't bother with path reserving. */
+	if (v->track == TRACK_BIT_DEPOT) {
+		/* Can't be stuck here as inside a depot is always a safe tile. */
+		if (v->flags.Test(VehicleRailFlag::Stuck)) SetWindowWidgetDirty(WC_VEHICLE_VIEW, v->index, WID_VV_START_STOP);
+		v->flags.Reset(VehicleRailFlag::Stuck);
+		return;
+	}
+
+	/* VehicleExitDir does not always produce the desired dir for depots and
+	 * tunnels/bridges that is needed for UpdateSignalsOnSegment. */
+	DiagDirection dir = VehicleExitDir(v->direction, v->track);
+	if (IsRailDepotTile(v->tile) || IsTileType(v->tile, TileType::TunnelBridge)) dir = INVALID_DIAGDIR;
+
+	if (UpdateSignalsOnSegment(v->tile, dir, v->owner) == SIGSEG_PBS || _settings_game.pf.reserve_paths) {
+		/* If we are currently on a tile with conventional signals, we can't treat the
+		 * current tile as a safe tile or we would enter a PBS block without a reservation. */
+		bool first_tile_okay = !(IsTileType(v->tile, TileType::Railway) &&
+			HasSignalOnTrackdir(v->tile, v->GetVehicleTrackdir()) &&
+			!IsPbsSignal(GetSignalType(v->tile, FindFirstTrack(v->track))));
+
+		/* If we are on a depot tile facing outwards, do not treat the current tile as safe. */
+		if (IsRailDepotTile(v->tile) && TrackdirToExitdir(v->GetVehicleTrackdir()) == GetRailDepotDirection(v->tile)) first_tile_okay = false;
+
+		if (IsRailStationTile(v->tile)) SetRailStationPlatformReservation(v->tile, TrackdirToExitdir(v->GetVehicleTrackdir()), true);
+		if (TryPathReserve(v, false, first_tile_okay)) {
+			/* Do a look-ahead now in case our current tile was already a safe tile. */
+			CheckNextTrainTile(v);
+		} else if (v->current_order.GetType() != OT_LOADING) {
+			/* Do not wait for a way out when we're still loading */
+			MarkTrainAsStuck(v);
+		}
+	} else if (v->flags.Test(VehicleRailFlag::Stuck)) {
+		/* A train not inside a PBS block can't be stuck. */
+		v->flags.Reset(VehicleRailFlag::Stuck);
+		v->wait_counter = 0;
+	}
+}
+
+/**
  * Turn a train around.
  * @param v %Train to turn around.
  */
 static void ReverseTrainDirection(Train *v)
 {
+	/* Trains with any underground part reverse via the same pairwise position
+	 * swap as surface trains (ReverseTrainSwapVeh swaps the underground state
+	 * along with the position), including the wagon advancing that keeps the
+	 * spacing right for parts of different or odd lengths (articulated sets);
+	 * crossings and signal updates are skipped, they have no meaning below
+	 * ground. */
+	bool any_underground = false;
+	for (const Train *u = v; u != nullptr; u = u->Next()) {
+		if (u->IsUnderground()) {
+			any_underground = true;
+			break;
+		}
+	}
+
+	if (any_underground) {
+		if (v->IsUnderground()) {
+			/* Free the underground path reserved ahead of the old front; after
+			 * reversing it would never be traversed and would deadlock the line. */
+			Track front_track = FindFirstTrack(v->track);
+			if (IsValidTrack(front_track) && v->underground_slice != 0 &&
+					_multilayer_map.IsValidSlice(static_cast<SliceID>(v->underground_slice))) {
+				Trackdir front_td = TrackDirectionToTrackdir(front_track, v->direction);
+				if (IsValidTrackdir(front_td)) {
+					FreeUndergroundPathAhead(TileRef{TileIndex(v->underground_tile_raw), static_cast<SliceID>(v->underground_slice)}, front_td, v->index);
+				}
+			}
+		} else if (!v->flags.Test(VehicleRailFlag::Stuck)) {
+			/* Mixed consist with a surface front: free the surface path ahead. */
+			FreeTrainTrackReservation(v);
+		}
+		/* The way out it held is not taken now. */
+		ReleaseUndergroundExitClaims(v);
+		/* A front below ground is making the dive this path was held for: the
+		 * body tiles stay reserved by the movement, only the record is dropped.
+		 * A surface front (the tail still coming out of another tunnel) may
+		 * already hold the path behind the next portal: give that up. */
+		if (v->IsUnderground()) {
+			if (UndergroundTrainState *st = GetUndergroundState(v); st != nullptr) st->entry_reserved_portal = INVALID_TILE;
+		} else {
+			FreeUndergroundEntryReservation(v);
+		}
+
+		int r = CountVehiclesInChain(v) - 1;
+		int l = 0;
+		AdvanceWagonsBeforeSwap(v);
+		do {
+			ReverseTrainSwapVeh(v, l++, r--);
+		} while (l <= r);
+		/* The parts on a portal tile must be in the state of their new direction
+		 * before the wagons are advanced: a part still on the surface but now
+		 * heading into the tunnel was moved by the surface code towards the mouth,
+		 * found no rails there and the train "disconnected" (fatal error). */
+		NormalizePortalStatesAfterReverse(v);
+		AdvanceWagonsAfterSwap(v);
+
+		v->flags.Flip(VehicleRailFlag::Reversed);
+		v->flags.Reset(VehicleRailFlag::Reversing);
+
+		NormalizePortalStatesAfterReverse(v);
+
+		v->ConsistChanged(CCF_TRACK);
+		for (Train *u = v; u != nullptr; u = u->Next()) u->UpdateViewport(false, false);
+		/* The tail is still below ground but the new front drives on the
+		 * surface: it needs a path there like any surface train. */
+		if (!v->IsUnderground()) ReserveSurfacePathAfterReverse(v);
+		return;
+	}
+
 	if (IsRailDepotTile(v->tile)) {
 		if (IsWholeTrainInsideDepot(v)) return;
 		InvalidateWindowData(WC_VEHICLE_DEPOT, v->tile);
@@ -1998,6 +2860,9 @@ static void ReverseTrainDirection(Train *v)
 
 	/* Clear path reservation in front if train is not stuck. */
 	if (!v->flags.Test(VehicleRailFlag::Stuck)) FreeTrainTrackReservation(v);
+	/* An underground path held for a dive the train will not make now. */
+	FreeUndergroundEntryReservation(v);
+	ReleaseUndergroundExitClaims(v);
 
 	/* Check if we were approaching a rail/road-crossing */
 	TileIndex crossing = TrainApproachingCrossingTile(v);
@@ -2035,42 +2900,7 @@ static void ReverseTrainDirection(Train *v)
 	crossing = TrainApproachingCrossingTile(v);
 	if (crossing != INVALID_TILE) MaybeBarCrossingWithSound(crossing);
 
-	/* If we are inside a depot after reversing, don't bother with path reserving. */
-	if (v->track == TRACK_BIT_DEPOT) {
-		/* Can't be stuck here as inside a depot is always a safe tile. */
-		if (v->flags.Test(VehicleRailFlag::Stuck)) SetWindowWidgetDirty(WC_VEHICLE_VIEW, v->index, WID_VV_START_STOP);
-		v->flags.Reset(VehicleRailFlag::Stuck);
-		return;
-	}
-
-	/* VehicleExitDir does not always produce the desired dir for depots and
-	 * tunnels/bridges that is needed for UpdateSignalsOnSegment. */
-	DiagDirection dir = VehicleExitDir(v->direction, v->track);
-	if (IsRailDepotTile(v->tile) || IsTileType(v->tile, TileType::TunnelBridge)) dir = INVALID_DIAGDIR;
-
-	if (UpdateSignalsOnSegment(v->tile, dir, v->owner) == SIGSEG_PBS || _settings_game.pf.reserve_paths) {
-		/* If we are currently on a tile with conventional signals, we can't treat the
-		 * current tile as a safe tile or we would enter a PBS block without a reservation. */
-		bool first_tile_okay = !(IsTileType(v->tile, TileType::Railway) &&
-			HasSignalOnTrackdir(v->tile, v->GetVehicleTrackdir()) &&
-			!IsPbsSignal(GetSignalType(v->tile, FindFirstTrack(v->track))));
-
-		/* If we are on a depot tile facing outwards, do not treat the current tile as safe. */
-		if (IsRailDepotTile(v->tile) && TrackdirToExitdir(v->GetVehicleTrackdir()) == GetRailDepotDirection(v->tile)) first_tile_okay = false;
-
-		if (IsRailStationTile(v->tile)) SetRailStationPlatformReservation(v->tile, TrackdirToExitdir(v->GetVehicleTrackdir()), true);
-		if (TryPathReserve(v, false, first_tile_okay)) {
-			/* Do a look-ahead now in case our current tile was already a safe tile. */
-			CheckNextTrainTile(v);
-		} else if (v->current_order.GetType() != OT_LOADING) {
-			/* Do not wait for a way out when we're still loading */
-			MarkTrainAsStuck(v);
-		}
-	} else if (v->flags.Test(VehicleRailFlag::Stuck)) {
-		/* A train not inside a PBS block can't be stuck. */
-		v->flags.Reset(VehicleRailFlag::Stuck);
-		v->wait_counter = 0;
-	}
+	ReserveSurfacePathAfterReverse(v);
 }
 
 /**
@@ -2118,12 +2948,17 @@ CommandCost CmdReverseTrainDirection(DoCommandFlags flags, VehicleID veh_id, boo
 		if (flags.Test(DoCommandFlag::Execute)) {
 			/* Properly leave the station if we are loading and won't be loading anymore */
 			if (v->current_order.IsType(OT_LOADING)) {
-				const Vehicle *last = v;
-				while (last->Next() != nullptr) last = last->Next();
-
-				/* not a station || different station --> leave the station */
-				if (!IsTileType(last->tile, TileType::Station) || GetStationIndex(last->tile) != GetStationIndex(v->tile)) {
+				if (v->IsUnderground()) {
+					/* Underground trains always leave station on reverse. */
 					v->LeaveStation();
+				} else {
+					const Vehicle *last = v;
+					while (last->Next() != nullptr) last = last->Next();
+
+					/* not a station || different station --> leave the station */
+					if (!IsTileType(last->tile, TileType::Station) || GetStationIndex(last->tile) != GetStationIndex(v->tile)) {
+						v->LeaveStation();
+					}
 				}
 			}
 
@@ -2203,9 +3038,51 @@ CommandCost CmdForceTrainProceed(DoCommandFlags flags, VehicleID veh_id)
  * @return Information where the closest train depot is located.
  * @pre The given vehicle must not be crashed!
  */
+/**
+ * Find the exit portal an underground train would surface from when it has
+ * no underground destination (nearest-exit search).
+ */
+static TileIndex GetUndergroundNearestExitPortal(const Train *v)
+{
+	if (v->underground_slice == 0 || !_multilayer_map.IsValidSlice(static_cast<SliceID>(v->underground_slice)) ||
+			v->underground_tile_raw == 0 || !IsValidTile(TileIndex(v->underground_tile_raw))) {
+		return INVALID_TILE;
+	}
+	Track t = FindFirstTrack(v->track);
+	if (!IsValidTrack(t)) return INVALID_TILE;
+	Trackdir td = TrackDirectionToTrackdir(t, v->direction);
+	if (!IsValidTrackdir(td)) return INVALID_TILE;
+
+	TileRef ref{TileIndex(v->underground_tile_raw), static_cast<SliceID>(v->underground_slice)};
+	Yapf3DResult r = Yapf3DFindPathFromRef(ref, td, INVALID_TILE, StationID::Invalid(), v);
+	if (!r.path_found || !r.exit_portal.IsValid()) return INVALID_TILE;
+	return r.exit_portal.tile;
+}
+
 static FindDepotData FindClosestTrainDepot(Train *v, int max_distance)
 {
 	assert(!v->vehstatus.Test(VehState::Crashed));
+
+	/* The surface pathfinder cannot run from an underground position. Route
+	 * servicing via the portal this train will surface from: pick the depot
+	 * nearest to that portal; the underground leg routes to the nearest exit
+	 * on its own once the depot order is set. */
+	if (v->IsUnderground()) {
+		TileIndex exit_tile = GetUndergroundNearestExitPortal(v);
+		if (exit_tile == INVALID_TILE) return FindDepotData();
+
+		FindDepotData res;
+		for (const Depot *d : Depot::Iterate()) {
+			if (!IsRailDepotTile(d->xy) || !IsTileOwner(d->xy, v->owner)) continue;
+			uint dist = DistanceManhattan(exit_tile, d->xy);
+			if (dist < res.best_length) {
+				res.tile = d->xy;
+				res.best_length = dist;
+				res.reverse = false;
+			}
+		}
+		return res;
+	}
 
 	return YapfTrainFindNearestDepot(v, max_distance);
 }
@@ -2241,6 +3118,9 @@ static void CheckNextTrainTile(Train *v)
 {
 	/* Don't do any look-ahead if path_backoff_interval is 255. */
 	if (_settings_game.pf.path_backoff_interval == 255) return;
+
+	/* Underground trains use separate reservation system вЂ” skip surface look-ahead. */
+	if (v->IsUnderground()) return;
 
 	/* Exit if we are inside a depot. */
 	if (v->track == TRACK_BIT_DEPOT) return;
@@ -2278,6 +3158,10 @@ static void CheckNextTrainTile(Train *v)
 
 	CFollowTrackRail ft(v);
 	if (!ft.Follow(v->tile, td)) return;
+
+	/* Through a metro portal the follower lands beyond the far end of the
+	 * tunnel; the underground path is reserved at the mouth, not from here. */
+	if (ft.is_portal) return;
 
 	if (!HasReservedTracks(ft.new_tile, TrackdirBitsToTrackBits(ft.new_td_bits))) {
 		/* Next tile is not reserved. */
@@ -2426,6 +3310,32 @@ void FreeTrainTrackReservation(const Train *v)
 {
 	assert(v->IsFrontEngine());
 
+	/* Underground trains use separate reservation system. */
+	if (v->IsUnderground()) {
+		/* Like on the surface only the path ahead is freed. The tiles the consist
+		 * stands on stay reserved until its last vehicle leaves them; freeing
+		 * them let the next train pass the signal into a train waiting at a
+		 * platform. */
+		Track front_track = FindFirstTrack(v->track);
+		if (IsValidTrack(front_track) && v->underground_slice != 0 &&
+				_multilayer_map.IsValidSlice(static_cast<SliceID>(v->underground_slice))) {
+			Trackdir front_td = TrackDirectionToTrackdir(front_track, v->direction);
+			if (IsValidTrackdir(front_td)) {
+				FreeUndergroundPathAhead(TileRef{TileIndex(v->underground_tile_raw), static_cast<SliceID>(v->underground_slice)}, front_td, v->index);
+			}
+		}
+		ReleaseUndergroundExitClaims(v);
+		return;
+	}
+
+	/* The surface path to a portal is given up: so is the underground path
+	 * reserved for the dive, unless the train already stands at the portal.
+	 * A new path to the same portal reserves it again. */
+	if (const UndergroundTrainState *st = GetUndergroundState(v); st != nullptr &&
+			st->entry_reserved_portal != INVALID_TILE && st->entry_reserved_portal != v->tile) {
+		FreeUndergroundEntryReservation(const_cast<Train *>(v));
+	}
+
 	TileIndex tile = v->tile;
 	Trackdir  td = v->GetVehicleTrackdir();
 	bool      free_tile = !(IsRailStationTile(v->tile) || IsTileType(v->tile, TileType::TunnelBridge));
@@ -2444,6 +3354,9 @@ void FreeTrainTrackReservation(const Train *v)
 
 	CFollowTrackRail ft(v, GetAllCompatibleRailTypes(v->railtypes));
 	while (ft.Follow(tile, td)) {
+		/* The follower jumps through a metro tunnel to the tile beyond its far
+		 * portal: what is reserved there belongs to a train that came out. */
+		if (ft.is_portal) break;
 		tile = ft.new_tile;
 		TrackdirBits bits = ft.new_td_bits & TrackBitsToTrackdirBits(GetReservedTrackbits(tile));
 		td = RemoveFirstTrackdir(&bits);
@@ -2508,6 +3421,15 @@ static const uint8_t _initial_tile_subcoord[6][4][3] = {
 static Track DoTrainPathfind(const Train *v, TileIndex tile, DiagDirection enterdir, TrackBits tracks, bool &path_found, bool do_track_reservation, PBSTileInfo *dest, TileIndex *final_dest)
 {
 	if (final_dest != nullptr) *final_dest = INVALID_TILE;
+
+	/* A portal tile entered towards the tunnel: the underground path is
+	 * reserved by the train before it dives (EnsureUndergroundEntryReservation);
+	 * here only the mouth track is chosen. */
+	if (HasEnterablePortal(tile, enterdir)) {
+		path_found = true;
+		return ChoosePortalSurfaceTrack(tile, tracks);
+	}
+
 	return YapfTrainChooseTrack(v, tile, enterdir, tracks, path_found, do_track_reservation, dest, final_dest);
 }
 
@@ -2521,6 +3443,9 @@ static Track DoTrainPathfind(const Train *v, TileIndex tile, DiagDirection enter
  */
 static PBSTileInfo ExtendTrainReservation(const Train *v, TrackBits *new_tracks, DiagDirection *enterdir)
 {
+	/* Underground trains use YAPF3D reservation вЂ” skip surface extend. */
+	if (v->IsUnderground()) return PBSTileInfo(v->tile, v->GetVehicleTrackdir(), false);
+
 	PBSTileInfo origin = FollowTrainReservation(v);
 
 	CFollowTrackRail ft(v);
@@ -2749,6 +3674,21 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 	/* Do we have a suitable reserved track? */
 	if (res_tracks != TRACK_BIT_NONE) return FindFirstTrack(res_tracks);
 
+	/* Portal tile entered towards the tunnel: the path continues underground.
+	 * It is reserved before the train dives; while another train holds it the
+	 * train waits in front of the mouth, like at a red signal. */
+	if (tracks != TRACK_BIT_NONE && HasEnterablePortal(tile, enterdir)) {
+		Track portal_track = ChoosePortalSurfaceTrack(tile, tracks);
+		if (EnsureUndergroundEntryReservation(v, tile, enterdir)) {
+			/* The mouth is part of the path: hold it like any surface tile. */
+			if (!HasReservedTracks(tile, TrackToTrackBits(portal_track))) TryReserveRailTrack(tile, portal_track, false);
+			if (got_reservation != nullptr) *got_reservation = true;
+		} else if (mark_stuck) {
+			MarkTrainAsStuck(v);
+		}
+		return portal_track;
+	}
+
 	/* Quick return in case only one possible track is available */
 	if (KillFirstBit(tracks) == TRACK_BIT_NONE) {
 		Track track = FindFirstTrack(tracks);
@@ -2766,6 +3706,16 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 	PBSTileInfo   res_dest(tile, INVALID_TRACKDIR, false);
 	DiagDirection dest_enterdir = enterdir;
 	if (do_track_reservation) {
+		/* The reservation and the path search both start at the end of the
+		 * train's reservation, which starts on the tile it stands on. A train
+		 * that came here without one (up a metro portal into a stretch
+		 * without signals) would otherwise reserve the next tile and then
+		 * search from its own tile again, running into that reservation for
+		 * good. Inside a path signal block a train always holds its tile. */
+		if (!v->IsUnderground() && v->track != TRACK_BIT_DEPOT && IsValidTrack(FindFirstTrack(v->track)) &&
+				!HasReservedTracks(v->tile, v->track) && HasTrack(TrackStatusToTrackBits(GetTileTrackStatus(v->tile, TRANSPORT_RAIL, 0)), FindFirstTrack(v->track))) {
+			TryReserveRailTrack(v->tile, FindFirstTrack(v->track));
+		}
 		res_dest = ExtendTrainReservation(v, &tracks, &dest_enterdir);
 		if (res_dest.tile == INVALID_TILE) {
 			/* Reservation failed? */
@@ -2813,7 +3763,10 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 
 		Track next_track = DoTrainPathfind(v, new_tile, dest_enterdir, tracks, path_found, do_track_reservation, &res_dest, &final_dest);
 		if (new_tile == tile) best_track = next_track;
-		v->HandlePathfindingResult(path_found);
+		/* The surface pathfinder does not route below ground: whether a station
+		 * with underground platforms can be reached is up to the underground
+		 * searches (HandleUndergroundPathfindingResult). */
+		if (path_found || GetUndergroundOrderTargetTile(v) == INVALID_TILE) v->HandlePathfindingResult(path_found);
 	}
 
 	/* No track reservation requested -> finished. */
@@ -2823,6 +3776,7 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 	if (res_dest.tile != INVALID_TILE && !res_dest.okay) {
 		if (mark_stuck) MarkTrainAsStuck(v);
 		FreeTrainTrackReservation(v);
+		if (!IsValidTrack(best_track)) best_track = ChoosePortalSurfaceTrack(tile, tracks);
 		return best_track;
 	}
 
@@ -2840,6 +3794,7 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 			FreeTrainTrackReservation(v);
 			if (mark_stuck) MarkTrainAsStuck(v);
 		}
+		if (!IsValidTrack(best_track)) best_track = ChoosePortalSurfaceTrack(tile, tracks);
 		return best_track;
 	}
 
@@ -2894,6 +3849,11 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 		SetWindowWidgetDirty(WC_VEHICLE_VIEW, v->index, WID_VV_START_STOP);
 	}
 
+	if (!IsValidTrack(best_track)) {
+		Debug(misc, 2, "ChooseTrainTrack: YAPF gave no track for train {} at ({},{}) dest ({},{})",
+			v->index.base(), TileX(tile), TileY(tile), TileX(v->dest_tile), TileY(v->dest_tile));
+		best_track = ChoosePortalSurfaceTrack(tile, tracks);
+	}
 	return best_track;
 }
 
@@ -2908,6 +3868,89 @@ static Track ChooseTrainTrack(Train *v, TileIndex tile, DiagDirection enterdir, 
 bool TryPathReserve(Train *v, bool mark_as_stuck, bool first_tile_okay)
 {
 	assert(v->IsFrontEngine());
+
+	/* Underground trains use YAPF3D reservation from the current slice. */
+	if (v->IsUnderground()) {
+		if (v->underground_slice == 0 || !_multilayer_map.IsValidSlice(static_cast<SliceID>(v->underground_slice)) ||
+				v->underground_tile_raw == 0 || !IsValidTile(TileIndex(v->underground_tile_raw))) {
+			if (mark_as_stuck) MarkTrainAsStuck(v);
+			return false;
+		}
+
+		Track cur_track = FindFirstTrack(v->track);
+		if (!IsValidTrack(cur_track)) {
+			if (mark_as_stuck) MarkTrainAsStuck(v);
+			return false;
+		}
+
+		TileRef cur_ref{TileIndex(v->underground_tile_raw), static_cast<SliceID>(v->underground_slice)};
+		Trackdir cur_td = TrackDirectionToTrackdir(cur_track, v->direction);
+		if (!IsValidTrackdir(cur_td)) {
+			if (mark_as_stuck) MarkTrainAsStuck(v);
+			return false;
+		}
+		TileIndex ug_target = GetUndergroundOrderTargetTile(v);
+		if (ug_target == INVALID_TILE &&
+				(v->current_order.IsType(OT_GOTO_STATION) || v->current_order.IsType(OT_GOTO_WAYPOINT))) {
+			ug_target = v->dest_tile;
+		}
+
+		Yapf3DResult ug_result = Yapf3DFindPathFromRef(cur_ref, cur_td, ug_target, GetUndergroundOrderTargetStation(v), v);
+		if (!ug_result.path_found && UndergroundDeadEndAhead(cur_ref, cur_td)) {
+			/* Hard dead end ahead (no track, no portal) вЂ” turn the consist
+			 * around, like surface trains do at line ends, and search again.
+			 * The Stuck flag would otherwise freeze the train before the
+			 * movement-level dead-end handling could ever run. */
+			ReverseTrainDirection(v);
+
+			/* The reversal swapped the consist positions; recompute the front. */
+			if (!v->IsUnderground() || v->underground_slice == 0 ||
+					!_multilayer_map.IsValidSlice(static_cast<SliceID>(v->underground_slice)) ||
+					v->underground_tile_raw == 0) {
+				if (mark_as_stuck) MarkTrainAsStuck(v);
+				return false;
+			}
+			cur_track = FindFirstTrack(v->track);
+			cur_ref = TileRef{TileIndex(v->underground_tile_raw), static_cast<SliceID>(v->underground_slice)};
+			Trackdir rev_td = IsValidTrack(cur_track) ? TrackDirectionToTrackdir(cur_track, v->direction) : INVALID_TRACKDIR;
+			if (IsValidTrackdir(rev_td)) ug_result = Yapf3DFindPathFromRef(cur_ref, rev_td, ug_target, GetUndergroundOrderTargetStation(v), v);
+		}
+		HandleUndergroundPathfindingResult(v, ug_result.path_found, ug_target, GetUndergroundOrderTargetStation(v));
+
+		/* A signal on the tile the front stands on, along its way, must show
+		 * green before the path past it is reserved: a block or entry signal
+		 * can be red for reasons a reservation does not see (a train standing
+		 * in the block off the path, every exit red). */
+		{
+			Trackdir now_td = IsValidTrack(cur_track) ? TrackDirectionToTrackdir(cur_track, v->direction) : INVALID_TRACKDIR;
+			const TileSlice &cs = _multilayer_map.GetSlice(cur_ref.slice);
+			if (IsValidTrackdir(now_td) && HasUndergroundSignalOnTrackdir(cs, now_td) &&
+					!UndergroundBlockBeyondHeld(v, cur_ref, now_td) && GetUndergroundSignalState(cur_ref, now_td, v->index) == SIGNAL_STATE_RED) {
+				if (mark_as_stuck) MarkTrainAsStuck(v);
+				return false;
+			}
+		}
+
+		bool reserved;
+		if (ug_result.path_found) {
+			reserved = ReserveUndergroundPathFor(v, ug_result, true);
+		} else {
+			/* Lost: hold the stretch up to the next signal, like a lost surface train. */
+			Trackdir now_td = IsValidTrack(cur_track) ? TrackDirectionToTrackdir(cur_track, v->direction) : INVALID_TRACKDIR;
+			reserved = IsValidTrackdir(now_td) && Yapf3DReserveToNextSignal(cur_ref, now_td, v);
+		}
+		if (!reserved) {
+			if (mark_as_stuck) MarkTrainAsStuck(v);
+			return false;
+		}
+
+		if (v->flags.Test(VehicleRailFlag::Stuck)) {
+			v->wait_counter = 0;
+			SetWindowWidgetDirty(WC_VEHICLE_VIEW, v->index, WID_VV_START_STOP);
+		}
+		v->flags.Reset(VehicleRailFlag::Stuck);
+		return true;
+	}
 
 	/* We have to handle depots specially as the track follower won't look
 	 * at the depot tile itself but starts from the next tile. If we are still
@@ -2974,6 +4017,62 @@ bool TryPathReserve(Train *v, bool mark_as_stuck, bool first_tile_okay)
 
 static bool CheckReverseTrain(const Train *v)
 {
+	/* Below ground: compare the way ahead with the way back from the rear of
+	 * the train, as YapfTrainCheckReverse does on the surface. A train at a
+	 * through platform whose next stop lies behind it turns round here
+	 * instead of running on to the end of the line. */
+	if (v->IsUnderground()) {
+		if (_settings_game.difficulty.line_reverse_mode != 0) return false;
+		const Train *last = v->Last();
+		if (!last->IsUnderground() || v->underground_slice == 0 || last->underground_slice == 0 ||
+				!_multilayer_map.IsValidSlice(static_cast<SliceID>(v->underground_slice)) ||
+				!_multilayer_map.IsValidSlice(static_cast<SliceID>(last->underground_slice))) {
+			return false;
+		}
+		Track front_track = FindFirstTrack(v->track);
+		Track last_track = FindFirstTrack(last->track);
+		if (!IsValidTrack(front_track) || !IsValidTrack(last_track)) return false;
+		Trackdir front_td = TrackDirectionToTrackdir(front_track, v->direction);
+		Trackdir back_td = ReverseTrackdir(TrackDirectionToTrackdir(last_track, last->direction));
+		if (!IsValidTrackdir(front_td) || !IsValidTrackdir(back_td)) return false;
+
+		TileIndex target = GetUndergroundOrderTargetTile(v);
+		if (target == INVALID_TILE && (v->current_order.IsType(OT_GOTO_STATION) || v->current_order.IsType(OT_GOTO_WAYPOINT))) {
+			target = v->dest_tile;
+		}
+		StationID target_station = GetUndergroundOrderTargetStation(v);
+		TileRef front_ref{TileIndex(v->underground_tile_raw), static_cast<SliceID>(v->underground_slice)};
+		TileRef back_ref{TileIndex(last->underground_tile_raw), static_cast<SliceID>(last->underground_slice)};
+		Yapf3DResult ahead = Yapf3DFindPathFromRef(front_ref, front_td, target, target_station, v);
+		Yapf3DResult back = Yapf3DFindPathFromRef(back_ref, back_td, target, target_station, v);
+		if (!back.path_found) return false;
+		/* Never turn into a way another train already holds (one coming up
+		 * behind): the two would stand face to face, or meet. The way back up
+		 * to its first signal must be free. */
+		for (auto it = back.path.rbegin() + 1; it != back.path.rend(); ++it) {
+			const TileSlice &s = _multilayer_map.GetSlice(it->first.slice);
+			if (s.kind == SliceKind::Portal) break;
+			if (IsUndergroundTrackReservedByOther(it->first, TrackdirToTrack(it->second), v->index)) return false;
+			if (HasUndergroundSignalOnTrackdir(s, it->second)) break;
+		}
+		if (!ahead.path_found) return true;
+		/* A way that reaches the target beats one that only gets to a portal;
+		 * between two ways out, the rest of the trip from the portal to the
+		 * target counts as the search scored it. */
+		auto ends_at_portal = [&](const Yapf3DResult &r) {
+			if (!r.exit_portal.IsValid() || !_multilayer_map.IsValidSlice(r.exit_portal.slice)) return false;
+			return _multilayer_map.GetSlice(r.exit_portal.slice).kind == SliceKind::Portal;
+		};
+		auto score = [&](const Yapf3DResult &r) {
+			int s = r.total_cost;
+			if (ends_at_portal(r) && target != INVALID_TILE) s += DistanceManhattan(r.exit_portal.tile, target) * 100;
+			return s;
+		};
+		if (ends_at_portal(back) != ends_at_portal(ahead)) return ends_at_portal(ahead);
+		/* Turning round costs: only a clearly shorter way back is worth it. */
+		return score(back) + 20 * 100 < score(ahead);
+	}
+
 	if (_settings_game.difficulty.line_reverse_mode != 0 ||
 			v->track == TRACK_BIT_DEPOT || v->track == TRACK_BIT_WORMHOLE ||
 			!(v->direction & 1)) {
@@ -2981,6 +4080,11 @@ static bool CheckReverseTrain(const Train *v)
 	}
 
 	assert(v->track != TRACK_BIT_NONE);
+
+	/* The tail still in a metro tunnel (the front came out of a portal, say
+	 * into a station right after it): its tile is the surface above it, with
+	 * no track for its trackdir to search back from. */
+	if (v->Last()->IsUnderground() && !v->Last()->IsOnSurfaceLayer()) return false;
 
 	return YapfTrainCheckReverse(v);
 }
@@ -2999,6 +4103,75 @@ TileIndex Train::GetOrderStationLocation(StationID station)
 		/* The destination station has no trainstation tiles. */
 		this->IncrementRealOrderIndex();
 		return TileIndex{};
+	}
+
+	auto underground_it = _station_complexes.find(station.base());
+	if (underground_it != _station_complexes.end()) {
+		auto get_tracks = [](const TileSlice &slice) -> TrackBits {
+			if (slice.kind == SliceKind::Track) return static_cast<TrackBits>(slice.track.tracks);
+			if (slice.kind == SliceKind::StationTile) return static_cast<TrackBits>(slice.station.tracks);
+			return TRACK_BIT_NONE;
+		};
+
+		TileIndex best_portal = INVALID_TILE;
+		int best_distance = INT_MAX;
+
+		for (const StationComplexNode *platform : underground_it->second.GetPlatforms()) {
+			if (platform == nullptr || !platform->ref.IsValid()) continue;
+
+			std::queue<std::pair<TileIndex, int>> open;
+			std::unordered_set<uint32_t> visited;
+
+			open.push({platform->ref.tile, 0});
+			visited.insert(platform->ref.tile.base());
+
+			while (!open.empty()) {
+				auto [current_tile, distance] = open.front();
+				open.pop();
+
+				SliceID current_sid = _multilayer_map.FindSliceAt(current_tile, platform->depth);
+				if (current_sid == INVALID_SLICE_ID) continue;
+
+				const TileSlice &current_slice = _multilayer_map.GetSlice(current_sid);
+				TrackBits current_tracks = get_tracks(current_slice);
+				if (current_tracks == TRACK_BIT_NONE) continue;
+
+				for (DiagDirection dir = DIAGDIR_BEGIN; dir < DIAGDIR_END; dir++) {
+					TileIndexDiffC diff = TileIndexDiffCByDiagDir(dir);
+					int nx = TileX(current_tile) + diff.x;
+					int ny = TileY(current_tile) + diff.y;
+					if (nx < 0 || ny < 0 || nx >= (int)Map::SizeX() || ny >= (int)Map::SizeY()) continue;
+
+					/* DiagdirReachesTracks(d) are the tracks met when moving in d onto a
+					 * tile: leaving towards dir needs a track at that edge, i.e. one met
+					 * when coming the other way. */
+					if ((current_tracks & DiagdirReachesTracks(ReverseDiagDir(dir))) == TRACK_BIT_NONE) continue;
+
+					TileIndex neighbor = TileXY(nx, ny);
+					SliceID neighbor_sid = _multilayer_map.FindSliceAt(neighbor, platform->depth);
+					if (neighbor_sid == INVALID_SLICE_ID) continue;
+
+					const TileSlice &neighbor_slice = _multilayer_map.GetSlice(neighbor_sid);
+					if (neighbor_slice.kind == SliceKind::Portal) {
+						if (distance + 1 < best_distance) {
+							best_distance = distance + 1;
+							best_portal = neighbor;
+						}
+						continue;
+					}
+
+					TrackBits neighbor_tracks = get_tracks(neighbor_slice);
+					if (neighbor_tracks == TRACK_BIT_NONE) continue;
+					if ((neighbor_tracks & DiagdirReachesTracks(dir)) == TRACK_BIT_NONE) continue;
+
+					if (visited.insert(neighbor.base()).second) {
+						open.push({neighbor, distance + 1});
+					}
+				}
+			}
+		}
+
+		if (best_portal != INVALID_TILE) return best_portal;
 	}
 
 	return st->xy;
@@ -3063,10 +4236,15 @@ static void TrainEnterStation(Train *v, StationID station)
 	v->force_proceed = TFP_NONE;
 	InvalidateWindowData(WC_VEHICLE_VIEW, v->index);
 
+	/* Like on the surface, arriving never touches VehState::Stopped: a train
+	 * at a station is OT_LOADING with cur_speed 0, and Stopped only ever
+	 * means the player (or a script) stopped it. */
 	v->BeginLoading();
 
-	TriggerStationRandomisation(st, v->tile, StationRandomTrigger::VehicleArrives);
-	TriggerStationAnimation(st, v->tile, StationAnimationTrigger::VehicleArrives);
+	if (IsTileType(v->tile, TileType::Station)) {
+		TriggerStationRandomisation(st, v->tile, StationRandomTrigger::VehicleArrives);
+		TriggerStationAnimation(st, v->tile, StationAnimationTrigger::VehicleArrives);
+	}
 }
 
 /* Check if the vehicle is compatible with the specified tile */
@@ -3129,6 +4307,8 @@ static bool TrainMovedChangeSignals(TileIndex tile, DiagDirection dir)
 void Train::ReserveTrackUnderConsist() const
 {
 	for (const Train *u = this; u != nullptr; u = u->Next()) {
+		/* Underground parts hold no surface track. */
+		if (!u->IsOnSurfaceLayer()) continue;
 		switch (u->track) {
 			case TRACK_BIT_WORMHOLE:
 				TryReserveRailTrack(u->tile, DiagDirToDiagTrack(GetTunnelBridgeDirection(u->tile)));
@@ -3158,13 +4338,24 @@ uint Train::Crash(bool flooded)
 		 * Also clear all reserved tracks the train is currently on. */
 		if (!this->flags.Test(VehicleRailFlag::Stuck)) FreeTrainTrackReservation(this);
 		for (const Train *v = this; v != nullptr; v = v->Next()) {
-			ClearPathReservation(v, v->tile, v->GetVehicleTrackdir());
-			if (IsTileType(v->tile, TileType::TunnelBridge)) {
+			/* Surface reservations only exist under surface (and portal column) parts. */
+			if (v->IsOnSurfaceLayer()) ClearPathReservation(v, v->tile, v->GetVehicleTrackdir());
+			if (v->IsOnSurfaceLayer() && IsTileType(v->tile, TileType::TunnelBridge)) {
 				/* ClearPathReservation will not free the wormhole exit
 				 * if the train has just entered the wormhole. */
 				SetTunnelBridgeReservation(GetOtherTunnelBridgeEnd(v->tile), false);
 			}
+			/* Release underground track reservations вЂ” crashed trains persist for
+			 * animation but their PBS reservations must not block other trains. */
+			if (v->underground_slice != 0) {
+				TileRef ug_ref{TileIndex(v->underground_tile_raw), static_cast<SliceID>(v->underground_slice)};
+				Track ug_track = FindFirstTrack(v->track);
+				if (IsValidTrack(ug_track)) UnreserveUndergroundTrack(ug_ref, ug_track);
+			}
 		}
+		/* A path held for a dive the train will never make. */
+		FreeUndergroundEntryReservation(this);
+		ReleaseUndergroundExitClaims(this);
 
 		/* we may need to update crossing we were approaching,
 		 * but must be updated after the train has been marked crashed */
@@ -3216,6 +4407,10 @@ static uint CheckTrainCollision(Vehicle *v, Train *t)
 	/* not a train or in depot */
 	if (v->type != VEH_TRAIN || Train::From(v)->track == TRACK_BIT_DEPOT) return 0;
 
+	/* Trains on different layers (surface vs. underground, or different
+	 * underground depths) share the tile hash but can never touch. */
+	if (!TrainsShareLayer(Train::From(v), t)) return 0;
+
 	/* do not crash into trains of another company. */
 	if (v->owner != t->owner) return 0;
 
@@ -3241,6 +4436,10 @@ static uint CheckTrainCollision(Vehicle *v, Train *t)
 
 	/* Happens when there is a train under bridge next to bridge head */
 	if (abs(v->z_pos - t->z_pos) > 5) return 0;
+
+	Debug(misc, 1, "train collision: {} (front {}) at ({},{}) ug={} depth={} track=0x{:X} dir={} res=0x{:X} speed={} | {} (front {}) at ({},{}) ug={} depth={} track=0x{:X} dir={} res=0x{:X} speed={}",
+		t->index.base(), t->First()->index.base(), TileX(t->tile), TileY(t->tile), t->IsUnderground(), t->underground_depth, (uint)t->track, (int)t->direction, (uint)GetReservedTrackbits(t->tile), t->First()->cur_speed,
+		v->index.base(), coll->index.base(), TileX(v->tile), TileY(v->tile), Train::From(v)->IsUnderground(), Train::From(v)->underground_depth, (uint)Train::From(v)->track, (int)v->direction, (uint)GetReservedTrackbits(v->tile), coll->cur_speed);
 
 	/* Crash both trains. Two statements required to guarantee execution
 	 * order because RandomRange() is involved. */
@@ -3306,8 +4505,502 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 	for (prev = v->Previous(); v != nomove; prev = v, v = v->Next()) {
 		DiagDirection enterdir = DIAGDIR_BEGIN;
 		bool update_signals_crossing = false; // will we update signals or crossing state?
+		TileIndex left_mouth = INVALID_TILE; // portal tile the last vehicle of an underground train just left
 
 		GetNewVehiclePosResult gp = GetNewVehiclePos(v);
+
+		/* Check if this train part is currently underground. */
+		if (v->IsUnderground()) {
+			/* Train is underground вЂ” handle movement via multi-layer map. */
+
+			/* Re-check signal when stopped on same tile (train waiting at red). */
+			if (gp.old_tile == gp.new_tile && v->IsFrontEngine() && v->cur_speed == 0 && v->underground_slice != 0) {
+				/* Standing on a platform it should stop at (e.g. it braked to a halt
+				 * there, or its order changed while it stood still): arrive now.
+				 * This is a one-shot arrival like VETS_ENTERED_STATION on the
+				 * surface: TrainEnterStation sets last_station_visited, so
+				 * ShouldStopAtStation() is false afterwards, and a train that is
+				 * already loading or was stopped by the player never re-arrives. */
+				if (!v->current_order.IsType(OT_LOADING) && !v->vehstatus.Test(VehState::Stopped)) {
+					if (StationID station = GetOccupiedUndergroundStationToStopAt(v); station != StationID::Invalid()) {
+						v->subspeed = 0;
+						TrainEnterStation(v, station);
+						goto ug_no_move;
+					}
+				}
+
+			}
+
+			/* A signal on this tile along the way stands at the far edge of the
+			 * tile: the front may not come near that edge until the train holds
+			 * the block behind the signal. It stops half a vehicle short of the
+			 * edge: the train ahead holds the next tile only while the centre of
+			 * its last vehicle is in it, so its tail can still hang half a
+			 * vehicle back over the edge into this tile. */
+			if (prev == nullptr && v->underground_slice != 0 && _multilayer_map.IsValidSlice(static_cast<SliceID>(v->underground_slice))) {
+				TileRef cur_ref{gp.old_tile, static_cast<SliceID>(v->underground_slice)};
+				Track cur_track = FindFirstTrack(v->track);
+				Trackdir cur_td = IsValidTrack(cur_track) ? TrackDirectionToTrackdir(cur_track, v->direction) : INVALID_TRACKDIR;
+				if (IsValidTrackdir(cur_td) && HasUndergroundSignalOnTrackdir(_multilayer_map.GetSlice(cur_ref.slice), cur_td)) {
+					int dist = gp.old_tile == gp.new_tile ? DistanceToTileExit(gp.x, gp.y, TrackdirToExitdir(cur_td)) : -1;
+					if (dist < UndergroundStopDistance(v, cur_ref, cur_td) && !UndergroundBlockBeyondHeld(v, cur_ref, cur_td)) {
+						bool due = UndergroundRetryDue(v);
+						if (!due || GetUndergroundSignalState(cur_ref, cur_td, v->index) == SIGNAL_STATE_RED || !ReserveUndergroundSignalBlock(v, cur_ref, cur_td)) {
+							/* Red, or the block behind it is held: stop the whole train
+							 * in front of it, like at a surface signal. */
+							if (due) UndergroundRetryLater(v);
+							v->cur_speed = 0;
+							v->subspeed = 0;
+							v->progress = 255; // every bit of acceleration hits the signal again
+							return false;
+						}
+					}
+				}
+				/* Without a signal too: the next tile held by another train keeps the
+				 * front half a vehicle short of the edge, clear of that train's tail. */
+				if (IsValidTrackdir(cur_td) && gp.old_tile == gp.new_tile) {
+					if (DistanceToTileExit(gp.x, gp.y, TrackdirToExitdir(cur_td)) < UndergroundStopDistance(v, cur_ref, cur_td) &&
+							UndergroundNextTileHeldByOther(v, cur_ref, cur_td)) {
+						v->cur_speed = 0;
+						v->subspeed = 0;
+						v->progress = 255;
+						return false;
+					}
+				}
+			}
+
+			/* Arriving at a station: the front stops at the far end of the last
+			 * tile of the platform, like at a surface platform, so the whole
+			 * train stands in the station as far as the platform is long. */
+			if (prev == nullptr && !v->current_order.IsType(OT_LOADING)) {
+				if (StationID station = GetUndergroundPlatformEndToStopAt(v); station != StationID::Invalid()) {
+					Track track = FindFirstTrack(v->track);
+					DiagDirection exitdir = TrackdirToExitdir(TrackDirectionToTrackdir(track, v->direction));
+					int dist = DistanceToTileExit(gp.x, gp.y, exitdir);
+					if (gp.old_tile != gp.new_tile || dist <= 1) {
+						if (gp.old_tile != gp.new_tile) {
+							gp.x = v->x_pos;
+							gp.y = v->y_pos;
+						}
+						v->cur_speed = 0;
+						v->subspeed = 0;
+						TrainEnterStation(v, station);
+						goto ug_no_move;
+					} else {
+						/* On the stopping tile brake down towards the stop, as
+						 * VehicleEnter_Station does on a surface platform. */
+						v->vehstatus.Set(VehState::TrainSlowing);
+						uint16_t spd = static_cast<uint16_t>(std::max(0, (dist - 1) * 20 - 15));
+						if (spd < v->cur_speed) v->cur_speed = spd;
+					}
+				}
+			}
+
+			if (gp.old_tile != gp.new_tile) {
+				enterdir = DiagdirBetweenTiles(gp.old_tile, gp.new_tile);
+
+				/* Leaving a ramp changes the depth the train continues at. */
+				int16_t move_depth = v->underground_depth;
+				if (v->underground_slice != 0 && _multilayer_map.IsValidSlice(static_cast<SliceID>(v->underground_slice))) {
+					const TileSlice &cur_s = _multilayer_map.GetSlice(static_cast<SliceID>(v->underground_slice));
+					if (cur_s.kind == SliceKind::Ramp &&
+							DiagDirToAxis(enterdir) == DiagDirToAxis(static_cast<DiagDirection>(cur_s.ramp.direction))) {
+						move_depth = (enterdir == static_cast<DiagDirection>(cur_s.ramp.direction)) ? cur_s.ramp.exit_depth : cur_s.ramp.entry_depth;
+					}
+				}
+
+				/* Check for tracks at the continuation depth in the new tile. */
+				TrackBits bits = GetUndergroundTrackBits(gp.new_tile, move_depth, enterdir);
+
+				/* One-way signals (every type but the path signal) cannot be passed
+				 * from behind, like on the surface: for a train without a path past
+				 * them they end the line, it turns round there. */
+				if (prev == nullptr && bits != TRACK_BIT_NONE) {
+					SliceID sig_sid = _multilayer_map.FindSliceAt(gp.new_tile, move_depth);
+					if (sig_sid != INVALID_SLICE_ID && CanSliceCarrySignals(_multilayer_map.GetSlice(sig_sid))) {
+						const TileSlice &sig_slice = _multilayer_map.GetSlice(sig_sid);
+						for (Track t : SetTrackBitIterator(bits)) {
+							if (HasUndergroundOnewaySignalBlockingTrackdir(sig_slice, TrackEnterdirToTrackdir(t, enterdir))) bits &= ~TrackToTrackBits(t);
+						}
+					}
+				}
+
+				/* Rail the train has no power on ends the line for it, like
+				 * CheckCompatibleRail on the surface: it turns round instead of
+				 * coasting onto it and being stranded there. */
+				if (prev == nullptr && bits != TRACK_BIT_NONE) {
+					SliceID rt_sid = _multilayer_map.FindSliceAt(gp.new_tile, move_depth);
+					if (rt_sid != INVALID_SLICE_ID && !CanTrainRunOnUndergroundSlice(v, _multilayer_map.GetSlice(rt_sid))) bits = TRACK_BIT_NONE;
+				}
+
+				if (bits == TRACK_BIT_NONE) {
+					/* Check if this is an exit portal вЂ” return to surface. */
+					SliceID exit_sid = _multilayer_map.FindSliceByKind(gp.new_tile, SliceKind::Portal);
+					/* A portal reached from behind (track built on its surface side) is
+					 * no way out but a dead end. */
+					if (exit_sid != INVALID_SLICE_ID && enterdir != ReverseDiagDir(GetPortalDiveDirection(gp.new_tile, _multilayer_map.GetSlice(exit_sid)))) {
+						exit_sid = INVALID_SLICE_ID;
+					}
+					if (exit_sid != INVALID_SLICE_ID) {
+						/* Exit: place train on PORTAL tile (has surface rails from CmdBuildPortal).
+						 * Surface TrainController will handle moving to beyond_tile on next tick. */
+						const TileSlice &exit_ps = _multilayer_map.GetSlice(exit_sid);
+						DiagDirection portal_dir = GetPortalDiveDirection(gp.new_tile, exit_ps);
+						DiagDirection outward_dir = ReverseDiagDir(portal_dir);
+
+						/* Check portal tile has surface tracks. */
+						TrackStatus ts = GetTileTrackStatus(gp.new_tile, TRANSPORT_RAIL, 0);
+						TrackBits portal_tracks = TrackStatusToTrackBits(ts);
+
+						if (portal_tracks == TRACK_BIT_NONE) {
+							/* Portal has no surface rails вЂ” dead end. Reverse the
+							 * whole consist; flipping just this part would tear
+							 * the train apart. */
+							if (prev != nullptr) {
+								v->cur_speed = 0;
+								continue; /* The front engine handles the reversal. */
+							}
+							v->wait_counter = 0;
+							v->cur_speed = 0;
+							v->subspeed = 0;
+							if (reverse) ReverseTrainDirection(v);
+							return false;
+						}
+
+						/* The mouth works like a signal into the surface block in front of
+						 * it. An underground train is not seen by the surface signal blocks
+						 * (unlike a train in a vanilla tunnel, which is part of its block),
+						 * so the way out is checked before the train comes out: the mouth
+						 * must be free of surface traffic (a train about to dive holds the
+						 * mouth track, its path ends there, or stands on it), the block in
+						 * front of it free, and with path signals the way on reserved up
+						 * to the next safe waiting position. Usually that was done before
+						 * the train entered the last underground block in front of the
+						 * mouth (MayComeOutOfPortal); otherwise it waits below ground here.
+						 * Hold the mouth from now on; the surface rules release it behind
+						 * the train. */
+						Track mouth_track = (DiagDirToAxis(outward_dir) == AXIS_X) ? TRACK_X : TRACK_Y;
+						if (prev == nullptr) {
+							bool own_part_on_mouth = HasVehicleOnTile(gp.new_tile, [v](const Vehicle *u) {
+								return u->type == VEH_TRAIN && Train::From(u)->First() == v;
+							});
+							bool other_on_mouth = HasVehicleOnTile(gp.new_tile, [v](const Vehicle *u) {
+								return u->type == VEH_TRAIN && !u->vehstatus.Test(VehState::Crashed) && Train::From(u)->First() != v;
+							});
+							bool mouth_held = (GetReservedTrackbits(gp.new_tile) & TrackToTrackBits(mouth_track)) != TRACK_BIT_NONE;
+							/* Reserved under its own claim: its way out, see MayComeOutOfPortal. */
+							bool own_way_out = mouth_held && GetPortalExitClaimant(gp.new_tile) == v->index;
+							bool may_exit = !other_on_mouth && (!mouth_held || own_part_on_mouth || own_way_out);
+							if (may_exit && !own_part_on_mouth && !own_way_out && IsTileType(gp.new_tile, TileType::Railway)) {
+								bool due = UndergroundRetryDue(v);
+								/* The claim of a train following it out (a game saved before
+								 * claims were made only together with the way out) does not
+								 * count against the train in the mouth; that one keeps it. */
+								VehicleID claimant = GetPortalExitClaimant(gp.new_tile);
+								bool other_claim = claimant != VehicleID::Invalid() && claimant != v->index && !mouth_held;
+								if (other_claim) ReleasePortalExit(gp.new_tile);
+								may_exit = due && MayComeOutOfPortal(v, gp.new_tile);
+								if (other_claim) ClaimPortalExit(gp.new_tile, claimant);
+								if (!may_exit && due) UndergroundRetryLater(v);
+							}
+							if (!may_exit) {
+								/* Keep the others out while it waits, unless one is in the mouth. */
+								if (!other_on_mouth && GetPortalExitClaimant(gp.new_tile) == VehicleID::Invalid()) ClaimUndergroundExit(v, gp.new_tile);
+								v->cur_speed = 0;
+								v->subspeed = 0;
+								v->progress = 255;
+								return false;
+							}
+							if (!HasReservedTracks(gp.new_tile, TrackToTrackBits(mouth_track))) TryReserveRailTrack(gp.new_tile, mouth_track, false);
+							/* Out now: the train itself occupies the block from here on. */
+							if (GetPortalExitClaimant(gp.new_tile) == v->index) ReleasePortalExit(gp.new_tile);
+						}
+
+						/* Release the underground reservation on the old tile when the
+						 * last vehicle leaves it. */
+						if (v->Next() == nullptr && v->underground_slice != 0) {
+							TileRef old_ref{TileIndex(v->underground_tile_raw), static_cast<SliceID>(v->underground_slice)};
+							Track old_track = FindFirstTrack(v->track);
+							if (IsValidTrack(old_track)) UnreserveUndergroundTrack(old_ref, old_track);
+						}
+
+						v->underground_depth = 0;
+						v->underground_slice = 0;
+						v->underground_tile_raw = 0;
+						v->vehstatus.Reset(VehState::Hidden);
+
+						v->tile = gp.new_tile; /* Portal tile. */
+
+						/* Use tracks from portal tile surface, straight track matching axis. */
+						Track portal_axis_track = (DiagDirToAxis(outward_dir) == AXIS_X) ? TRACK_X : TRACK_Y;
+						if (portal_tracks & TrackToTrackBits(portal_axis_track)) {
+							v->track = TrackToTrackBits(portal_axis_track);
+						} else {
+							v->track = TrackToTrackBits(FindFirstTrack(portal_tracks));
+						}
+						if (DiagDirToDir(outward_dir) != v->direction) {
+							v->direction = DiagDirToDir(outward_dir);
+							direction_changed = true;
+						}
+
+						/* Place at entry edge of portal tile. Like for any tile change the
+						 * table is indexed by the direction of travel; indexing it by the
+						 * edge put the part on the far side of the tile, a step ahead of
+						 * the parts behind it (broken train length). */
+						Track ct = FindFirstTrack(v->track);
+						if (ct < TRACK_END) {
+							const uint8_t *b = _initial_tile_subcoord[ct][outward_dir];
+							v->x_pos = TileX(gp.new_tile) * TILE_SIZE + b[0];
+							v->y_pos = TileY(gp.new_tile) * TILE_SIZE + b[1];
+						} else {
+							v->x_pos = TileX(gp.new_tile) * TILE_SIZE + TILE_SIZE / 2;
+							v->y_pos = TileY(gp.new_tile) * TILE_SIZE + TILE_SIZE / 2;
+						}
+						v->z_pos = GetSlopePixelZ(v->x_pos, v->y_pos, true);
+
+						v->UpdatePosition();
+						v->UpdateViewport(true, true);
+
+						/* The train now occupies the surface block of the mouth; it came
+						 * into it without passing a signal. In a block with path signals
+						 * it reserves its way on, like a train entering such a block
+						 * through a block signal (see update_signals_crossing below):
+						 * every train in a path signal block holds the tile it is on, a
+						 * later path search starts from there. */
+						if (prev == nullptr && IsTileType(gp.new_tile, TileType::Railway)) {
+							if (UpdateSignalsOnSegment(gp.new_tile, outward_dir, GetTileOwner(gp.new_tile)) == SIGSEG_PBS && !TryPathReserve(v)) {
+								MarkTrainAsStuck(v);
+							}
+						}
+
+						/* Force line-end check NOW, before any movement.
+						 * This catches dead ends on next tile and slows/reverses. */
+						if (v->IsFrontEngine()) TrainCheckIfLineEnds(v, false);
+
+						continue;
+					}
+					/* Dead end underground вЂ” stop and reverse the whole consist;
+					 * flipping just this part would tear the train apart. */
+					if (prev != nullptr) {
+						v->cur_speed = 0;
+						continue; /* The front engine handles the reversal. */
+					}
+					v->wait_counter = 0;
+					v->cur_speed = 0;
+					v->subspeed = 0;
+					if (reverse) ReverseTrainDirection(v);
+					return false;
+				}
+
+				SliceID new_sid = _multilayer_map.FindSliceAt(gp.new_tile, move_depth);
+				if (new_sid == INVALID_SLICE_ID) {
+					/* Track bits were found but no slice exists at this depth вЂ” corrupted
+					 * state. Stop instead of entering a half-underground state (slice = 0
+					 * with non-zero depth) that the rest of the code can't handle. */
+					v->cur_speed = 0;
+					continue;
+				}
+
+				/* Choose track. */
+				TrackBits chosen_track;
+				if (prev == nullptr) {
+					TileRef new_ref{gp.new_tile, new_sid};
+					SliceKind new_kind = _multilayer_map.GetSlice(new_sid).kind;
+					/* Portals carry no reservation. */
+					bool reservable = new_kind == SliceKind::Track || new_kind == SliceKind::StationTile || new_kind == SliceKind::Ramp;
+					chosen_track = GetUndergroundReservedTrackbits(new_ref, v->index) & bits;
+
+					if (chosen_track == TRACK_BIT_NONE && v->underground_slice != 0 &&
+							_multilayer_map.IsValidSlice(static_cast<SliceID>(v->underground_slice))) {
+						/* No reservation of our own onto the new tile: the previous one
+						 * ended here (at a signal behind us, a platform end, after a
+						 * reversal). Re-path and reserve the next leg, like surface PBS
+						 * does when passing a signal; a lost train holds the stretch to
+						 * the next signal. Without this, track choice at underground
+						 * junctions degrades to "first track". */
+						TileIndex ug_target = GetUndergroundOrderTargetTile(v);
+						if (ug_target == INVALID_TILE &&
+								(v->current_order.IsType(OT_GOTO_STATION) || v->current_order.IsType(OT_GOTO_WAYPOINT))) {
+							ug_target = v->dest_tile;
+						}
+						Track cur_track = FindFirstTrack(v->track);
+						Trackdir cur_td = IsValidTrack(cur_track) ? TrackDirectionToTrackdir(cur_track, v->direction) : INVALID_TRACKDIR;
+						if (IsValidTrackdir(cur_td)) {
+							TileRef cur_ref{gp.old_tile, static_cast<SliceID>(v->underground_slice)};
+							bool due = UndergroundRetryDue(v);
+							bool got = false;
+							if (due) {
+								Yapf3DResult repath = Yapf3DFindPathFromRef(cur_ref, cur_td, ug_target, GetUndergroundOrderTargetStation(v), v);
+								HandleUndergroundPathfindingResult(v, repath.path_found, ug_target, GetUndergroundOrderTargetStation(v));
+								got = repath.path_found ? ReserveUndergroundPathFor(v, repath, true) : Yapf3DReserveToNextSignal(cur_ref, cur_td, v);
+							}
+							if (!got && reservable) {
+								/* The way ahead is held by another train (say, one using the
+								 * crossover in front of a terminus): wait here, like at a red
+								 * signal, instead of driving on unreserved track. */
+								if (due) UndergroundRetryLater(v);
+								v->cur_speed = 0;
+								v->subspeed = 0;
+								v->progress = 255;
+								return false;
+							}
+							chosen_track = GetUndergroundReservedTrackbits(new_ref, v->index) & bits;
+						}
+					}
+
+					if (chosen_track == TRACK_BIT_NONE) {
+						/* Nothing of ours is reserved here (the tile cannot carry a
+						 * reservation, or the line ends right behind it). Never run
+						 * onto track another train holds. */
+						Track first = FindFirstTrack(bits);
+						if (reservable && IsUndergroundTrackReservedByOther(new_ref, first, v->index)) {
+							v->cur_speed = 0;
+							v->subspeed = 0;
+							v->progress = 255;
+							return false;
+						}
+						chosen_track = TrackToTrackBits(first);
+					} else if (KillFirstBit(chosen_track) != TRACK_BIT_NONE) {
+						chosen_track = TrackToTrackBits(FindFirstTrack(chosen_track));
+					}
+				} else {
+					/* Wagons must stay on the consist's path. When prev is on this
+					 * very tile, copy its track; otherwise follow the engine's
+					 * reserved trail (kept until the last vehicle passes), which is
+					 * the only junction-safe rule. */
+					chosen_track = TRACK_BIT_NONE;
+					if (prev->IsUnderground() && TileIndex(prev->underground_tile_raw) == gp.new_tile) {
+						chosen_track = static_cast<TrackBits>(prev->track) & bits;
+					}
+					if (chosen_track == TRACK_BIT_NONE && new_sid != INVALID_SLICE_ID) {
+						TileRef follow_ref{gp.new_tile, new_sid};
+						chosen_track = GetUndergroundReservedTrackbits(follow_ref, v->First()->index) & bits;
+					}
+					if (chosen_track != TRACK_BIT_NONE && KillFirstBit(chosen_track) != TRACK_BIT_NONE) {
+						chosen_track = TrackToTrackBits(FindFirstTrack(chosen_track));
+					}
+					if (chosen_track == TRACK_BIT_NONE) chosen_track = TrackToTrackBits(FindFirstTrack(bits));
+				}
+
+				/* Safety guard. */
+				if (chosen_track == TRACK_BIT_NONE) {
+					v->cur_speed = 0;
+					continue;
+				}
+
+				/* Update position for entering new underground tile. */
+				const uint8_t *b = _initial_tile_subcoord[FindFirstBit(chosen_track)][enterdir];
+				gp.x = (gp.x & ~0xF) | b[0];
+				gp.y = (gp.y & ~0xF) | b[1];
+				Direction chosen_dir = (Direction)b[2];
+
+				/* Hold the track under the front on the new tile (a no-op when the
+				 * path reservation already covers it). When another train holds it
+				 * the front does not move onto it. A crossing held by the train's
+				 * own tail (a loop over a diamond) is no reason to stop: the train
+				 * would wait for itself for ever. */
+				if (v->IsFrontEngine() && new_sid != INVALID_SLICE_ID) {
+					TileRef new_ref{gp.new_tile, new_sid};
+					SliceKind new_kind = _multilayer_map.GetSlice(new_sid).kind;
+					Track new_track = FindFirstTrack(chosen_track);
+					/* Portals carry no reservation. */
+					if ((new_kind == SliceKind::Track || new_kind == SliceKind::StationTile || new_kind == SliceKind::Ramp) &&
+							!TryReserveUndergroundTrack(new_ref, new_track, v->index)) {
+						Debug(misc, 1, "underground reservation failed: train {} entering ({},{}) depth {} track {} held by train {}",
+							v->index.base(), TileX(gp.new_tile), TileY(gp.new_tile), move_depth, new_track, GetUndergroundReservationOwner(new_ref).base());
+						if (IsUndergroundTrackReservedByOther(new_ref, new_track, v->index)) {
+							v->cur_speed = 0;
+							v->subspeed = 0;
+							v->progress = 255;
+							return false;
+						}
+					}
+				}
+
+				/* Clear the reservation on the previous underground tile only when
+				 * the LAST vehicle leaves it. Clearing it per-wagon erased the
+				 * engine's reserved trail before trailing wagons could follow it,
+				 * so at junctions wagons picked a different branch than the engine. */
+				if (v->Next() == nullptr && v->underground_slice != 0) {
+					TileRef old_ref{TileIndex(v->underground_tile_raw), static_cast<SliceID>(v->underground_slice)};
+					Track old_track = FindFirstTrack(v->track);
+					/* Only what this train holds: the track may be another train's. */
+					if (IsValidTrack(old_track) && (GetUndergroundReservedTrackbits(old_ref, v->First()->index) & TrackToTrackBits(old_track)) != TRACK_BIT_NONE) {
+						UnreserveUndergroundTrack(old_ref, old_track);
+						/* On a loop over a diamond the front may stand on the other
+						 * track of this tile, which it could not hold while the tail
+						 * held this one: hold it now. */
+						const Train *front = v->First();
+						if (front != v && front->IsUnderground() && front->underground_tile_raw == old_ref.tile.base() &&
+								static_cast<SliceID>(front->underground_slice) == old_ref.slice) {
+							Track front_track = FindFirstTrack(front->track);
+							if (IsValidTrack(front_track)) TryReserveUndergroundTrack(old_ref, front_track, front->index);
+						}
+					}
+
+					/* If the last vehicle steps off a portal column, release the
+					 * surface reservation on the portal tile: the path that led the
+					 * consist into the portal ended there and nothing on the surface
+					 * will ever free it once the whole train is underground. */
+					TileIndex old_tile = TileIndex(v->underground_tile_raw);
+					SliceID portal_sid = _multilayer_map.FindSliceByKind(old_tile, SliceKind::Portal);
+					if (portal_sid != INVALID_SLICE_ID && old_tile != gp.new_tile) {
+						const TileSlice &ps = _multilayer_map.GetSlice(portal_sid);
+						Track surf_track = (DiagDirToAxis(static_cast<DiagDirection>(ps.portal.direction)) == AXIS_X) ? TRACK_X : TRACK_Y;
+						if (GetReservedTrackbits(old_tile) & TrackToTrackBits(surf_track)) {
+							UnreserveRailTrack(old_tile, surf_track);
+						}
+						/* The path held for this dive is now the train's ordinary reservation. */
+						if (UndergroundTrainState *st = GetUndergroundState(v->First()); st != nullptr) st->entry_reserved_portal = INVALID_TILE;
+						left_mouth = old_tile;
+					}
+				}
+
+				/* Update train state. */
+				v->tile = gp.new_tile;
+				v->track = chosen_track;
+
+				v->underground_depth = move_depth;
+				v->underground_slice = new_sid;
+				v->underground_tile_raw = gp.new_tile.base();
+
+				/* Fully underground from the first step off the portal column. */
+				v->vehstatus.Set(VehState::Hidden);
+
+				/* Integrity watch: a wagon drifting more than one tile from the
+				 * vehicle ahead means the consist is splitting (e.g. it took a
+				 * different branch at a junction). */
+				if (prev != nullptr && prev->IsUnderground() && prev->underground_tile_raw != 0 &&
+						DistanceManhattan(gp.new_tile, TileIndex(prev->underground_tile_raw)) > 1) {
+					Debug(misc, 1, "underground consist split: train part {} at ({},{}) but prev {} at ({},{})",
+						v->index.base(), TileX(gp.new_tile), TileY(gp.new_tile),
+						prev->index.base(), TileX(TileIndex(prev->underground_tile_raw)), TileY(TileIndex(prev->underground_tile_raw)));
+				}
+
+				/* Like on the surface any turning part counts: the curve speed
+				 * limit looks at the whole consist. */
+				if (chosen_dir != v->direction) {
+					v->direction = chosen_dir;
+					direction_changed = true;
+				}
+			}
+
+		ug_no_move:
+			/* Update vehicle position (train is hidden while underground).
+			 * Keep z_pos synced to surface height so exit doesn't cause z mismatch. */
+			v->x_pos = gp.x;
+			v->y_pos = gp.y;
+			v->z_pos = GetSlopePixelZ(gp.x, gp.y, true);
+			v->UpdatePosition();
+			v->UpdateViewport(true, true);
+			/* The whole train is below ground now: the surface block of the mouth is free. */
+			if (left_mouth != INVALID_TILE) {
+				SliceID mouth_sid = _multilayer_map.FindSliceByKind(left_mouth, SliceKind::Portal);
+				if (mouth_sid != INVALID_SLICE_ID) UpdatePortalMouthSignals(left_mouth, _multilayer_map.GetSlice(mouth_sid));
+			}
+			continue;
+		}
+
 		if (v->track != TRACK_BIT_WORMHOLE) {
 			/* Not inside tunnel */
 			if (gp.old_tile == gp.new_tile) {
@@ -3361,6 +5054,31 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 
 				TrackBits chosen_track;
 				if (prev == nullptr) {
+					/* Diving into a metro portal: hold the underground path first, as
+					 * the wormhole of a tunnel is held before a train enters it. Until
+					 * that path is free the train waits in front of the mouth and lets
+					 * the mouth go, so a train coming out of the tunnel can use it. */
+					if (HasEnterablePortal(gp.new_tile, enterdir)) {
+						Track mouth_track = AxisToTrack(DiagDirToAxis(enterdir));
+						bool other_on_mouth = HasVehicleOnTile(gp.new_tile, [v](const Vehicle *u) {
+							return u->type == VEH_TRAIN && !u->vehstatus.Test(VehState::Crashed) && Train::From(u)->First() != v;
+						});
+						/* A train already marked stuck is handled by the stuck handler
+						 * (retries with backoff, turns round after the timeout), as at a
+						 * red surface signal. */
+						bool stuck = v->flags.Test(VehicleRailFlag::Stuck);
+						if (other_on_mouth || stuck || !EnsureUndergroundEntryReservation(v, gp.new_tile, enterdir)) {
+							if (!other_on_mouth && (GetReservedTrackbits(gp.new_tile) & TrackToTrackBits(mouth_track)) != TRACK_BIT_NONE) {
+								UnreserveRailTrack(gp.new_tile, mouth_track);
+							}
+							if (!stuck) MarkTrainAsStuck(v);
+							v->cur_speed = 0;
+							v->subspeed = 0;
+							v->progress = 255;
+							return false;
+						}
+					}
+
 					/* Currently the locomotive is active. Determine which one of the
 					 * available tracks to choose */
 					chosen_track = TrackToTrackBits(ChooseTrainTrack(v, gp.new_tile, enterdir, bits, false, nullptr, true));
@@ -3408,6 +5126,8 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 								/* check if a train is waiting on the other side */
 								if (!HasVehicleOnTile(o_tile, [&exitdir](const Vehicle *u) {
 										if (u->type != VEH_TRAIN || u->vehstatus.Test(VehState::Crashed)) return false;
+										/* A train underground is not waiting at this surface signal. */
+										if (!IsVehicleOnSurfaceLayer(u)) return false;
 										const Train *t = Train::From(u);
 
 										/* not front engine of a train, inside wormhole or depot, crashed */
@@ -3464,13 +5184,48 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 						chosen_track = _connecting_track[enterdir][exitdir];
 					}
 					chosen_track &= bits;
+
+					/* A wagon following its consist into a metro portal: the
+					 * vehicle ahead is already underground, so the geometric
+					 * prev-following above can yield no (or an ambiguous)
+					 * track вЂ” both on the portal tile itself and on curves
+					 * leading to it. Stay on the consist's path: take the
+					 * portal's surface track, or any reachable piece. */
+					if (chosen_track == TRACK_BIT_NONE || KillFirstBit(chosen_track) != TRACK_BIT_NONE) {
+						if (prev->IsUnderground()) {
+							Track fallback = HasPortalOnTile(gp.new_tile) ? ChoosePortalSurfaceTrack(gp.new_tile, bits) : FindFirstTrack(bits);
+							if (IsValidTrack(fallback)) chosen_track = TrackToTrackBits(fallback);
+						}
+					}
 				}
 
-				/* Make sure chosen track is a valid track */
-				assert(
-						chosen_track == TRACK_BIT_X     || chosen_track == TRACK_BIT_Y ||
-						chosen_track == TRACK_BIT_UPPER || chosen_track == TRACK_BIT_LOWER ||
-						chosen_track == TRACK_BIT_LEFT  || chosen_track == TRACK_BIT_RIGHT);
+				/* Make sure chosen track is a valid track. With the multilayer
+				 * metro in the mix, an inconsistency here must NOT take the
+				 * whole game down: log everything, halt the consist and mark
+				 * it stuck instead of asserting. */
+				if (chosen_track == TRACK_BIT_NONE || KillFirstBit(chosen_track) != TRACK_BIT_NONE) {
+					Debug(misc, 0, "metro shield: invalid wagon track: v={} chosen=0x{:X} bits=0x{:X} tile={}({},{}) enterdir={} v_ug={} prev={} prev_tile={}({},{}) prev_track=0x{:X} prev_ug={}",
+						v->index.base(), chosen_track, bits, gp.new_tile.base(), TileX(gp.new_tile), TileY(gp.new_tile), enterdir,
+						v->IsUnderground(), prev->index.base(), prev->tile.base(), TileX(prev->tile), TileY(prev->tile), prev->track, prev->IsUnderground());
+
+					Train *shield_front = v->First();
+					if (bits != TRACK_BIT_NONE) {
+						/* Stay on rails: pick any reachable piece and continue,
+						 * but flag the consist so the player notices. */
+						chosen_track = TrackToTrackBits(FindFirstTrack(bits));
+						MarkTrainAsStuck(shield_front);
+					} else {
+						/* No rails at all under this wagon's destination tile:
+						 * freeze the consist in place rather than corrupting it. */
+						shield_front->cur_speed = 0;
+						shield_front->subspeed = 0;
+						MarkTrainAsStuck(shield_front);
+						if (_settings_client.gui.lost_vehicle_warn && shield_front->owner == _local_company) {
+							AddVehicleAdviceNewsItem(AdviceType::TrainStuck, GetEncodedString(STR_NEWS_TRAIN_IS_STUCK, shield_front->index), shield_front->index);
+						}
+						return false;
+					}
+				}
 
 				/* Update XY to reflect the entrance to the new tile, and select the direction to use */
 				const uint8_t *b = _initial_tile_subcoord[FindFirstBit(chosen_track)][enterdir];
@@ -3496,6 +5251,29 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 					if (v->Next() == nullptr) ClearPathReservation(v, v->tile, v->GetVehicleTrackdir());
 
 					v->tile = gp.new_tile;
+
+					/* Check if train entered a portal вЂ” transition to underground.
+					 * Wagons following an already-underground engine dive on the
+					 * portal tile regardless of approach axis (e.g. coming out of
+					 * a curve); they must NEVER dive on a non-portal tile, or
+					 * they end up "underground" in the void. */
+					bool dive = HasEnterablePortal(gp.new_tile, enterdir);
+					if (!dive && prev != nullptr && prev->IsUnderground() && !v->IsUnderground()) {
+						dive = _multilayer_map.FindSliceByKind(gp.new_tile, SliceKind::Portal) != INVALID_SLICE_ID;
+					}
+					if (dive) {
+						SliceID portal_sid = _multilayer_map.FindSliceByKind(gp.new_tile, SliceKind::Portal);
+						if (portal_sid != INVALID_SLICE_ID) {
+							const TileSlice &ps = _multilayer_map.GetSlice(portal_sid);
+							v->underground_depth = ps.span.z_bot;
+							v->underground_slice = portal_sid;
+							v->underground_tile_raw = gp.new_tile.base();
+							/* Stay VISIBLE while crossing the portal tile: the
+							 * vehicle slides under the portal arch (drawn in
+							 * front of it) and is hidden on its first step off
+							 * the portal column — a vanilla-tunnel-like dive. */
+						}
+					}
 
 					if (GetTileRailType(gp.new_tile) != GetTileRailType(gp.old_tile)) {
 						v->First()->ConsistChanged(CCF_TRACK);
@@ -3551,7 +5329,7 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 				v->x_pos = gp.x;
 				v->y_pos = gp.y;
 				v->UpdatePosition();
-				if (!v->vehstatus.Test(VehState::Hidden)) v->Vehicle::UpdateViewport(true);
+				if (!v->vehstatus.Test(VehState::Hidden) || ShouldDrawUndergroundTrainPart(v)) v->Vehicle::UpdateViewport(true);
 				continue;
 			}
 		}
@@ -3626,10 +5404,10 @@ static bool IsRailStationPlatformOccupied(TileIndex tile)
 	TileIndexDiff delta = TileOffsByAxis(GetRailStationAxis(tile));
 
 	for (TileIndex t = tile; IsCompatibleTrainStationTile(t, tile); t -= delta) {
-		if (HasVehicleOnTile(t, IsTrain)) return true;
+		if (HasVehicleOnTile(t, IsSurfaceTrain)) return true;
 	}
 	for (TileIndex t = tile + delta; IsCompatibleTrainStationTile(t, tile); t += delta) {
-		if (HasVehicleOnTile(t, IsTrain)) return true;
+		if (HasVehicleOnTile(t, IsSurfaceTrain)) return true;
 	}
 
 	return false;
@@ -3668,9 +5446,15 @@ static void DeleteLastWagon(Train *v)
 	TrackBits trackbits = v->track;
 	TileIndex tile = v->tile;
 	Owner owner = v->owner;
+	bool on_surface = v->IsOnSurfaceLayer();
 
 	delete v;
 	v = nullptr; // make sure nobody will try to read 'v' anymore
+
+	/* An underground part never held the surface track, crossing, platform
+	 * or signal block of the surface tile above it; its own underground
+	 * reservation was already released when the train crashed. */
+	if (!on_surface) return;
 
 	if (trackbits == TRACK_BIT_WORMHOLE) {
 		/* Vehicle is inside a wormhole, v->track contains no useful value then. */
@@ -3685,6 +5469,7 @@ static void DeleteLastWagon(Train *v)
 		TrackBits remaining_trackbits = TRACK_BIT_NONE;
 		for (const Vehicle *u : VehiclesOnTile(tile)) {
 			if (u->type != VEH_TRAIN || !u->vehstatus.Test(VehState::Crashed)) continue;
+			if (!IsVehicleOnSurfaceLayer(u)) continue;
 			TrackBits train_tbits = Train::From(u)->track;
 			if (train_tbits == TRACK_BIT_WORMHOLE) {
 				/* Vehicle is inside a wormhole, u->track contains no useful value then. */
@@ -3766,11 +5551,14 @@ static bool HandleCrashedTrain(Train *v)
 			if (--index < 0) {
 				r = Random();
 
-				CreateEffectVehicleRel(u,
-					GB(r,  8, 3) + 2,
-					GB(r, 16, 3) + 2,
-					GB(r,  0, 3) + 5,
-					EV_EXPLOSION_SMALL);
+				/* No explosion on the surface above an underground wreck. */
+				if (IsVehicleOnSurfaceLayer(u)) {
+					CreateEffectVehicleRel(u,
+						GB(r,  8, 3) + 2,
+						GB(r, 16, 3) + 2,
+						GB(r,  0, 3) + 5,
+						EV_EXPLOSION_SMALL);
+				}
 				break;
 			}
 		} while ((u = u->Next()) != nullptr);
@@ -3881,6 +5669,11 @@ static TileIndex TrainApproachingCrossingTile(const Train *v)
 	assert(v->IsFrontEngine());
 	assert(!v->vehstatus.Test(VehState::Crashed));
 
+	/* A train below ground, or on a portal column diving into the tunnel,
+	 * is heading for underground track: the surface tile ahead of it is
+	 * not on its path, even if it happens to be a level crossing. */
+	if (v->IsUnderground()) return INVALID_TILE;
+
 	if (!TrainCanLeaveTile(v)) return INVALID_TILE;
 
 	DiagDirection dir = VehicleExitDir(v->direction, v->track);
@@ -3973,7 +5766,8 @@ static bool TrainLocoHandler(Train *v, bool mode)
 		ReverseTrainDirection(v);
 	}
 
-	/* exit if train is stopped */
+	/* exit if train is stopped (also at an underground station: a stopped
+	 * train neither loads nor leaves until it is started again) */
 	if (v->vehstatus.Test(VehState::Stopped) && v->cur_speed == 0) return true;
 
 	bool valid_order = !v->current_order.IsType(OT_NOTHING) && v->current_order.GetType() != OT_CONDITIONAL;
@@ -3984,10 +5778,8 @@ static bool TrainLocoHandler(Train *v, bool mode)
 		v->flags.Reset(VehicleRailFlag::LeavingStation);
 		ReverseTrainDirection(v);
 		return true;
-	} else if (v->flags.Test(VehicleRailFlag::LeavingStation)) {
-		/* Try to reserve a path when leaving the station as we
-		 * might not be marked as wanting a reservation, e.g.
-		 * when an overlength train gets turned around in a station. */
+	} else if (v->flags.Test(VehicleRailFlag::LeavingStation) && !v->IsUnderground()) {
+		/* Try to reserve a path when leaving the station (surface only). */
 		DiagDirection dir = VehicleExitDir(v->direction, v->track);
 		if (IsRailDepotTile(v->tile) || IsTileType(v->tile, TileType::TunnelBridge)) dir = INVALID_DIAGDIR;
 
@@ -4019,7 +5811,17 @@ static bool TrainLocoHandler(Train *v, bool mode)
 
 		if (!turn_around && v->wait_counter % _settings_game.pf.path_backoff_interval != 0 && v->force_proceed == TFP_NONE) return true;
 		if (!TryPathReserve(v)) {
-			/* Still stuck. */
+			/* Still stuck. Below ground never turn round into a train coming up
+			 * behind: the two would only stand face to face. */
+			if (turn_around && v->IsUnderground()) {
+				const Train *last = v->Last();
+				Track last_track = last->IsUnderground() && last->underground_slice != 0 ? FindFirstTrack(last->track) : INVALID_TRACK;
+				if (IsValidTrack(last_track) && _multilayer_map.IsValidSlice(static_cast<SliceID>(last->underground_slice))) {
+					Trackdir back_td = ReverseTrackdir(TrackDirectionToTrackdir(last_track, last->direction));
+					TileRef back_ref{TileIndex(last->underground_tile_raw), static_cast<SliceID>(last->underground_slice)};
+					if (IsValidTrackdir(back_td) && UndergroundNextTileHeldByOther(v, back_ref, back_td)) turn_around = false;
+				}
+			}
 			if (turn_around) ReverseTrainDirection(v);
 
 			if (v->flags.Test(VehicleRailFlag::Stuck) && v->wait_counter > 2 * _settings_game.pf.wait_for_pbs_path * Ticks::DAY_TICKS) {
@@ -4057,12 +5859,13 @@ static bool TrainLocoHandler(Train *v, bool mode)
 		/* if the vehicle has speed 0, update the last_speed field. */
 		if (v->cur_speed == 0) v->SetLastSpeed();
 	} else {
-		TrainCheckIfLineEnds(v);
+		if (!v->IsUnderground()) TrainCheckIfLineEnds(v);
 		/* Loop until the train has finished moving. */
 		for (;;) {
 			j -= adv_spd;
 			TrainController(v, nullptr);
-			/* Don't continue to move if the train crashed. */
+			/* Don't continue to move if the train crashed. Underground fronts
+			 * only collide with trains on their own layer and depth. */
 			if (CheckTrainCollision(v)) break;
 			/* Determine distance to next map position */
 			adv_spd = v->GetAdvanceDistance();
@@ -4070,20 +5873,22 @@ static bool TrainLocoHandler(Train *v, bool mode)
 			/* No more moving this tick */
 			if (j < adv_spd || v->cur_speed == 0) break;
 
-			OrderType order_type = v->current_order.GetType();
-			/* Do not skip waypoints (incl. 'via' stations) when passing through at full speed. */
-			if ((order_type == OT_GOTO_WAYPOINT || order_type == OT_GOTO_STATION) &&
-						v->current_order.GetNonStopType().Test(OrderNonStopFlag::NoDestination) &&
-						IsTileType(v->tile, TileType::Station) &&
-						v->current_order.GetDestination() == GetStationIndex(v->tile)) {
-				ProcessOrders(v);
+			if (!v->IsUnderground()) {
+				OrderType order_type = v->current_order.GetType();
+				/* Do not skip waypoints (incl. 'via' stations) when passing through at full speed. */
+				if ((order_type == OT_GOTO_WAYPOINT || order_type == OT_GOTO_STATION) &&
+							v->current_order.GetNonStopType().Test(OrderNonStopFlag::NoDestination) &&
+							IsTileType(v->tile, TileType::Station) &&
+							v->current_order.GetDestination() == GetStationIndex(v->tile)) {
+					ProcessOrders(v);
+				}
 			}
 		}
 		v->SetLastSpeed();
 	}
 
 	for (Train *u = v; u != nullptr; u = u->Next()) {
-		if (u->vehstatus.Test(VehState::Hidden)) continue;
+		if (u->vehstatus.Test(VehState::Hidden) && !ShouldDrawUndergroundTrainPart(u)) continue;
 
 		u->UpdateViewport(false, false);
 	}
@@ -4210,8 +6015,14 @@ void Train::OnNewEconomyDay()
 
 		/* update destination */
 		if (this->current_order.IsType(OT_GOTO_STATION)) {
-			TileIndex tile = Station::Get(this->current_order.GetDestination().ToStationID())->train_station.tile;
-			if (tile != INVALID_TILE) this->dest_tile = tile;
+			StationID dest_station = this->current_order.GetDestination().ToStationID();
+			/* Metro-only stations: keep the portal destination computed by
+			 * GetOrderStationLocation вЂ” their train_station.tile is a fake
+			 * surface anchor with no rails on it. */
+			if (!StationUsesPortalRouting(dest_station.base())) {
+				TileIndex tile = Station::Get(dest_station)->train_station.tile;
+				if (tile != INVALID_TILE) this->dest_tile = tile;
+			}
 		}
 
 		if (this->running_ticks != 0) {
