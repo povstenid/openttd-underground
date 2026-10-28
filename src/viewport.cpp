@@ -1391,6 +1391,8 @@ static void ViewportAddLandscape()
 					if (_cur_ti.tile != INVALID_TILE && HasPortalOnTile(_cur_ti.tile)) {
 						DrawPortalOverlay(&_cur_ti);
 					}
+					/* The portal the portal tool would build under the cursor. */
+					if (_cur_ti.tile != INVALID_TILE) DrawSurfacePortalGhost(&_cur_ti);
 					/* Underpass exits of underground stations (pavilions are station tiles). */
 					if (_cur_ti.tile != INVALID_TILE && HasStationExitOverlay(_cur_ti.tile)) {
 						DrawStationExitOverlay(&_cur_ti);

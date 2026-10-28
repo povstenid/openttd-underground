@@ -23,6 +23,7 @@
 #include "../town_map.h"
 #include "../industry_map.h"
 #include "../slope_func.h"
+#include "../landscape.h"
 #include "../table/sprites.h"
 #include "../track_func.h"
 #include "../pbs.h"
@@ -1105,11 +1106,103 @@ static void DrawRampGhost(const TileInfo *ti, int16_t depth, bool slice_mode)
 	ctx.Flat(arrow, ghost->buildable ? PAL_NONE : PALETTE_SEL_TILE_RED, 8, 8, TILE_HEIGHT / 2);
 }
 
+/** Offset of the one-way road arrow pointing towards a direction, within SPR_ONEWAY_BASE's block. */
+static constexpr uint8_t _oneway_arrow[DIAGDIR_END] = {1, 4, 0, 3};
+
+/**
+ * Ghost of the portal the portal tool would build: pale where it can be built,
+ * red where it cannot, with an arrow along the line into the tunnel (and the
+ * "down" sign of the ramps for a portal diving into flat ground). The tail of
+ * the arrow is the side the line comes from on the surface.
+ * Seen from above (on the surface or in the X-ray view) it is the portal's
+ * arch on the surface tile; in the slice view the portal on its level when
+ * that level is viewed, else only the arrow on the plane.
+ * @param ti The tile.
+ * @param slice_mode The slice view is drawn.
+ */
+static void DrawPortalGhost(const TileInfo *ti, bool slice_mode)
+{
+	const UndergroundPortalGhost *ghost = GetUndergroundPortalGhost(ti->tile);
+	if (ghost == nullptr || !IsValidDiagDirection(ghost->dir)) return;
+
+	/* Drawn like the ramp ghost: in pale concrete where it can be built, in red where it cannot. */
+	PaletteID pal = ghost->buildable ? PALETTE_TO_TRANSPARENT : PALETTE_SEL_TILE_RED;
+	PaletteID arrow_pal = ghost->buildable ? PAL_NONE : PALETTE_SEL_TILE_RED;
+	DiagDirection dir = ghost->dir;
+	SpriteID arrow = SPR_ONEWAY_BASE + _oneway_arrow[dir];
+	/* The "down" sign stands over the tunnel end of the tile. */
+	static constexpr int8_t down_sign_x[DIAGDIR_END] = {3, 8, 13, 8};
+	static constexpr int8_t down_sign_y[DIAGDIR_END] = {8, 13, 8, 3};
+
+	if (!slice_mode) {
+		SpriteID base = SPR_METRO_PORTAL_HILL_BASE;
+		if (!ghost->hillside) {
+			base = Clamp(GetTileZ(ti->tile) - ghost->depth, 1, 2) == 1 ? SPR_METRO_PORTAL_CUT_SHALLOW_BASE : SPR_METRO_PORTAL_DIVE_BASE;
+		}
+		SpriteID image = base + dir * 2;
+		DrawGroundSprite(image, pal);
+		AddSortableSpriteToDraw(image + 1, pal, *ti, _portal_roof_bounds[dir], false);
+
+		/* The arrow lies on the ground, on a hillside on the incline like a one-way road's. */
+		if (ti->tileh == SLOPE_NE || ti->tileh == SLOPE_NW) {
+			arrow += ONEWAY_SLOPE_N_OFFSET;
+		} else if (ti->tileh == SLOPE_SE || ti->tileh == SLOPE_SW) {
+			arrow += ONEWAY_SLOPE_S_OFFSET;
+		}
+		/* The arrows are sorted above the arch (whose bounds are the tunnel roof's), so it never hides them. */
+		auto over_arch = [ti, arrow_pal](SpriteID image, int x, int y, int z) {
+			static constexpr int8_t sort_z = BB_Z_SEPARATOR + 2;
+			AddSortableSpriteToDraw(image, arrow_pal, ti->x, ti->y, ti->z,
+				SpriteBounds{{0, 0, sort_z}, {TILE_SIZE, TILE_SIZE, 1}, {static_cast<int8_t>(x), static_cast<int8_t>(y), static_cast<int8_t>(z - sort_z)}}, false);
+		};
+		over_arch(arrow, 8, 8, GetPartialPixelZ(8, 8, ti->tileh) + 2);
+		if (!ghost->hillside) over_arch(SPR_METRO_RAMP_ARROW_DOWN, down_sign_x[dir], down_sign_y[dir], 4);
+		return;
+	}
+
+	int16_t depth = GetUndergroundViewDepth();
+	LevelDrawContext ctx(ti, depth, true);
+	if (ghost->depth != depth) {
+		/* The portal is on another level: show where the line goes. */
+		ctx.Flat(arrow, arrow_pal, 8, 8, 7);
+		if (!ghost->hillside) ctx.Flat(SPR_METRO_RAMP_ARROW_DOWN, arrow_pal, down_sign_x[dir], down_sign_y[dir], 14);
+		return;
+	}
+
+	const RailTypeInfo *rti = GetRailTypeInfoSafe(ghost->railtype);
+	if (ghost->hillside) {
+		/* As a built hillside mouth is drawn on its level. */
+		ctx.Flat(rti->base_sprites.single_x + (DiagDirToAxis(dir) == AXIS_X ? 0 : 1), pal);
+		SpriteID image = SPR_METRO_TUNNEL_BASE + dir * 2;
+		ctx.Flat(image, pal);
+		ctx.Box(image + 1, pal, _portal_roof_bounds[dir]);
+		ctx.Flat(arrow, arrow_pal, 8, 8, 1);
+		return;
+	}
+
+	/* As a built dive portal is drawn on its level: a ramp rising from the tunnel side to the open side. */
+	ctx.Flat(SPR_METRO_PORTAL_RAMP_BASE + dir, pal);
+	ctx.Flat(GetInclinedRailSprite(dir, ghost->railtype), pal);
+	bool raised_north = (dir == DIAGDIR_SE || dir == DIAGDIR_SW);
+	ctx.Flat(arrow + (raised_north ? ONEWAY_SLOPE_N_OFFSET : ONEWAY_SLOPE_S_OFFSET), arrow_pal, 8, 8, TILE_HEIGHT / 2);
+	ctx.Flat(SPR_METRO_RAMP_ARROW_DOWN, arrow_pal, down_sign_x[dir], down_sign_y[dir], 7);
+}
+
+/**
+ * The ghost of the portal the portal tool would build on a surface tile in the
+ * normal view (see DrawPortalGhost).
+ */
+void DrawSurfacePortalGhost(const TileInfo *ti)
+{
+	DrawPortalGhost(ti, false);
+}
+
 void DrawUndergroundTile(const TileInfo *ti)
 {
 	DrawUndergroundTileContent(ti);
 	DrawBlueprintGhost(ti, GetUndergroundViewDepth(), false);
 	DrawRampGhost(ti, GetUndergroundViewDepth(), false);
+	DrawPortalGhost(ti, false);
 }
 
 void DrawUndergroundSliceTile(const TileInfo *ti)
@@ -1117,4 +1210,5 @@ void DrawUndergroundSliceTile(const TileInfo *ti)
 	DrawUndergroundSliceTileContent(ti);
 	DrawBlueprintGhost(ti, GetUndergroundViewDepth(), true);
 	DrawRampGhost(ti, GetUndergroundViewDepth(), true);
+	DrawPortalGhost(ti, true);
 }

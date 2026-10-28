@@ -788,8 +788,8 @@ struct BuildRailToolbarWindow : Window {
 			case WID_RAT_PICK_RAILTYPE: return HT_RECT;
 			case WID_RAT_BUILD_EXIT_PAVILION: return HT_RECT;
 			case WID_RAT_BUILD_EXIT_UNDERPASS: return HT_RECT;
-			case WID_RAT_BUILD_PORTAL: return HT_RAIL;
-			/* The ramp's ghost shows its direction; the tile is just framed. */
+			/* The ghosts of the portal and the ramp show their direction; the tile is just framed. */
+			case WID_RAT_BUILD_PORTAL: return HT_RECT;
 			case WID_RAT_BUILD_RAMP_DOWN: return HT_RECT;
 			case WID_RAT_BUILD_RAMP_UP: return HT_RECT;
 			default: NOT_REACHED();
@@ -1114,7 +1114,7 @@ struct BuildRailToolbarWindow : Window {
 
 	void OnMouseLoop() override
 	{
-		/* The ramp tools show the ramp they would build under the cursor. */
+		/* The ramp and portal tools show what they would build under the cursor. */
 		UpdateUndergroundRailToolGhost(this->last_user_action != INVALID_WIDGET && this->IsWidgetLowered(this->last_user_action) ? this->last_user_action : INVALID_WIDGET, this->railtype);
 	}
 

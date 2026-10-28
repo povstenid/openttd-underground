@@ -25,6 +25,9 @@ bool PlaceDivePortalSignal(TileIndex tile, Axis axis, uint &x, uint &y);
 /** Draw portal overlay on the surface tile (always visible). */
 void DrawPortalOverlay(const TileInfo *ti);
 
+/** Draw the ghost of the portal the portal tool would build on the surface tile. */
+void DrawSurfacePortalGhost(const TileInfo *ti);
+
 /** Check if a tile carries an underpass exit of an underground station (drawn over the road). */
 bool HasStationExitOverlay(TileIndex tile);
 

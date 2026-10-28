@@ -56,6 +56,21 @@ struct UndergroundRampGhost {
 
 const UndergroundRampGhost *GetUndergroundRampGhost(TileIndex tile);
 
+/** The portal the portal tool would build, shown under the cursor before it is built (client-side only). */
+struct UndergroundPortalGhost {
+	TileIndex tile = INVALID_TILE; ///< Tile of the portal, INVALID_TILE when none is shown.
+	DiagDirection dir = INVALID_DIAGDIR; ///< Direction into the tunnel, like PortalPayload::direction: the side the line goes underground.
+	DiagDirection command_dir = INVALID_DIAGDIR; ///< Direction passed to the command; on a hillside the slope decides \a dir.
+	int16_t depth = 0; ///< Level of the portal.
+	bool hillside = false; ///< A tunnel mouth at the foot of an incline, not a portal diving into flat ground.
+	RailType railtype = INVALID_RAILTYPE; ///< Track type built.
+	bool buildable = false; ///< The command would succeed.
+
+	bool operator==(const UndergroundPortalGhost &) const = default;
+};
+
+const UndergroundPortalGhost *GetUndergroundPortalGhost(TileIndex tile);
+
 /**
  * Show (or hide) the tooltip with the soil and its price multipliers while a
  * tool of the railway construction toolbar hovers a tile of the viewed underground level.

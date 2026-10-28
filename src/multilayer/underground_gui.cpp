@@ -106,31 +106,98 @@ static UndergroundRampGhost MakeRampGhost(WidgetID tool, TileIndex tile, DiagDir
 }
 
 /**
- * Show the ramp a ramp tool would build under the cursor, or while it is
- * dragged; hide it with any other tool. Client-side only: the command is just
- * tested, to show a ramp that cannot be built in red.
+ * The portal the portal tool builds on \a tile when the player points
+ * towards \a dir. On flat ground the portal dives into the ground towards
+ * \a dir, like a ramp going down: two levels below the surface (one where the
+ * map bottom leaves no room), or on the viewed level when that is deeper. On
+ * a hillside the tunnel mouth is at the foot of the incline and the incline
+ * decides the direction; a drag across it is refused by the command.
+ * @param tile The portal's tile.
+ * @param dir The direction pointed at: the tile edge nearest to the cursor, or the drag.
+ * @param dragged The direction comes from a drag, not from a click.
+ * @param railtype The track type built.
+ */
+static UndergroundPortalGhost MakePortalGhost(TileIndex tile, DiagDirection dir, bool dragged, RailType railtype)
+{
+	UndergroundPortalGhost ghost;
+	ghost.tile = tile;
+	ghost.railtype = railtype;
+
+	int16_t below = static_cast<int16_t>(GetTileZ(tile) - 2);
+	if (below < GetMetroGlobalMinZ()) below = static_cast<int16_t>(GetTileZ(tile) - 1);
+	ghost.depth = GetUndergroundViewDepth();
+	if (!IsUndergroundSliceMode() || ghost.depth > below) ghost.depth = below;
+	ghost.dir = dir;
+	ghost.command_dir = dir;
+
+	if (DiagDirection slope_dir = GetInclinedSlopeDirection(GetTileSlope(tile)); slope_dir != INVALID_DIAGDIR) {
+		ghost.hillside = true;
+		ghost.depth = static_cast<int16_t>(GetTileZ(tile));
+		ghost.dir = slope_dir;
+		if (!dragged) ghost.command_dir = slope_dir;
+	}
+	return ghost;
+}
+
+/**
+ * The tile and direction a ramp or portal tool points at: while dragged, from
+ * the first tile towards the one under the cursor (or the edge clicked when
+ * the drag has not left the tile); otherwise the tile under the cursor and
+ * its edge nearest to the cursor.
+ * @param[out] tile The tile.
+ * @param[out] dir The direction.
+ * @return Whether the direction comes from a drag to another tile.
+ */
+static bool GetRailToolGhostSpot(TileIndex &tile, DiagDirection &dir)
+{
+	tile = INVALID_TILE;
+	dir = INVALID_DIAGDIR;
+	if (_special_mouse_mode == WSM_SIZING) {
+		tile = TileVirtXY(_thd.selstart.x, _thd.selstart.y);
+		TileIndex end = TileVirtXY(_thd.selend.x, _thd.selend.y);
+		if (end != tile) {
+			dir = DiagdirBetweenTiles(tile, end);
+			return true;
+		}
+		dir = _ramp_click_dir;
+		return false;
+	}
+	Point pt = GetTileBelowCursor();
+	if (pt.x != -1) {
+		tile = TileVirtXY(pt.x, pt.y);
+		dir = GetNearestTileEdge(pt);
+	}
+	return false;
+}
+
+/** The portal the portal tool shows under the cursor. */
+static UndergroundPortalGhost _portal_ghost;
+
+/** Mark the tile of a portal ghost and the tile behind its arch for redraw. */
+static void MarkPortalGhostDirty(const UndergroundPortalGhost &ghost)
+{
+	if (ghost.tile == INVALID_TILE) return;
+	MarkTileDirtyByTile(ghost.tile);
+	TileIndex behind = TileAddByDiagDir(ghost.tile, ghost.dir);
+	if (IsValidTile(behind)) MarkTileDirtyByTile(behind);
+}
+
+/**
+ * Show the ramp a ramp tool, or the portal the portal tool, would build under
+ * the cursor, or while it is dragged; hide it with any other tool.
+ * Client-side only: the command is just tested, to show what cannot be built in red.
  * @param tool The active tool of the railway construction toolbar, or INVALID_WIDGET.
  * @param railtype The track type built.
  */
 void UpdateUndergroundRailToolGhost(WidgetID tool, RailType railtype)
 {
+	bool placing = _thd.window_class == WC_BUILD_TOOLBAR && (_thd.place_mode & HT_DRAG_MASK) != HT_NONE;
+
 	UndergroundRampGhost ghost;
-	if ((tool == WID_RAT_BUILD_RAMP_DOWN || tool == WID_RAT_BUILD_RAMP_UP) && IsUndergroundSliceMode() &&
-			_thd.window_class == WC_BUILD_TOOLBAR && (_thd.place_mode & HT_DRAG_MASK) != HT_NONE) {
-		TileIndex tile = INVALID_TILE;
-		DiagDirection dir = INVALID_DIAGDIR;
-		if (_special_mouse_mode == WSM_SIZING) {
-			/* Dragged: from the first tile towards the one under the cursor. */
-			tile = TileVirtXY(_thd.selstart.x, _thd.selstart.y);
-			TileIndex end = TileVirtXY(_thd.selend.x, _thd.selend.y);
-			dir = (end != tile) ? DiagdirBetweenTiles(tile, end) : _ramp_click_dir;
-		} else {
-			Point pt = GetTileBelowCursor();
-			if (pt.x != -1) {
-				tile = TileVirtXY(pt.x, pt.y);
-				dir = GetNearestTileEdge(pt);
-			}
-		}
+	if ((tool == WID_RAT_BUILD_RAMP_DOWN || tool == WID_RAT_BUILD_RAMP_UP) && IsUndergroundSliceMode() && placing) {
+		TileIndex tile;
+		DiagDirection dir;
+		GetRailToolGhostSpot(tile, dir);
 		if (IsValidTile(tile) && IsValidDiagDirection(dir)) {
 			ghost = MakeRampGhost(tool, tile, dir, railtype);
 			Backup<CompanyID> cur_company(_current_company, _local_company);
@@ -139,10 +206,42 @@ void UpdateUndergroundRailToolGhost(WidgetID tool, RailType railtype)
 		}
 	}
 
-	if (ghost == _ramp_ghost) return;
-	if (_ramp_ghost.tile != INVALID_TILE) MarkTileDirtyByTile(_ramp_ghost.tile);
-	_ramp_ghost = ghost;
-	if (_ramp_ghost.tile != INVALID_TILE) MarkTileDirtyByTile(_ramp_ghost.tile);
+	if (ghost != _ramp_ghost) {
+		if (_ramp_ghost.tile != INVALID_TILE) MarkTileDirtyByTile(_ramp_ghost.tile);
+		_ramp_ghost = ghost;
+		if (_ramp_ghost.tile != INVALID_TILE) MarkTileDirtyByTile(_ramp_ghost.tile);
+	}
+
+	/* The portal tool works from the surface and from the views below ground. */
+	UndergroundPortalGhost portal;
+	if (tool == WID_RAT_BUILD_PORTAL && placing) {
+		TileIndex tile;
+		DiagDirection dir;
+		bool dragged = GetRailToolGhostSpot(tile, dir);
+		if (IsValidTile(tile) && IsValidDiagDirection(dir)) {
+			portal = MakePortalGhost(tile, dir, dragged, railtype);
+			Backup<CompanyID> cur_company(_current_company, _local_company);
+			portal.buildable = Command<Commands::BuildPortal>::Do(DoCommandFlag::Auto, tile, railtype, portal.command_dir, portal.depth).Succeeded();
+			cur_company.Restore();
+		}
+	}
+
+	if (portal != _portal_ghost) {
+		MarkPortalGhostDirty(_portal_ghost);
+		_portal_ghost = portal;
+		MarkPortalGhostDirty(_portal_ghost);
+	}
+}
+
+/**
+ * The portal the portal tool shows on a tile before it is built.
+ * @param tile The tile.
+ * @return The portal, or nullptr when none is shown on the tile.
+ */
+const UndergroundPortalGhost *GetUndergroundPortalGhost(TileIndex tile)
+{
+	if (_portal_ghost.tile != tile || _thd.window_class != WC_BUILD_TOOLBAR || (_thd.place_mode & HT_DRAG_MASK) == HT_NONE) return nullptr;
+	return &_portal_ghost;
 }
 
 /**
@@ -155,32 +254,6 @@ const UndergroundRampGhost *GetUndergroundRampGhost(TileIndex tile)
 	if (_ramp_ghost.tile != tile || _thd.window_class != WC_BUILD_TOOLBAR || (_thd.place_mode & HT_DRAG_MASK) == HT_NONE) return nullptr;
 	if (!IsUndergroundSliceMode() || _ramp_ghost.entry_depth != GetUndergroundViewDepth()) return nullptr;
 	return &_ramp_ghost;
-}
-
-/**
- * Direction of a portal placed with a single click on flat ground (a portal
- * diving into the ground): it points into the tunnel, i.e. towards a neighbour
- * that carries underground line on the portal's level, or else away from a
- * neighbour whose surface rail runs towards this tile.
- * @return The direction, or INVALID_DIAGDIR when no neighbour decides it.
- */
-static DiagDirection GuessDivePortalDirection(TileIndex tile, int16_t depth)
-{
-	for (DiagDirection d = DIAGDIR_BEGIN; d < DIAGDIR_END; d++) {
-		TileIndex n = TileAddByDiagDir(tile, d);
-		if (!IsValidTile(n)) continue;
-		SliceID sid = _multilayer_map.FindSliceAt(n, depth);
-		if (sid == INVALID_SLICE_ID) continue;
-		SliceKind k = _multilayer_map.GetSlice(sid).kind;
-		if (k == SliceKind::Track || k == SliceKind::StationTile || k == SliceKind::Ramp) return d;
-	}
-	for (DiagDirection d = DIAGDIR_BEGIN; d < DIAGDIR_END; d++) {
-		TileIndex n = TileAddByDiagDir(tile, d);
-		if (!IsValidTile(n) || !IsPlainRailTile(n)) continue;
-		/* The neighbour's rail must reach the shared edge, i.e. be enterable moving from here into it. */
-		if ((GetTrackBits(n) & DiagdirReachesTracks(d)) != TRACK_BIT_NONE) return ReverseDiagDir(d);
-	}
-	return INVALID_DIAGDIR;
 }
 
 /**
@@ -589,50 +662,20 @@ static void PlaceUndergroundStationExit(TileIndex tile, StationExitType exit_typ
 }
 
 /**
- * Build a portal with the portal tool of the railway construction toolbar.
- * Its direction comes from the drag, else from the track under the cursor or,
- * for a single click on flat ground, from the line next to it. On flat ground
- * the portal dives into the ground; on a hillside the tunnel mouth is at the
- * slope's foot. The viewed level follows the portal's level.
+ * Build a portal with the portal tool of the railway construction toolbar,
+ * the one its ghost showed (see MakePortalGhost): on flat ground it dives
+ * into the ground towards the tile edge clicked, or towards the drag; on a
+ * hillside the incline decides. The viewed level follows the portal's level.
  */
-static void PlaceUndergroundPortal(TileIndex start_tile, TileIndex end_tile, Track track, RailType railtype)
+static void PlaceUndergroundPortal(TileIndex start_tile, TileIndex end_tile, RailType railtype)
 {
-	DiagDirection dir;
-	switch (track) {
-		case TRACK_X:     dir = DIAGDIR_SW; break;
-		case TRACK_Y:     dir = DIAGDIR_SE; break;
-		case TRACK_UPPER: dir = DIAGDIR_NE; break;
-		case TRACK_LOWER: dir = DIAGDIR_SW; break;
-		case TRACK_LEFT:  dir = DIAGDIR_NW; break;
-		case TRACK_RIGHT: dir = DIAGDIR_SE; break;
-		default:          dir = DIAGDIR_NE; break;
-	}
-	if (start_tile != end_tile) dir = DiagdirBetweenTiles(start_tile, end_tile);
+	bool dragged = start_tile != end_tile;
+	DiagDirection dir = dragged ? DiagdirBetweenTiles(start_tile, end_tile) : _ramp_click_dir;
+	if (!IsValidDiagDirection(dir)) return;
 
-	/* A diving portal lies below the surface. Its open cut descends two levels,
-	 * so unless a deeper level is viewed the tunnel starts two levels down (one
-	 * where the map bottom leaves no room). Built from the surface, it always
-	 * starts there. */
-	int16_t below = static_cast<int16_t>(GetTileZ(start_tile) - 2);
-	if (below < GetMetroGlobalMinZ()) below = static_cast<int16_t>(GetTileZ(start_tile) - 1);
-	int16_t portal_depth = GetUndergroundViewDepth();
-	if (!IsUndergroundSliceMode() || portal_depth > below) portal_depth = below;
-
-	if (GetTileSlope(start_tile) == SLOPE_FLAT && start_tile == end_tile) {
-		DiagDirection guess = GuessDivePortalDirection(start_tile, portal_depth);
-		if (guess != INVALID_DIAGDIR) dir = guess;
-	}
-	/* On a hillside the portal's level is the low side of the incline, and the
-	 * incline decides the direction. A click picks the track under the cursor,
-	 * which may run across the incline: the slope says which way is meant. A
-	 * drag across the incline is refused by the command. */
-	if (DiagDirection slope_dir = GetInclinedSlopeDirection(GetTileSlope(start_tile)); slope_dir != INVALID_DIAGDIR) {
-		portal_depth = static_cast<int16_t>(GetTileZ(start_tile));
-		if (start_tile == end_tile) dir = slope_dir;
-	}
-
-	SetUndergroundViewDepth(portal_depth);
-	Command<Commands::BuildPortal>::Post(STR_ERROR_CAN_T_BUILD_PORTAL, start_tile, railtype, dir, portal_depth);
+	UndergroundPortalGhost portal = MakePortalGhost(start_tile, dir, dragged, railtype);
+	SetUndergroundViewDepth(portal.depth);
+	Command<Commands::BuildPortal>::Post(STR_ERROR_CAN_T_BUILD_PORTAL, start_tile, railtype, portal.command_dir, portal.depth);
 }
 
 /**
@@ -696,10 +739,6 @@ bool UndergroundRailToolPlaceObject(WidgetID tool, TileIndex tile, RailType rail
 			return true;
 
 		case WID_RAT_BUILD_PORTAL:
-			/* The direction comes from the drag. */
-			VpStartPlaceSizing(tile, VPM_RAILDIRS, DDSP_PLACE_RAIL);
-			return true;
-
 		case WID_RAT_BUILD_RAMP_DOWN:
 		case WID_RAT_BUILD_RAMP_UP:
 			/* Towards the tile edge nearest to the click, as the ghost showed it;
@@ -761,7 +800,7 @@ bool UndergroundRailToolPlaceMouseUp(WidgetID tool, ViewportPlaceMethod select_m
 
 	switch (tool) {
 		case WID_RAT_BUILD_PORTAL:
-			PlaceUndergroundPortal(start_tile, end_tile, track, railtype);
+			PlaceUndergroundPortal(start_tile, end_tile, railtype);
 			return true;
 
 		case WID_RAT_BUILD_RAMP_DOWN:
