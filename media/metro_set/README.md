@@ -72,8 +72,9 @@ the 765 does not expire.
 Needs Python 3 with Pillow and numpy, and NML 0.8 (`pip install nml`). From
 this folder:
 
-    python generate.py                       # sprites (gfx/*.png), metro_set.nml, docs/preview*.png
-    nmlc --grf=metro_set.grf metro_set.nml   # the NewGRF
+    python generate.py                              # sprites (gfx/*.png), metro_set.nml, docs/preview*.png
+    nmlc -c --grf=metro_set.grf metro_set.nml      # the NewGRF (-c: crop the sprites)
+    python generate.py --fix-grf metro_set.grf      # a valid default group for the railtype
 
 or run `build.ps1` (Windows) / `build.sh`. `generate.py` reads the TTD
 palette from `../baseset/openttd/openttdgui.png`. `metro_set.nml` and the

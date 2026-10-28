@@ -6,8 +6,10 @@ Push-Location $PSScriptRoot
 try {
 	& $Python generate.py
 	if ($LASTEXITCODE -ne 0) { throw "generate.py failed" }
-	& $Nmlc --grf=metro_set.grf metro_set.nml
+	& $Nmlc -c --grf=metro_set.grf metro_set.nml
 	if ($LASTEXITCODE -ne 0) { throw "nmlc failed" }
+	& $Python generate.py --fix-grf metro_set.grf
+	if ($LASTEXITCODE -ne 0) { throw "generate.py --fix-grf failed" }
 } finally {
 	Pop-Location
 }

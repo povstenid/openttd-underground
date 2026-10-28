@@ -3,4 +3,5 @@
 set -e
 cd "$(dirname "$0")"
 python3 generate.py
-nmlc --grf=metro_set.grf metro_set.nml
+nmlc -c --grf=metro_set.grf metro_set.nml
+python3 generate.py --fix-grf metro_set.grf

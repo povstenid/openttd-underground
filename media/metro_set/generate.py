@@ -18,10 +18,12 @@ The art and the code are original work for this set; no sprite or code of
 any other set was used. GPL v2, see README.md.
 
 Usage: python generate.py   (needs Pillow and numpy)
+       python generate.py --fix-grf metro_set.grf   (after nmlc, see fix_grf)
 """
 
 import math
 import os
+import sys
 
 import numpy as np
 from PIL import Image
@@ -616,7 +618,49 @@ def track_nml(table):
     return '\n'.join(out) + RAILTYPE_NML
 
 
+GRF_V2_MAGIC = b'\x00\x00GRF\x82\r\n\x1a\n'
+
+
+def fix_grf(path):
+    """Give the Action 3 of the railtype a valid default group, in place.
+
+    nmlc does not allow a default group for a railtype and writes group 0 as
+    the default of its Action 3. The set has no group 0, so OpenTTD logs
+    "MapSpriteGroup: Spritegroup 0x0000 out of range or empty, skipping."
+    when it loads the set. OpenTTD ignores the default of a railtype anyway,
+    so the default becomes the group of the first sprite type of the Action 3
+    (the bytes keep their size; nothing else of the file changes)."""
+    with open(path, 'rb') as fh:
+        data = bytearray(fh.read())
+    assert data.startswith(GRF_V2_MAGIC), f'{path}: not a GRF container version 2'
+    pos = len(GRF_V2_MAGIC) + 4 + 1   # offset of the sprite section, compression
+    fixed = 0
+    while True:
+        size = int.from_bytes(data[pos:pos + 4], 'little')
+        if size == 0:
+            break
+        info = data[pos + 4]
+        body = pos + 5
+        # Action 3 for railtypes (feature 0x10), one railtype, no wagon override:
+        # 03 10 01 <id> <n> n * (<type> <word group>) <word default>
+        if info == 0xFF and size >= 6 and data[body] == 0x03 and data[body + 1] == 0x10 and data[body + 2] == 0x01:
+            n = data[body + 4]
+            if n > 0 and size == 5 + 3 * n + 2:
+                default = body + 5 + 3 * n
+                if data[default:default + 2] == b'\x00\x00':
+                    data[default:default + 2] = data[body + 6:body + 8]
+                    fixed += 1
+        pos = body + size
+    assert fixed == 1, f'{path}: expected one railtype Action 3 with default group 0, found {fixed}'
+    with open(path, 'wb') as fh:
+        fh.write(data)
+    print(f'{os.path.basename(path)}: railtype Action 3 default set to group 0x{data[default]:02X}')
+
+
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] == '--fix-grf':
+        fix_grf(sys.argv[2])
+        return
     pal = load_palette()
     os.makedirs(os.path.join(HERE, 'gfx'), exist_ok=True)
     os.makedirs(os.path.join(HERE, 'docs'), exist_ok=True)
