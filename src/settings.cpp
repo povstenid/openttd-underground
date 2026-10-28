@@ -1170,27 +1170,45 @@ static GRFConfigList GRFLoadConfig(const IniFile &ini, std::string_view grpname,
 /** GRF ID of the metro set that ships with the game, "OUM" (media/metro_set). */
 static constexpr uint32_t METRO_SET_GRFID = 0x014D554F;
 
+/** The bundled metro set was once put in the NewGRF list of a new game ("metro_set_added" in [misc]). */
+bool _metro_set_added = false;
+
 /**
- * NewGRFs of a first new game, when the configuration has no NewGRF list yet.
- * The metro set ships with the game, so a fresh install can build metro lines
- * without downloading anything. It is looked up by GRF ID among the scanned
- * NewGRFs; when it is missing (or the scan was skipped) the list stays empty.
- * Once the list is saved in the configuration, the player decides.
- * @return The list of default NewGRF configurations.
+ * Put the metro set that ships with the game at the end of the NewGRF list of
+ * a new game, once per configuration. The configuration lives in the personal
+ * directory shared by all OpenTTD builds, so it usually has a NewGRF list
+ * already when this fork is started for the first time; the set is added to
+ * that list as well. The fact is remembered in the configuration, so a player
+ * who removes the set later keeps it removed.
+ * Nothing happens when the set is not among the scanned NewGRFs (or the scan
+ * was skipped); it is then tried again on the next start.
+ * @param list The NewGRF list of a new game, as loaded from the configuration.
+ * @param static_list The static NewGRFs; they are not changed.
  */
-static GRFConfigList GRFDefaultNewGameConfig()
+static void GRFAddMetroSetOnce(GRFConfigList &list, const GRFConfigList &static_list)
 {
-	GRFConfigList list;
+	if (_metro_set_added) return;
 
 	const GRFConfig *s = FindGRFConfig(METRO_SET_GRFID, FGCM_NEWEST_VALID);
-	if (s == nullptr) return list;
+	if (s == nullptr) return;
+
+	auto has_set = [](const GRFConfigList &l) {
+		return std::ranges::any_of(l, [](const auto &gc) { return gc->ident.grfid == METRO_SET_GRFID; });
+	};
+	if (has_set(list) || has_set(static_list)) {
+		_metro_set_added = true;
+		return;
+	}
 
 	auto c = std::make_unique<GRFConfig>(*s);
-	if (!FillGRFDetails(*c, false) || c->flags.Test(GRFConfigFlag::Invalid)) return list;
+	if (!FillGRFDetails(*c, false) || c->flags.Test(GRFConfigFlag::Invalid)) return;
 
-	Debug(grf, 1, "No NewGRF list in the configuration, enabling the bundled metro set {}", c->filename);
+	size_t non_static = std::ranges::count_if(list, [](const auto &gc) { return !gc->flags.Test(GRFConfigFlag::Static); });
+	if (non_static >= NETWORK_MAX_GRF_COUNT) return;
+
+	Debug(grf, 1, "Adding the bundled metro set {} to the NewGRF list of a new game", c->filename);
 	list.push_back(std::move(c));
-	return list;
+	_metro_set_added = true;
 }
 
 static IniFileVersion LoadVersionFromConfig(const IniFile &ini)
@@ -1477,14 +1495,11 @@ void LoadFromConfig(bool startup)
 			_settings_client.gui.right_click_wnd_close = old_value.value_or(false) ? RightClickClose::Yes : RightClickClose::No;
 		}
 
-		/* A configuration without a NewGRF list is a first start: enable the bundled metro set.
-		 * An existing list, even an empty one, is the player's choice and stays as it is. */
-		if (generic_ini.GetGroup("newgrf") == nullptr) {
-			_grfconfig_newgame = GRFDefaultNewGameConfig();
-		} else {
-			_grfconfig_newgame = GRFLoadConfig(generic_ini, "newgrf", false);
-		}
+		_grfconfig_newgame = GRFLoadConfig(generic_ini, "newgrf", false);
 		_grfconfig_static  = GRFLoadConfig(generic_ini, "newgrf-static", true);
+		/* Once per configuration, even one with a NewGRF list from another OpenTTD build, the bundled metro set
+		 * joins the list of a new game. After that the list is the player's choice. */
+		GRFAddMetroSetOnce(_grfconfig_newgame, _grfconfig_static);
 		AILoadConfig(generic_ini, "ai_players");
 		GameLoadConfig(generic_ini, "game_scripts");
 		PickerLoadConfig(favs_ini);

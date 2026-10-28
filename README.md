@@ -164,8 +164,9 @@ See [OpenTTD's website](https://www.openttd.org), under Downloads, for what plug
 OpenTTD Underground comes with its own NewGRF, the OpenTTD Underground Metro Set: metro track and five generations of metro cars (Type A, Type E, 717/714, 720, 765).
 It is installed with the game (`newgrf/metro_set.grf` next to the game data) and is active in a first new game: unpack the game, start a new game and build a metro, nothing to download.
 
-The set is enabled only while the configuration file has no NewGRF list yet, i.e. on the first start.
-After that the list in `openttd.cfg` is saved as usual and it is your choice: remove the set in "NewGRF Settings" and it stays removed.
+The set is added once to the end of the NewGRF list of a new game, also when `openttd.cfg` already has a list from another OpenTTD build (the configuration in your personal directory is shared by all of them).
+The game remembers this in `openttd.cfg` (`metro_set_added` in `[misc]`); after that the list is your choice: remove the set in "NewGRF Settings" and it stays removed.
+Static NewGRFs, running games and saved games are not changed.
 Servers and clients of this fork all have the set, so a multiplayer game with it needs no download either.
 See [media/metro_set/README.md](./media/metro_set/README.md) for the cars and for building the set.
 
