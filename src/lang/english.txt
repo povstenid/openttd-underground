@@ -1441,6 +1441,10 @@ STR_CONFIG_SETTING_UNDERGROUND_FOUNDATION_MEDIUM_HELPTEXT       :Houses with at 
 STR_CONFIG_SETTING_UNDERGROUND_INDUSTRY_FOUNDATION              :Foundation of industries: {STRING2}
 STR_CONFIG_SETTING_UNDERGROUND_INDUSTRY_FOUNDATION_HELPTEXT     :How deep the basements of industries reach: nothing can be built under an industry down to this many levels below the ground, and no industry is set up above underground construction this shallow. Underground construction already under an industry stays when this changes
 STR_CONFIG_SETTING_UNDERGROUND_INDUSTRY_FOUNDATION_VALUE        :{COMMA} level{P "" s}
+STR_CONFIG_SETTING_UNDERGROUND_EXIT_CARGO                       :Cargo through underground station exits: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_EXIT_CARGO_HELPTEXT              :Which cargo the pavilions and underpasses of an underground station take from and give to the houses and industries around them. Surface platforms and stops joined to the same station keep their own catchment for all cargo. Cargo unloaded underground for a transfer is not affected
+STR_CONFIG_SETTING_UNDERGROUND_EXIT_CARGO_PASSENGERS_MAIL       :Passengers and mail
+STR_CONFIG_SETTING_UNDERGROUND_EXIT_CARGO_ALL                   :All cargo
 STR_CONFIG_SETTING_UNDERGROUND_BASE_COST                        :Base underground price multiplier: {STRING2}
 STR_CONFIG_SETTING_UNDERGROUND_BASE_COST_HELPTEXT               :Underground construction costs the surface price of the same thing times this multiplier, times the multiplier of the soil
 STR_CONFIG_SETTING_UNDERGROUND_MULTIPLIER_WHOLE                 :×{COMMA}

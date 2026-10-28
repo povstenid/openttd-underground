@@ -172,6 +172,7 @@
     <li><strong>Pavilion.</strong> Built on a free surface tile, or on a town house, which is demolished. Catchment radius 3 tiles.</li>
     <li><strong>Underpass.</strong> Built on a straight road tile without junctions. The road keeps working. Catchment radius 2 tiles.</li>
   </ul>
+  <p>By default the exits take only passengers and mail from the houses and industries around them, and give them only those. Set <em>Cargo through underground station exits</em> to <em>All cargo</em> to serve freight through them too. Surface platforms and stops joined to the same station always serve all cargo in their own catchment, and freight unloaded underground for a transfer still waits at the station. Games saved by an earlier version keep <em>All cargo</em>.</p>
   <p>To remove an exit, remove it on the surface first; the error <em>remove the metro station exit first</em> means that you must do so before you remove the station.</p>
 
   <h2>Portals</h2>
@@ -508,6 +509,7 @@
       <tr><td>Foundation of medium houses from</td><td><code>underground.foundation_medium_percent</code></td><td>25%</td><td>0 to 100%, not above the tallest threshold</td></tr>
       <tr><td>Foundation of industries</td><td><code>underground.industry_foundation_depth</code></td><td>2 levels</td><td>0 to 2 levels</td></tr>
       <tr><td>Maximum distance of a metro station exit from its platforms</td><td><code>construction.max_station_exit_distance</code></td><td>2 tiles</td><td>1 to 6 tiles</td></tr>
+      <tr><td>Cargo through underground station exits</td><td><code>underground.exit_cargo</code></td><td>Passengers and mail</td><td>Passengers and mail, or All cargo</td></tr>
     </tbody>
   </table>
   </div>

@@ -546,6 +546,7 @@ public:
 	IndustryType indtype = IT_INVALID; ///< Industry type to get the name from
 
 	BitmapTileArea catchment_tiles{}; ///< NOSAVE: Set of individual tiles covered by catchment area
+	BitmapTileArea exit_only_catchment_tiles{}; ///< NOSAVE: Tiles of catchment_tiles covered only by the exits of the underground part, not by any surface station tile; empty if none
 
 	StationHadVehicleOfType had_vehicle_of_type{};
 
@@ -589,6 +590,21 @@ public:
 	{
 		return this->catchment_tiles.HasTile(tile);
 	}
+
+	/**
+	 * Whether a tile of the catchment is covered only by the exits of the underground part
+	 * of the station (pavilions, underpasses), not by any of its surface tiles.
+	 * @param tile Tile in the catchment.
+	 * @return True if only the underground station exits cover it.
+	 */
+	inline bool TileIsInExitOnlyCatchment(TileIndex tile) const
+	{
+		return this->exit_only_catchment_tiles.tile != INVALID_TILE && this->exit_only_catchment_tiles.HasTile(tile);
+	}
+
+	bool ExitsServeCargo(CargoType cargo) const;
+	bool CatchmentServesTile(TileIndex tile, CargoType cargo) const;
+	bool CatchmentServesIndustry(const Industry *ind, CargoType cargo) const;
 
 	inline bool TileBelongsToRailStation(TileIndex tile) const override
 	{

@@ -35,6 +35,11 @@ class MetroHouseLegacyTunnel extends GSController {
 				if (f > 0 && GSTile.GetMinHeight(t) - d <= f && GSMetro.IsUndergroundTile(t, d)) legacy++;
 			}
 			report.check_eq("tall_houses", 3, tall, "three tall houses over the tunnel");
+
+			/* A game of an earlier metro version keeps every cargo through its station exits;
+			 * industry foundations get the default, for new construction only. */
+			report.check_eq("legacy_exit_cargo_all", 1, GSGameSettings.GetValue("underground.exit_cargo"), "underground.exit_cargo of an older game");
+			report.check_eq("legacy_industry_foundation", 2, GSGameSettings.GetValue("underground.industry_foundation_depth"), "underground.industry_foundation_depth of an older game");
 			report.check_eq("tunnel_in_foundations", 4, legacy, "four houses with the tunnel inside their foundation");
 
 			local company = GSCompany.ResolveCompanyID(GSCompany.COMPANY_FIRST);

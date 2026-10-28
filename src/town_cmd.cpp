@@ -516,12 +516,13 @@ static void AdvanceHouseConstruction(TileIndex tile)
 /**
  * Generate cargo for a house, scaled by the current economy scale.
  * @param t The current town.
+ * @param tile The house tile producing the cargo.
  * @param cargo Type of cargo to generate, usually CT_PASSENGERS or CT_MAIL.
  * @param amount The number of cargo units.
  * @param stations Available stations for this house.
  * @param affected_by_recession Is this cargo halved during recessions?
  */
-static void TownGenerateCargo(Town *t, CargoType cargo, uint amount, StationFinder &stations, bool affected_by_recession)
+static void TownGenerateCargo(Town *t, TileIndex tile, CargoType cargo, uint amount, StationFinder &stations, bool affected_by_recession)
 {
 	if (amount == 0) return;
 
@@ -537,17 +538,18 @@ static void TownGenerateCargo(Town *t, CargoType cargo, uint amount, StationFind
 	/* Actually generate cargo and update town statistics. */
 	auto &supplied = t->GetOrCreateCargoSupplied(cargo);
 	supplied.history[THIS_MONTH].production += amount;
-	supplied.history[THIS_MONTH].transported += MoveGoodsToStation(cargo, amount, {t->index, SourceType::Town}, stations.GetStations());;
+	supplied.history[THIS_MONTH].transported += MoveGoodsToStation(cargo, amount, {t->index, SourceType::Town}, stations.GetStations(), INVALID_OWNER, tile);
 }
 
 /**
  * Generate cargo for a house using the original algorithm.
  * @param t The current town.
+ * @param tile The house tile producing the cargo.
  * @param tpe The town production effect.
  * @param rate The town's product rate for this production.
  * @param stations Available stations for this house.
  */
-static void TownGenerateCargoOriginal(Town *t, TownProductionEffect tpe, uint8_t rate, StationFinder &stations)
+static void TownGenerateCargoOriginal(Town *t, TileIndex tile, TownProductionEffect tpe, uint8_t rate, StationFinder &stations)
 {
 	for (const CargoSpec *cs : CargoSpec::town_production_cargoes[tpe]) {
 		uint32_t r = Random();
@@ -555,7 +557,7 @@ static void TownGenerateCargoOriginal(Town *t, TownProductionEffect tpe, uint8_t
 			CargoType cargo_type = cs->Index();
 			uint amt = (GB(r, 0, 8) * cs->town_production_multiplier / TOWN_PRODUCTION_DIVISOR) / 8 + 1;
 
-			TownGenerateCargo(t, cargo_type, amt, stations, true);
+			TownGenerateCargo(t, tile, cargo_type, amt, stations, true);
 		}
 	}
 }
@@ -563,11 +565,12 @@ static void TownGenerateCargoOriginal(Town *t, TownProductionEffect tpe, uint8_t
 /**
  * Generate cargo for a house using the binomial algorithm.
  * @param t The current town.
+ * @param tile The house tile producing the cargo.
  * @param tpe The town production effect.
  * @param rate The town's product rate for this production.
  * @param stations Available stations for this house.
  */
-static void TownGenerateCargoBinomial(Town *t, TownProductionEffect tpe, uint8_t rate, StationFinder &stations)
+static void TownGenerateCargoBinomial(Town *t, TileIndex tile, TownProductionEffect tpe, uint8_t rate, StationFinder &stations)
 {
 	for (const CargoSpec *cs : CargoSpec::town_production_cargoes[tpe]) {
 		CargoType cargo_type = cs->Index();
@@ -580,7 +583,7 @@ static void TownGenerateCargoBinomial(Town *t, TownProductionEffect tpe, uint8_t
 		/* Mask random value by potential pax and count number of actual pax. */
 		uint amt = CountBits(r & genmask) * cs->town_production_multiplier / TOWN_PRODUCTION_DIVISOR;
 
-		TownGenerateCargo(t, cargo_type, amt, stations, true);
+		TownGenerateCargo(t, tile, cargo_type, amt, stations, true);
 	}
 }
 
@@ -628,14 +631,14 @@ static void TileLoop_Town(TileIndex tile)
 			if (amt == 0) continue;
 
 			/* NewGRF-supplied town cargos are not affected by recessions. */
-			TownGenerateCargo(t, cargo, amt, stations, false);
+			TownGenerateCargo(t, tile, cargo, amt, stations, false);
 		}
 	} else {
 		switch (_settings_game.economy.town_cargogen_mode) {
 			case TCGM_ORIGINAL:
 				/* Original (quadratic) cargo generation algorithm */
-				TownGenerateCargoOriginal(t, TPE_PASSENGERS, hs->population, stations);
-				TownGenerateCargoOriginal(t, TPE_MAIL, hs->mail_generation, stations);
+				TownGenerateCargoOriginal(t, tile, TPE_PASSENGERS, hs->population, stations);
+				TownGenerateCargoOriginal(t, tile, TPE_MAIL, hs->mail_generation, stations);
 				break;
 
 			case TCGM_BITCOUNT:
@@ -643,8 +646,8 @@ static void TileLoop_Town(TileIndex tile)
 				/* Reduce generation rate to a 1/4, using tile bits to spread out distribution.
 				 * As tick counter is incremented by 256 between each call, we ignore the lower 8 bits. */
 				if (GB(TimerGameTick::counter, 8, 2) == GB(tile.base(), 0, 2)) {
-					TownGenerateCargoBinomial(t, TPE_PASSENGERS, hs->population, stations);
-					TownGenerateCargoBinomial(t, TPE_MAIL, hs->mail_generation, stations);
+					TownGenerateCargoBinomial(t, tile, TPE_PASSENGERS, hs->population, stations);
+					TownGenerateCargoBinomial(t, tile, TPE_MAIL, hs->mail_generation, stations);
 				}
 				break;
 

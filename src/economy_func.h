@@ -33,7 +33,7 @@ void StartupIndustryDailyChanges(bool init_counter);
 void DoAcquireCompany(Company *c, bool hostile_takeover);
 
 Money GetTransportedGoodsIncome(uint num_pieces, uint dist, uint16_t transit_periods, CargoType cargo_type);
-uint MoveGoodsToStation(CargoType cargo, uint amount, Source source, const StationList &all_stations, Owner exclusivity = INVALID_OWNER);
+uint MoveGoodsToStation(CargoType cargo, uint amount, Source source, const StationList &all_stations, Owner exclusivity = INVALID_OWNER, TileIndex source_tile = INVALID_TILE);
 
 void PrepareUnload(Vehicle *front_v);
 void LoadUnloadStation(Station *st);

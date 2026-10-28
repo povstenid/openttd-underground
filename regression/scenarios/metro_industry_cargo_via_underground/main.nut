@@ -46,6 +46,9 @@ class MetroIndustryCargoViaUnderground extends GSController {
 
 			local company_mode = null;
 
+			/* First the exits serve every cargo; the rule "passengers and mail" is checked after the run. */
+			report.check_true("exit_cargo_all_set", GSGameSettings.SetValue("underground.exit_cargo", 1), "Setting underground.exit_cargo should switch to all cargo.");
+
 			if (area != null && company != GSCompany.COMPANY_INVALID && pair != null && rail_engine != null) {
 				local x = build.tile_x(area);
 				local y = build.tile_y(area);
@@ -165,6 +168,54 @@ class MetroIndustryCargoViaUnderground extends GSController {
 				report.check_true("industry_pickup_recorded", industry_pickup_result != null || source_transported > 0, "Source industry should report transported freight once the metro line starts moving cargo.");
 				report.check_true("industry_delivery_recorded", cargo_unloaded != null || industry_delivery_result != null, "Freight train should unload its cargo at the destination underground station.");
 				report.check_true("destination_stockpile_positive", industry_delivery_result != null || destination_stockpiled > 0 || cargo_unloaded != null, "Destination branch should consume or stockpile the delivered cargo after the train unloads.");
+
+				/* The exits serve passengers and mail only: the freight industries lose the
+				 * service through them, cargo unloaded for a transfer still moves. */
+				local at_destination = vehicle == GSVehicle.VEHICLE_INVALID ? null : trains.wait_for_underground_station(vehicle, destination_station_id, 30000);
+				report.check_true("pm_train_back_at_destination", at_destination != null, "Freight train should come back to the destination station.");
+				if (at_destination != null) GSVehicle.StartStopVehicle(vehicle);
+				local stopped = vehicle != GSVehicle.VEHICLE_INVALID && GSVehicle.GetState(vehicle) != GSVehicle.VS_RUNNING;
+				report.metric("pm_train_state", vehicle == GSVehicle.VEHICLE_INVALID ? -1 : GSVehicle.GetState(vehicle));
+				report.check_true("pm_train_stopped", stopped, "Freight train should wait at the destination station.");
+
+				local w0 = GSStation.GetCargoWaiting(source_station_id, pair.cargo);
+				GSController.Sleep(3000);
+				local w1 = GSStation.GetCargoWaiting(source_station_id, pair.cargo);
+				report.metric("all_cargo_waiting_before", w0);
+				report.metric("all_cargo_waiting_after", w1);
+				report.check_true("all_cargo_still_supplied", w1 > w0, "With all cargo the source industry should keep supplying the station through its exit.");
+
+				report.check_true("exit_cargo_pm_set", GSGameSettings.SetValue("underground.exit_cargo", 0), "Setting underground.exit_cargo should switch to passengers and mail.");
+				report.check_eq("exit_cargo_pm_value", 0, GSGameSettings.GetValue("underground.exit_cargo"), "Setting value should be passengers and mail.");
+				report.check_true("pm_destination_rejects", !world.station_accepts_cargo(destination_station_id, pair.cargo), "With passengers and mail the destination station should not accept the freight through its exit.");
+				report.check_true("pm_source_industry_still_near", GSIndustry.GetAmountOfStationsAround(source_built.industry) > 0, "The station still lies around the source industry.");
+
+				local w2 = GSStation.GetCargoWaiting(source_station_id, pair.cargo);
+				GSController.Sleep(3000);
+				local w3 = GSStation.GetCargoWaiting(source_station_id, pair.cargo);
+				report.metric("pm_waiting_before", w2);
+				report.metric("pm_waiting_after", w3);
+				report.check_true("pm_source_not_supplied", w3 <= w2, "With passengers and mail the source industry should not hand freight to the station through its exit.");
+
+				/* Transfer: the freight still waiting at the source is unloaded underground at the destination. */
+				GSCargoMonitor.GetIndustryDeliveryAmount(company, pair.cargo, destination_built.industry, true);
+				local dest_waiting_before = GSStation.GetCargoWaiting(destination_station_id, pair.cargo);
+				report.check_true("pm_transfer_order", GSOrder.SetOrderFlags(vehicle, 1, GSOrder.OF_TRANSFER | GSOrder.OF_NO_LOAD), "The destination order should become a transfer.");
+				report.check_true("pm_train_restarted", GSVehicle.StartStopVehicle(vehicle), "Freight train should start again.");
+				local pm_source = trains.wait_for_underground_station(vehicle, source_station_id, 30000);
+				local pm_loaded = pm_source == null ? null : trains.wait_for_vehicle_cargo(vehicle, pair.cargo, 4000, 1);
+				local pm_destination = pm_loaded == null ? null : trains.wait_for_underground_station(vehicle, destination_station_id, 30000);
+				local pm_unloaded = pm_destination == null ? null : trains.wait_for_vehicle_cargo_at_most(vehicle, pair.cargo, 4000, 0);
+				local dest_waiting_after = GSStation.GetCargoWaiting(destination_station_id, pair.cargo);
+				local pm_delivered = GSCargoMonitor.GetIndustryDeliveryAmount(company, pair.cargo, destination_built.industry, false);
+				report.metric("pm_transfer_loaded", pm_loaded == null ? -1 : pm_loaded.amount);
+				report.metric("pm_destination_waiting_before", dest_waiting_before);
+				report.metric("pm_destination_waiting_after", dest_waiting_after);
+				report.metric("pm_delivered_to_industry", pm_delivered);
+				report.check_true("pm_transfer_loaded", pm_loaded != null, "The freight left at the source station should still be loaded.");
+				report.check_true("pm_transfer_unloaded", pm_unloaded != null, "The freight should be unloaded for the transfer underground.");
+				report.check_true("pm_transfer_waiting", dest_waiting_after > dest_waiting_before, "The transferred freight should wait at the destination station.");
+				report.check_eq("pm_not_delivered", 0, pm_delivered, "No freight should reach the destination industry through the exit.");
 
 				report.metric("cargo", pair.cargo);
 				report.metric("cargo_name", GSCargo.GetName(pair.cargo));

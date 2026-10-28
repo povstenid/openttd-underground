@@ -797,6 +797,7 @@ SettingsContainer &GetSettingsTree()
 				depth->Add(new SettingEntry("underground.foundation_medium_percent"));
 				depth->Add(new SettingEntry("underground.industry_foundation_depth"));
 				depth->Add(new SettingEntry("construction.max_station_exit_distance"));
+				depth->Add(new SettingEntry("underground.exit_cargo"));
 			}
 
 			SettingsPage *prices = underground->Add(new SettingsPage(STR_CONFIG_SETTING_UNDERGROUND_PRICES));

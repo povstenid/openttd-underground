@@ -619,6 +619,14 @@ static void UndergroundIndustryFoundationChanged(int32_t)
 	MarkWholeScreenDirty();
 }
 
+/** The cargo through the exits of underground stations changed: their acceptance follows at once. */
+static void UndergroundExitCargoChanged(int32_t)
+{
+	for (Station *st : Station::Iterate()) UpdateStationAcceptance(st, false);
+	InvalidateWindowClassesData(WC_STATION_VIEW);
+	MarkWholeScreenDirty();
+}
+
 /** Underground price multipliers are stored in tenths: show them as "x1.5". */
 static std::pair<StringParameter, StringParameter> UndergroundMultiplierValueParams(const IntSettingDesc &, int32_t value)
 {

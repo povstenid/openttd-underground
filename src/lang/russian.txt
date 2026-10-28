@@ -1586,6 +1586,10 @@ STR_CONFIG_SETTING_UNDERGROUND_FOUNDATION_MEDIUM_HELPTEXT       :Дома, у к
 STR_CONFIG_SETTING_UNDERGROUND_INDUSTRY_FOUNDATION              :Фундамент предприятий: {STRING2}
 STR_CONFIG_SETTING_UNDERGROUND_INDUSTRY_FOUNDATION_HELPTEXT     :На сколько уровней вниз уходят подвалы предприятий: под предприятием нельзя строить на этой глубине и выше, а новое предприятие не появится над подземной стройкой мельче его фундамента. То, что уже построено под предприятием, при смене настройки остаётся
 STR_CONFIG_SETTING_UNDERGROUND_INDUSTRY_FOUNDATION_VALUE        :{COMMA} {P уровень уровня уровней}
+STR_CONFIG_SETTING_UNDERGROUND_EXIT_CARGO                       :Грузы через выходы подземных станций: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_EXIT_CARGO_HELPTEXT              :Какие грузы павильоны и подземные переходы подземной станции принимают у домов и предприятий вокруг и отдают им. Наземные платформы и остановки той же станции сохраняют свой охват для всех грузов. Груз, выгруженный под землёй для пересадки, это не затрагивает
+STR_CONFIG_SETTING_UNDERGROUND_EXIT_CARGO_PASSENGERS_MAIL       :Пассажиры и почта
+STR_CONFIG_SETTING_UNDERGROUND_EXIT_CARGO_ALL                   :Все грузы
 STR_CONFIG_SETTING_UNDERGROUND_BASE_COST                        :Базовый подземный множитель цены: {STRING2}
 STR_CONFIG_SETTING_UNDERGROUND_BASE_COST_HELPTEXT               :Подземная стройка стоит наземную цену того же объекта, умноженную на этот множитель и на множитель грунта
 STR_CONFIG_SETTING_UNDERGROUND_MULTIPLIER_WHOLE                 :×{COMMA}

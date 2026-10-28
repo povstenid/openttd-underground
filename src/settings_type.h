@@ -448,6 +448,12 @@ enum UndergroundSeaTunnels : uint8_t {
 /** Deepest foundation of an industry, in levels below the surface (setting underground.industry_foundation_depth). */
 static constexpr uint8_t MAX_INDUSTRY_FOUNDATION_DEPTH = 2;
 
+/** Which cargo the exits of underground stations (pavilions and underpasses) take in and hand out. */
+enum UndergroundExitCargo : uint8_t {
+	UEC_PASSENGERS_MAIL = 0, ///< Only cargo of the passengers and mail classes; the default.
+	UEC_ALL = 1,             ///< Any cargo, like a surface station.
+};
+
 /**
  * Settings of underground (metro) construction and its prices.
  * The depth below the surface (construction.max_underground_depth) and the
@@ -491,6 +497,7 @@ struct UndergroundSettings {
 	uint8_t refund_percent;               ///< percentage of the build price returned on removal (0..100)
 	bool refund_soil;                     ///< whether the refund on removal includes the soil multiplier
 	uint8_t industry_foundation_depth;    ///< depth below the surface of industry foundations (0..2): nothing can be built under an industry at depth 1..this
+	uint8_t exit_cargo;                   ///< UndergroundExitCargo: cargo taken in and handed out through the exits of underground stations
 };
 
 /** Settings related to construction in-game */

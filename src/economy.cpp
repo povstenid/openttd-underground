@@ -1060,6 +1060,9 @@ static uint DeliverGoodsToIndustry(const Station *st, CargoType cargo_type, uint
 		/* Check if industry temporarily refuses acceptance */
 		if (IndustryTemporarilyRefusesCargo(ind, cargo_type)) continue;
 
+		/* An industry only the exits of an underground station reach gets only the cargo they serve. */
+		if (!st->CatchmentServesIndustry(ind, cargo_type)) continue;
+
 		if (ind->exclusive_supplier != INVALID_OWNER && ind->exclusive_supplier != st->owner) continue;
 
 		/* Insert the industry into _cargo_delivery_destinations, if not yet contained */

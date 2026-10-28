@@ -3431,6 +3431,15 @@ bool AfterLoadGame()
 		}
 	}
 
+	/* Before the setting underground.exit_cargo, the exits of underground stations served
+	 * every cargo. Games of the earlier metro versions keep that, so no service through them
+	 * stops working; games without the metro get the default. The depth of industry
+	 * foundations keeps its default: it only affects new construction, so tunnels already
+	 * under an industry stay and work. */
+	if (!IsSavegameVersionBefore(SLV_MULTILAYER_MAP) && IsSavegameVersionBefore(SLV_METRO_INDUSTRY_CARGO)) {
+		_settings_game.underground.exit_cargo = UEC_ALL;
+	}
+
 	/* Compute station catchment areas. This is needed here in case UpdateStationAcceptance is called below. */
 	Station::RecomputeCatchmentForAll();
 

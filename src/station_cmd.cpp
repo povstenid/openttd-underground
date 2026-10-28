@@ -605,10 +605,23 @@ static std::pair<CargoArray, CargoTypes> GetAcceptanceAroundStation(const Statio
 {
 	CargoArray acceptance{};
 	CargoTypes always_accepted{};
+	/* What the tiles only the underground station exits cover accept: the cargo the exits do not serve is left out. */
+	CargoArray exit_acceptance{};
+	CargoTypes exit_always_accepted{};
 
 	BitmapTileIterator it(st->catchment_tiles);
 	for (TileIndex tile = it; tile != INVALID_TILE; tile = ++it) {
-		AddAcceptedCargo(tile, acceptance, always_accepted);
+		if (st->TileIsInExitOnlyCatchment(tile)) {
+			AddAcceptedCargo(tile, exit_acceptance, exit_always_accepted);
+		} else {
+			AddAcceptedCargo(tile, acceptance, always_accepted);
+		}
+	}
+
+	for (CargoType cargo = 0; cargo < NUM_CARGO; ++cargo) {
+		if (!st->ExitsServeCargo(cargo)) continue;
+		acceptance[cargo] += exit_acceptance[cargo];
+		if (HasBit(exit_always_accepted, cargo)) SetBit(always_accepted, cargo);
 	}
 
 	return {acceptance, always_accepted};
@@ -4781,7 +4794,19 @@ static bool CanMoveGoodsToStation(const Station *st, CargoType cargo)
 	return true;
 }
 
-uint MoveGoodsToStation(CargoType cargo, uint amount, Source source, const StationList &all_stations, Owner exclusivity)
+/**
+ * Move cargo produced by an industry, a house or a headquarters to the stations around it.
+ * @param cargo Cargo type.
+ * @param amount Amount produced.
+ * @param source Where the cargo comes from.
+ * @param all_stations The stations whose catchment covers the source.
+ * @param exclusivity The only company whose stations may get the cargo, INVALID_OWNER for any.
+ * @param source_tile The tile the cargo comes from, for a house; a station whose
+ *                    underground exits alone cover it gets only the cargo the exits serve.
+ *                    For an industry this is checked against all its tiles.
+ * @return The amount moved to the stations.
+ */
+uint MoveGoodsToStation(CargoType cargo, uint amount, Source source, const StationList &all_stations, Owner exclusivity, TileIndex source_tile)
 {
 	/* Return if nothing to do. Also the rounding below fails for 0. */
 	if (all_stations.empty()) return 0;
@@ -4794,6 +4819,12 @@ uint MoveGoodsToStation(CargoType cargo, uint amount, Source source, const Stati
 	for (Station *st : all_stations) {
 		if (exclusivity != INVALID_OWNER && exclusivity != st->owner) continue;
 		if (!CanMoveGoodsToStation(st, cargo)) continue;
+		/* Through the exits of an underground station only the cargo they serve. */
+		if (source.type == SourceType::Industry) {
+			if (!st->CatchmentServesIndustry(Industry::Get(source.ToIndustryID()), cargo)) continue;
+		} else if (source_tile != INVALID_TILE) {
+			if (!st->CatchmentServesTile(source_tile, cargo)) continue;
+		}
 
 		/* Avoid allocating a vector if there is only one station to significantly
 		 * improve performance in this common case. */

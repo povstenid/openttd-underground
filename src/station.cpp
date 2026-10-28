@@ -475,6 +475,7 @@ void Station::RecomputeCatchment(bool no_clear_nearby_lists)
 {
 	this->industries_near.clear();
 	if (!no_clear_nearby_lists) this->RemoveFromAllNearbyLists();
+	this->exit_only_catchment_tiles.Reset();
 
 	if (this->rect.IsEmpty()) {
 		this->catchment_tiles.Reset();
@@ -515,11 +516,15 @@ void Station::RecomputeCatchment(bool no_clear_nearby_lists)
 	}
 
 	this->catchment_tiles.Initialize(catchment_rect);
+	const bool has_exits = sc_it != _station_complexes.end() && !sc_it->second.GetExits().empty();
+	if (has_exits) this->exit_only_catchment_tiles.Initialize(catchment_rect);
 
 	/* Loop finding all station tiles */
 	TileArea ta(TileXY(this->rect.left, this->rect.top), TileXY(this->rect.right, this->rect.bottom));
 	for (TileIndex tile : ta) {
 		if (!IsTileType(tile, TileType::Station) || GetStationIndex(tile) != this->index) continue;
+		/* The bus stop tile of a pavilion exit catches as an exit, below. */
+		if (has_exits && IsStationExitPavilionTile(tile)) continue;
 
 		uint r = GetTileCatchmentRadius(tile, this);
 		if (r == CA_NONE) continue;
@@ -534,8 +539,11 @@ void Station::RecomputeCatchment(bool no_clear_nearby_lists)
 
 	/* Also include catchment from StationComplex ExitSurface tiles. Underground
 	 * platforms themselves catch nothing: a metro station without any exit built
-	 * by the player keeps an empty catchment (from its underground part). */
-	if (sc_it != _station_complexes.end()) {
+	 * by the player keeps an empty catchment (from its underground part).
+	 * The tiles only the exits cover are remembered apart: depending on the
+	 * setting underground.exit_cargo they serve passengers and mail only, while
+	 * the surface tiles of the same station serve every cargo. */
+	if (has_exits) {
 		for (const auto *exit_node : sc_it->second.GetExits()) {
 			if (!exit_node->ref.IsValid()) continue;
 			TileIndex exit_tile = exit_node->ref.tile;
@@ -544,7 +552,10 @@ void Station::RecomputeCatchment(bool no_clear_nearby_lists)
 			TileArea ta2 = TileArea(exit_tile, 1, 1).Expand(r);
 			for (TileIndex tile2 : ta2) {
 				if (!this->catchment_tiles.Contains(tile2)) continue;
+				/* A tile set already is covered by a surface tile, or by an exit before. */
+				if (this->catchment_tiles.HasTile(tile2)) continue;
 				this->catchment_tiles.SetTile(tile2);
+				this->exit_only_catchment_tiles.SetTile(tile2);
 			}
 		}
 	}
@@ -568,6 +579,50 @@ void Station::RecomputeCatchment(bool no_clear_nearby_lists)
 			this->AddIndustryToDeliver(i, tile);
 		}
 	}
+}
+
+/**
+ * Whether the exits of the underground part of the station (pavilions, underpasses)
+ * take in and hand out a cargo (setting underground.exit_cargo).
+ * @param cargo Cargo type.
+ * @return True for passengers and mail, and for any cargo with the setting "all cargo".
+ */
+bool Station::ExitsServeCargo(CargoType cargo) const
+{
+	if (_settings_game.underground.exit_cargo == UEC_ALL) return true;
+	return IsCargoInClass(cargo, CargoClass::Passengers) || IsCargoInClass(cargo, CargoClass::Mail);
+}
+
+/**
+ * Whether the catchment of the station takes a cargo from or gives it to a tile:
+ * the tile is in the catchment, and if only the underground station exits cover
+ * it, they serve the cargo.
+ * @param tile Tile, e.g. a house.
+ * @param cargo Cargo type.
+ * @return True if the cargo may move between the tile and the station.
+ */
+bool Station::CatchmentServesTile(TileIndex tile, CargoType cargo) const
+{
+	if (!this->TileIsInCatchment(tile)) return false;
+	return !this->TileIsInExitOnlyCatchment(tile) || this->ExitsServeCargo(cargo);
+}
+
+/**
+ * Whether the catchment of the station takes a cargo from or gives it to an industry
+ * near it: an industry that only the underground station exits reach gets and gives
+ * only the cargo the exits serve.
+ * @param ind Industry near the station.
+ * @param cargo Cargo type.
+ * @return True if the cargo may move between the industry and the station.
+ */
+bool Station::CatchmentServesIndustry(const Industry *ind, CargoType cargo) const
+{
+	if (this->exit_only_catchment_tiles.tile == INVALID_TILE || this->ExitsServeCargo(cargo)) return true;
+	for (TileIndex tile : ind->location) {
+		if (!IsTileType(tile, TileType::Industry) || GetIndustryIndex(tile) != ind->index) continue;
+		if (this->TileIsInCatchment(tile) && !this->TileIsInExitOnlyCatchment(tile)) return true;
+	}
+	return false;
 }
 
 /**

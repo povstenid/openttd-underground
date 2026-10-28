@@ -157,8 +157,10 @@ class MetroIndustryFoundations extends GSController {
 
 			/* Settings other than the defaults go into the savegame (checked by loading it). */
 			GSGameSettings.SetValue("underground.industry_foundation_depth", 1);
+			GSGameSettings.SetValue("underground.exit_cargo", 1);
 			report.check_true("settings_save_written", GSTest.SaveGame("metro_industry_foundations_settings.sav"), "save with changed settings");
 			GSGameSettings.SetValue("underground.industry_foundation_depth", 2);
+			GSGameSettings.SetValue("underground.exit_cargo", 0);
 
 			/* The game runs on with industries over the tunnels. */
 			GSController.Sleep(2000);

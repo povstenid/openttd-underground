@@ -424,7 +424,7 @@ enum SaveLoadVersion : uint16_t {
 	SLV_METRO_RUNTIME_STATE,                ///< 371  Underground reservations, portal exit claims and train path state are saved in full, a loaded game runs on like the live one.
 	SLV_METRO_DEPOT_RESERVED_372,           ///< 372  Taken by the depot rules (SLV_DEPOT_RULES), so the metro forks agree on the numbers above it.
 	SLV_METRO_DEPOT_RESERVED_373,           ///< 373  Taken by the two-way depots (SLV_DEPOT_TWO_WAY), so the metro forks agree on the numbers above it.
-	SLV_METRO_INDUSTRY_CARGO,               ///< 374  Metro: industry foundations (underground.industry_foundation_depth).
+	SLV_METRO_INDUSTRY_CARGO,               ///< 374  Metro: industry foundations (underground.industry_foundation_depth), cargo through underground station exits (underground.exit_cargo).
 
 	SL_MAX_VERSION,                         ///< Highest possible saveload version
 };
