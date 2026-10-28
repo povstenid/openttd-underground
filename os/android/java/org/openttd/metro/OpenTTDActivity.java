@@ -25,14 +25,14 @@ import java.util.Locale;
 
 /**
  * Starts OpenTTD through SDL. Before the game runs, the data files bundled in the APK
- * (base graphics, languages, script libraries) are copied to the app's storage, as
+ * (base graphics, languages, script libraries, the metro set) are copied to the app's storage, as
  * OpenTTD reads its data from regular files.
  */
 public class OpenTTDActivity extends SDLActivity {
 	private static final String TAG = "OpenTTD";
 
 	/** Asset directories that are copied to the data directory. */
-	private static final String[] DATA_DIRS = { "baseset", "lang", "ai", "game", "scripts" };
+	private static final String[] DATA_DIRS = { "baseset", "lang", "ai", "game", "scripts", "newgrf" };
 
 	@Override
 	protected String[] getLibraries() {
