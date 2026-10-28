@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenTTD Underground: player guide</title>
+<meta name="description" content="Player guide to OpenTTD Underground: a fork of OpenTTD with a multi-level underground metro. Levels, portals, ramps, signals, soil prices, house and water rules, blueprints and settings.">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button type="button" class="menu-button" id="menu-button" aria-controls="sidebar" aria-expanded="false">Contents</button>
+  <a class="brand" href="#/overview">OpenTTD Underground</a>
+  <nav class="top-links" aria-label="Links">
+    <a href="play/">Play in the browser</a>
+    <a href="https://github.com/povstenid/openttd-underground/releases">Download</a>
+    <a href="https://github.com/povstenid/openttd-underground">Source</a>
+  </nav>
+</header>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <label class="search">
+      <span class="visually-hidden">Search the guide</span>
+      <input type="search" id="search" placeholder="Search the guide" autocomplete="off">
+    </label>
+    <div class="search-results" id="search-results" hidden></div>
+    <nav id="toc" aria-label="Guide contents"></nav>
+  </aside>
+
+  <main class="content" id="content" tabindex="-1"></main>
+</div>
+
+<footer class="footer">
+  <p>OpenTTD Underground is a fork of OpenTTD, released under the GNU General Public License version 2. <a href="#/credits">Credits and license</a>.</p>
+</footer>
+
+<!-- ============================================================ -->
+<!-- START HERE                                                    -->
+<!-- ============================================================ -->
+
+<template id="overview" data-title="Overview" data-group="Start here">
+  <h1>Overview</h1>
+  <p class="lead">OpenTTD Underground adds a multi-level underground railway to OpenTTD. You can lay track, stations and platforms on several levels below the ground, connect them to the surface with portals and ramps, and run trains through them.</p>
+
+  <h2>What this fork adds</h2>
+  <ul>
+    <li><strong>Several underground levels.</strong> Levels are numbered −1, −2, −3 and so on, counted down from the surface. Track, stations and signals can be built on any of them.</li>
+    <li><strong>Portals.</strong> A portal joins a surface line to the underground. On flat ground the line dives into the ground; on a hillside the tunnel starts at the foot of the slope.</li>
+    <li><strong>Ramps.</strong> A ramp connects two neighbouring levels, so a line can go down or up inside the ground.</li>
+    <li><strong>Underground stations.</strong> Platforms on any level, with station exits to the surface: pavilions on the ground, or underpasses through a road.</li>
+    <li><strong>All signal types underground.</strong> Block, entry, exit, combo, path signals and one-way path signals, as light or semaphore.</li>
+    <li><strong>Soil.</strong> The ground is made of 11 layers by depth, from earth to obsidian. Deeper construction is more expensive.</li>
+    <li><strong>House and water rules.</strong> Tall houses have foundations that you cannot dig under, and water (rivers, canals, the sea) keeps you out down to its depth.</li>
+    <li><strong>Blueprints.</strong> Copy a 3D area of underground construction and paste it elsewhere.</li>
+    <li><strong>An Underground settings page</strong> with the depth limits, prices, soil multipliers and refund rules.</li>
+  </ul>
+
+  <h2>How it differs from vanilla tunnels</h2>
+  <p>In standard OpenTTD a tunnel only runs into a hill, through one plane of ground. In OpenTTD Underground:</p>
+  <ul>
+    <li>You can build underground under flat ground as well as under hills, starting from a portal.</li>
+    <li>You can have several levels, one below another, with ramps between them.</li>
+    <li>Stations can be underground, with exits to the surface.</li>
+    <li>The price depends on the soil at the depth you build in, not only on the tile.</li>
+    <li>Houses and water above a tunnel can stop you building at a given depth.</li>
+  </ul>
+
+  <h2>Words used in this guide</h2>
+  <dl class="glossary">
+    <dt>Level</dt><dd>A horizontal layer of underground construction, shown by its height: −1 is one level below the surface, −2 two levels below it, and so on.</dd>
+    <dt>Depth below ground</dt><dd>How many levels a level lies below the surface of its tile. Level −1 on flat ground is 1 below ground. On a hill it can be deeper, because the surface is higher there.</dd>
+    <dt>Surface</dt><dd>The normal map, the level you see when you are not looking underground.</dd>
+    <dt>Portal</dt><dd>The entrance between the surface line and the underground.</dd>
+    <dt>Ramp</dt><dd>A slope connecting two neighbouring underground levels.</dd>
+    <dt>Station exit</dt><dd>A pavilion or an underpass that lets passengers reach the surface from an underground station.</dd>
+    <dt>Soil</dt><dd>The kind of ground at a depth, e.g. clay or granite. It sets the price of building there. See <a href="#/soil">Soil and prices</a>.</dd>
+    <dt>Foundation</dt><dd>The depth a house reaches down into the ground. See <a href="#/rules">Houses and water</a>.</dd>
+  </dl>
+
+  <h2>Where to go next</h2>
+  <ul>
+    <li><a href="#/getting-started">Getting started</a>: open the underground toolbar and move between levels.</li>
+    <li><a href="#/building">Building underground</a>: track, stations, portals, ramps.</li>
+    <li><a href="#/signals">Signals and trains</a>: how trains behave underground and how to avoid jams.</li>
+    <li><a href="#/soil">Soil and prices</a>: what the soil is and what it costs.</li>
+  </ul>
+</template>
+
+<template id="getting-started" data-title="Getting started" data-group="Start here">
+  <h1>Getting started</h1>
+  <p class="lead">This page shows how to open the underground toolbar, move between levels and choose what you see.</p>
+
+  <h2>Open the underground toolbar</h2>
+  <p>Press <kbd>Ctrl</kbd>+<kbd>U</kbd>, or use the underground button of the main toolbar. This opens the <strong>Underground Construction</strong> toolbar on the level you are viewing. Its tools build on that level.</p>
+  <p>The number in the toolbar is the level you are building on. It reads <em>Surface</em> when you build on the ground.</p>
+  <img src="assets/img/slice-level-1.png" alt="Level −1 seen as a slice: a station platform and tracks in the ground" loading="lazy">
+  <p class="caption">Level −1 seen as a slice. The tracks and platform are underground; the green is the surface above them.</p>
+  <img src="assets/img/slice-level-1-no-surface.png" alt="Level −1 seen as a slice with the surface turned off" loading="lazy">
+  <p class="caption">The same slice with the surface turned off: only the underground level remains.</p>
+
+  <h2>Move between levels</h2>
+  <table>
+    <thead><tr><th>Action</th><th>Key or button</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>One level deeper</td><td><kbd>Page Down</kbd> or the down arrow</td><td>From the surface, goes underground to the level you viewed last. Then one level further down each press.</td></tr>
+      <tr><td>One level higher</td><td><kbd>Page Up</kbd> or the up arrow</td><td>One level up. From the highest underground level, goes back to the surface.</td></tr>
+      <tr><td>Surface or underground</td><td>Click the level number</td><td>Switches between the surface and the underground.</td></tr>
+    </tbody>
+  </table>
+  <p>The tools always build on the level you are viewing, not on the surface. If a tool seems to do nothing, check the level number in the toolbar.</p>
+
+  <h2>Views</h2>
+  <p>Views decide what you see on the map. Each one can be switched on and off.</p>
+  <table>
+    <thead><tr><th>View</th><th>Key</th><th>What it shows</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Slice</strong></td><td>Shown when you view a level</td><td>The viewed level as a cut through the ground, so you see its track and stations at their depth. The surface above it can be turned off.</td></tr>
+      <tr><td><strong>X-ray</strong></td><td><kbd>Ctrl</kbd>+<kbd>Home</kbd></td><td>The surface with the viewed underground level drawn through it. Good for seeing where a tunnel lies under a town.</td></tr>
+      <tr><td><strong>Below</strong></td><td><kbd>Ctrl</kbd>+<kbd>Page Down</kbd></td><td>The levels below the viewed level, drawn at their own depth, without the surface. Building still happens on the viewed level.</td></tr>
+      <tr><td><strong>Above</strong></td><td><kbd>Ctrl</kbd>+<kbd>Page Up</kbd></td><td>The levels above the viewed level, drawn at their own depth, without the surface. Building still happens on the viewed level.</td></tr>
+    </tbody>
+  </table>
+  <div class="figures">
+    <figure>
+      <img src="assets/img/xray-depth-1.png" alt="X-ray view at depth 1: the surface with the level below drawn through it" loading="lazy">
+      <figcaption>X-ray at depth 1. The red marks show the level below the viewed one.</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/img/xray-depth-2.png" alt="X-ray view at depth 2: the surface with a level above drawn through it" loading="lazy">
+      <figcaption>X-ray at depth 2. The white marks show the level above.</figcaption>
+    </figure>
+  </div>
+
+  <h2>Leave underground</h2>
+  <p>Press <kbd>Page Up</kbd> from the highest underground level, or click the level number, to return to the surface. The surface toolbar tools then build on the ground again.</p>
+
+  <h2>Tip: check the costs first</h2>
+  <p>Hold <kbd>Shift</kbd> while using a tool to see the cost estimate without building. Estimates include the soil, so you can compare a route at two depths before you pay for it.</p>
+</template>
+
+<!-- ============================================================ -->
+<!-- BUILD                                                         -->
+<!-- ============================================================ -->
+
+<template id="building" data-title="Building underground" data-group="Build">
+  <h1>Building underground</h1>
+  <p class="lead">Track, stations, portals and ramps are built on the level you are viewing. This page describes each one and the rules that apply.</p>
+
+  <h2>Track</h2>
+  <p>Use the track tool on the viewed level and drag along the tiles. Underground track joins the track next to it, on the same level. A drag builds a straight line or a curve as you would on the surface.</p>
+  <p>Each piece is priced by the soil at its depth. See <a href="#/soil">Soil and prices</a>.</p>
+
+  <h2>Stations and platforms</h2>
+  <p>Underground stations are built with the station tool on the viewed level, just like surface stations. A station can be as deep as the deepest station level allows. The default is level −3, set by <em>Deepest level of stations</em>. Stations can never go deeper than tunnels.</p>
+  <p>A station needs exits to reach the surface. Use a pavilion or an underpass, below.</p>
+
+  <h2>Station exits</h2>
+  <p>An exit links an underground station to the surface. Both kinds must be within the exit distance of the station's platforms. The default distance is 2 tiles, set by <em>Maximum distance of a metro station exit from its platforms</em>.</p>
+  <div class="figures">
+    <figure>
+      <img src="assets/img/exit-pavilion.png" alt="A station exit pavilion on the surface above an underground platform" loading="lazy">
+      <figcaption>Pavilion: a station building on the surface.</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/img/exit-underpass.png" alt="A station exit underpass: stairs next to a straight road" loading="lazy">
+      <figcaption>Underpass: stairs next to a straight road. The road stays usable.</figcaption>
+    </figure>
+  </div>
+  <ul>
+    <li><strong>Pavilion.</strong> Built on a free surface tile, or on a town house, which is demolished. Catchment radius 3 tiles.</li>
+    <li><strong>Underpass.</strong> Built on a straight road tile without junctions. The road keeps working. Catchment radius 2 tiles.</li>
+  </ul>
+  <p>To remove an exit, remove it on the surface first; the error <em>remove the metro station exit first</em> means that you must do so before you remove the station.</p>
+
+  <h2>Portals</h2>
+  <p>A portal is the entrance between the surface line and the underground. Build it with the portal tool.</p>
+  <ul>
+    <li><strong>Flat ground: a dive portal.</strong> The line dives down into the ground. The portal's track runs straight, and the cut rises up to the surface line.</li>
+    <li><strong>Hillside: a hillside portal.</strong> The tunnel starts at the foot of the slope, so the mouth sits on the surface where the hill begins.</li>
+  </ul>
+  <p>Drag in the direction of travel into the tunnel. A plain click turns the portal to the line next to it.</p>
+  <img src="assets/img/tunnel-mouths.png" alt="Two tunnel mouths: a dive portal on flat ground and a hillside mouth at the foot of a slope" loading="lazy">
+  <p class="caption">Tunnel mouths: a dive portal on flat ground and a hillside mouth at the foot of a slope.</p>
+
+  <h3>The slope rule</h3>
+  <ul>
+    <li>On a slope, the slope sets the direction of the portal. A portal must run along the slope, not across it. A portal across a slope is refused with <em>land sloped in wrong direction</em>.</li>
+    <li>A portal needs a straight track on its tile. Otherwise the error is <em>a tunnel mouth needs a straight track</em>.</li>
+    <li>Only one portal fits on a tile: <em>there is already a metro portal here</em>.</li>
+    <li>A portal's own track can be built on its tile, but nothing else: <em>only the metro portal's own track can be laid on its tile</em>.</li>
+  </ul>
+  <p>A portal is priced with the portal multiplier, and always with the soil of the first underground level.</p>
+
+  <h2>Ramps</h2>
+  <p>A ramp connects two neighbouring levels: for example, level −1 to level −2. Ramps are the way to go deeper or shallower inside the ground without a portal.</p>
+  <ul>
+    <li><strong>Ramp down</strong> builds a ramp to the level below. <strong>Ramp up</strong> builds one to the level above.</li>
+    <li>The ramp descends or rises towards the tile edge nearest to your cursor. The ghost shows its direction. A red ghost means it cannot be built there.</li>
+    <li>Drag from the ramp's tile along a line to lead the ramp down or up towards the drag.</li>
+    <li>A ramp must connect two adjacent levels: <em>ramp must connect two adjacent levels</em>.</li>
+  </ul>
+  <img src="assets/img/ramps.png" alt="Ramp direction markers: a red arrow for a ramp that cannot be built, green arrows for ramps that can" loading="lazy">
+  <p class="caption">Ramp ghosts: green arrows show where a ramp can go, the red arrow where it cannot.</p>
+  <p>A ramp is priced with the soil of its lower level, and its price is set by the ramp multiplier.</p>
+
+  <h2>Removing track, stations, signals, portals and ramps</h2>
+  <ul>
+    <li>The <strong>Demolish</strong> tool removes underground track, stations, signals, portals and ramps on the viewed level.</li>
+    <li><kbd>Ctrl</kbd>+click and drag demolishes surface buildings, roads and so on instead.</li>
+    <li>Hold <kbd>Shift</kbd> to see the cost of the removal without removing anything. A removal pays back a share of the build price. See <a href="#/soil">Soil and prices</a>.</li>
+    <li>The track tool can also remove track: the <em>build/remove</em> toggle switches it, and holding <kbd>Ctrl</kbd> with the track tool removes track too.</li>
+    <li>A portal cannot be removed while track still runs through its mouth. The errors you will see are <em>must remove metro portal first</em> and <em>must remove railway track first</em>.</li>
+  </ul>
+
+  <h2>Where construction can fail</h2>
+  <p>Construction is refused with a short reason in the status line. The usual reasons are:</p>
+  <ul>
+    <li><em>underground depth must be below the surface</em>, or <em>too deep underground</em>: the level is above ground or beyond the depth limit.</li>
+    <li><em>underground construction in the way</em> or <em>another underground structure in the way at this depth</em>.</li>
+    <li><em>rail type mismatch at this depth</em>: the track types do not match.</li>
+    <li><em>building foundation here</em>, <em>too shallow under the water</em> and <em>no underground construction under the sea</em>: see <a href="#/rules">Houses and water</a>.</li>
+  </ul>
+</template>
+
+<template id="signals" data-title="Signals and trains" data-group="Build">
+  <h1>Signals and trains underground</h1>
+  <p class="lead">Trains use the same signals underground as on the surface. This page explains where to put them, how trains reserve track, what happens at portals, and how to avoid jams.</p>
+
+  <h2>Signal types</h2>
+  <p>All standard OpenTTD signal types can be built underground:</p>
+  <ul>
+    <li><strong>Block</strong>, <strong>entry</strong>, <strong>exit</strong> and <strong>combo</strong> signals.</li>
+    <li><strong>Path signals</strong>, as two-way and one-way signals (PBS and PBS one-way).</li>
+    <li>Each in <strong>light</strong> or <strong>semaphore</strong> form.</li>
+  </ul>
+  <p>Signals can also stand on ramps between two levels.</p>
+
+  <h2>Where a signal stands</h2>
+  <ul>
+    <li>A signal stands at the far edge of its tile, in the direction the trains face. Place it where the train should stop or be allowed to pass.</li>
+    <li>A one-way signal stops trains going the other way. A two-way path signal lets trains pass in both directions.</li>
+    <li>Use two-way path signals at a dead end where a train must turn back.</li>
+  </ul>
+
+  <h2>How trains reserve track</h2>
+  <ul>
+    <li>A train reserves the track ahead of it, up to the next signal. A block signal that is green still reserves the path to the next signal, so a train cannot run into another train's reservation.</li>
+    <li>A train never enters a tile it has not reserved. It waits instead.</li>
+    <li>A red signal stops trains at the tile before it.</li>
+  </ul>
+
+  <h2>Portals</h2>
+  <p>A train coming out of a portal into the surface waits until the way ahead is free. The train that enters the last block before a portal decides whether it may come out, and it claims the mouth so no other train enters it. Keep at least one free block after a portal so that trains can leave it without waiting in the tunnel.</p>
+
+  <h2>Common causes of jams</h2>
+  <ol>
+    <li><strong>A dead end with a one-way signal.</strong> A train cannot turn back, so it waits forever. Put a two-way path signal at the dead end, or a loop or a turning platform.</li>
+    <li><strong>Two trains facing each other on one track.</strong> Neither can pass. Build a passing loop or a second track, and use path signals so each train can wait in a free place.</li>
+    <li><strong>A portal mouth blocked from the surface.</strong> A train waits in the tunnel for the surface beyond the portal to be free. Keep the block after the portal clear and do not stop trains there.</li>
+    <li><strong>Trains stopping at every station.</strong> Without non-stop orders, a train halts at each station it passes. Set intermediate stations to non-stop, so trains do not block platforms they only pass through.</li>
+    <li><strong>One platform for a busy station.</strong> A train waiting for a platform blocks the way for the trains behind it. Give busy stations two or more platforms.</li>
+  </ol>
+  <p>When a train is stuck, check which signal it waits at and whether the track ahead is reserved by another train. Trains at a red signal wait; they do not drive through it.</p>
+</template>
+
+<!-- ============================================================ -->
+<!-- BUILD AND PAY                                                 -->
+<!-- ============================================================ -->
+
+<template id="soil" data-title="Soil and prices" data-group="Build and pay">
+  <h1>Soil and prices</h1>
+  <p class="lead">The ground has 11 soil layers by depth. Building deeper costs more. This page lists the layers, the multipliers that set the price, and where you change them.</p>
+
+  <h2>What the soil is</h2>
+  <p>The soil at a level depends on its depth below the ground of the tile. The depth is the level's height minus the height of the ground. A hill is harder to dig through than flat ground, because a level in a hill is deeper below the surface.</p>
+  <p>The soil is not saved. It follows from the height of the land and the level. If you raise the land above a tunnel, the soil for later work there changes too.</p>
+
+  <h2>The 11 soil layers</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Depth below ground</th><th>Soil</th><th>Tunnel ×</th><th>Station ×</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Earth (black, with roots)</td><td>1</td><td>1</td></tr>
+      <tr><td>2</td><td>Light clay</td><td>1.5</td><td>1.5</td></tr>
+      <tr><td>3</td><td>Clay</td><td>2</td><td>2</td></tr>
+      <tr><td>4</td><td>Dark clay</td><td>2.5</td><td>2.5</td></tr>
+      <tr><td>5</td><td>Light marble</td><td>3</td><td>3.5</td></tr>
+      <tr><td>6</td><td>Grey marble</td><td>3.5</td><td>4</td></tr>
+      <tr><td>7</td><td>Pink granite</td><td>4</td><td>5</td></tr>
+      <tr><td>8</td><td>Grey granite</td><td>5</td><td>6</td></tr>
+      <tr><td>9</td><td>Dark granite</td><td>6</td><td>7</td></tr>
+      <tr><td>10</td><td>Black granite</td><td>7</td><td>8</td></tr>
+      <tr><td>11 and deeper</td><td>Obsidian</td><td>15</td><td>20</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>These are the default multipliers. Each can be changed on the settings page; see below.</p>
+
+  <h2>Under water: sand</h2>
+  <p>Under a river, a canal or the sea, the earth and clay near the surface are replaced by sand. The sand takes the place of depths 1 to 3, then the layers go on as on land.</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Depth below the water bed</th><th>Soil</th><th>Tunnel ×</th><th>Station ×</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Light sand</td><td>4</td><td>5</td></tr>
+      <tr><td>2</td><td>Sand</td><td>4</td><td>5</td></tr>
+      <tr><td>3</td><td>Dark sand</td><td>4</td><td>5</td></tr>
+      <tr><td>4 and deeper</td><td>As on land (dark clay, marble, granite, obsidian)</td><td>as above</td><td>as above</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>The three sand layers share one multiplier each for tunnels and stations. Water itself is not dug through: the depths the water fills are closed to construction. See <a href="#/rules">Houses and water</a>.</p>
+
+  <h2>How the price is worked out</h2>
+  <p>Underground construction costs the surface price of the same thing, times the base multiplier, times the soil multiplier of its tile. Ramps and portals also have their own multiplier:</p>
+  <ul>
+    <li><strong>Track:</strong> rail price × base × tunnel soil.</li>
+    <li><strong>Station platform:</strong> the price of a surface station tile × base × station soil.</li>
+    <li><strong>Ramp:</strong> rail price × base × ramp multiplier × tunnel soil of its lower level.</li>
+    <li><strong>Portal:</strong> rail price × base × portal multiplier × tunnel soil of the first underground level (earth).</li>
+    <li><strong>Signal:</strong> the surface signal price × base. Signals have no soil multiplier.</li>
+  </ul>
+  <p>The base multiplier is 10 by default, which means ×10 for the whole price. The soil and ramp and portal multipliers are typed in tenths: 15 is ×1.5.</p>
+  <p>Some examples with the default values:</p>
+  <ul>
+    <li>Track in earth: 10 times the price of the same rail piece.</li>
+    <li>Track in obsidian: 150 times the price of the same rail piece (base 10 × soil 15).</li>
+    <li>A portal: 20 times the price of a rail piece (base 10 × portal 2).</li>
+    <li>A ramp down to light clay: 45 times the price of a rail piece (base 10 × ramp 3 × soil 1.5).</li>
+  </ul>
+  <p>The tooltip under the cursor shows the soil and its multiplier, e.g. <em>Dark clay, ×2</em>. Hold <kbd>Shift</kbd> for the total cost estimate.</p>
+
+  <h2>Refund when you remove something</h2>
+  <p>Removing underground construction pays back a share of its build price. The default share is 25%.</p>
+  <ul>
+    <li>With <em>Soil counts in the refund</em> on (the default), the refund uses the cheaper of two soils: the one there now, and the one you paid for. So if the land above has been raised, the refund is still based on what you paid.</li>
+    <li>With it off, the refund is worked out as if the soil were earth or cheaper.</li>
+    <li>A refund is never larger than the build price, so building and removing the same piece never makes a profit.</li>
+  </ul>
+
+  <h2>Depth limits</h2>
+  <ul>
+    <li><strong>Deepest level of tunnels</strong>: the lowest level track, ramps and portals may use. Default −3. Range −10 to −1.</li>
+    <li><strong>Deepest level of stations</strong>: the lowest level stations may use. Default −3. Never deeper than tunnels.</li>
+    <li><strong>Deepest underground level below the surface</strong>: how many levels below a tile construction may go. Default 10. Range 1 to 15. Obsidian starts at depth 11.</li>
+  </ul>
+  <p>Older saves keep what they have. Something already built deeper than a new limit stays and can be removed, but nothing new can be built past the limit.</p>
+
+  <h2>Where to change the prices</h2>
+  <p>Open the game <strong>Settings</strong> and go to the <strong>Underground</strong> page. It has these sub-pages:</p>
+  <ul>
+    <li><strong>Depth</strong>: depth limits, sea tunnels, house foundation thresholds, exit distance.</li>
+    <li><strong>Prices</strong>: base multiplier, ramp and portal multipliers, and two sub-pages: <em>Tunnels by soil</em> and <em>Stations by soil</em>.</li>
+    <li><strong>Refund on removal</strong>: the refund share and whether soil counts.</li>
+  </ul>
+  <p>The full list, with defaults and ranges, is on the <a href="#/settings">Settings reference</a> page. These are game settings: they are saved in the save game and apply to every player in a multiplayer game.</p>
+</template>
+
+<template id="rules" data-title="Houses and water" data-group="Build and pay">
+  <h1>Houses and water</h1>
+  <p class="lead">The surface limits how deep you can build. Houses have foundations, and water keeps underground construction out down to its depth. This page explains both rules and the messages you see when they apply.</p>
+
+  <h2>House foundations</h2>
+  <p>A house reaches down into the ground by its foundation depth. You cannot build underground at or above that depth below the house. The foundation is worked out from the population of the house per tile, compared with the largest population per tile of all houses in the game:</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>House</th><th>Foundation</th></tr></thead>
+    <tbody>
+      <tr><td>Low houses: small homes, shops, low offices</td><td>0 levels. Nothing is blocked.</td></tr>
+      <tr><td>Medium houses: tall residential, hotels, medium offices</td><td>1 level</td></tr>
+      <tr><td>Tallest houses: skyscrapers, high offices, towers</td><td>2 levels</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <ul>
+    <li>A house with at least 60% of the largest population per tile has a foundation of 2 levels. A house with at least 25% has 1 level. Both thresholds are set on the settings page.</li>
+    <li>Churches have no foundation. Stadiums have 1 level.</li>
+    <li>A house of several tiles has one foundation for all of its tiles.</li>
+    <li>The scale is taken from the houses of your game, including NewGRF houses, so the tallest houses in any set always reach 2 levels.</li>
+  </ul>
+  <p>The rule works both ways: the town does not put a tall house over your tunnel, and you cannot build a tunnel under a house's foundation. Tunnels that were already built under a house before the rule applied stay where they are.</p>
+
+  <h2>Water: rivers, canals and the sea</h2>
+  <p>Water has a depth too. Nothing is built at or above that depth below the water.</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Water</th><th>Depth</th></tr></thead>
+    <tbody>
+      <tr><td>River or canal, a tile next to land</td><td>1 level</td></tr>
+      <tr><td>River or canal, a tile in the middle (water on all four sides)</td><td>2 levels</td></tr>
+      <tr><td>Sea, first tile from the shore</td><td>1 level</td></tr>
+      <tr><td>Sea, second tile from the shore</td><td>2 levels</td></tr>
+      <tr><td>Sea, third tile from the shore and further out</td><td>3 levels</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <ul>
+    <li>Only the four sides of a tile count as next to land. A tile where land touches it only at a corner counts as the middle.</li>
+    <li>A shore tile, where land slopes into the water, is land.</li>
+    <li>Under the sea, you can build below the water. The sea tunnels setting controls this:
+      <ul>
+        <li><strong>Below the water (normal)</strong>, the default in the game: build below the water depth.</li>
+        <li><strong>Forbidden (stricter)</strong>: nothing is built under the sea at any depth.</li>
+      </ul>
+    </li>
+    <li>Under a river or canal you can build below its depth. The sand layers on the <a href="#/soil">Soil and prices</a> page sit in the water column.</li>
+  </ul>
+
+  <h2>Water over your tunnels</h2>
+  <p>A canal cannot be dug if its water would reach a tunnel that is already built. Land that becomes water next to a tunnel is checked the same way: the error is <em>underground construction in the way</em>. Water that is already there and over a tunnel stays.</p>
+
+  <h2>What you will see</h2>
+  <ul>
+    <li><em>building foundation here (down to N levels below ground)</em>: a house foundation is in the way.</li>
+    <li><em>too shallow under the water: must be deeper than N levels here</em>: the level is inside the water column.</li>
+    <li><em>no underground construction under the sea</em>: the stricter sea setting forbids it.</li>
+  </ul>
+  <p>In the slice view, a level with a house foundation is drawn as an underground car park, and a level in the water is drawn as water, darker with each level. In the land information, the tile says <em>house foundation</em>, <em>water</em> or <em>no construction under the sea</em> instead of the soil.</p>
+</template>
+
+<template id="blueprints" data-title="Blueprints" data-group="Build and pay">
+  <h1>Blueprints</h1>
+  <p class="lead">A blueprint is a copy of underground construction, which you can paste elsewhere. It covers several levels in one go, so you can copy a whole station with its tunnels.</p>
+
+  <h2>Open the blueprint window</h2>
+  <p>Press <kbd>Ctrl</kbd>+<kbd>B</kbd>, or click the <em>BP</em> button of the railway construction toolbar. The console command <code>blueprint gui</code> does the same.</p>
+
+  <h2>Copy</h2>
+  <ul>
+    <li>Drag a rectangle over the area to copy.</li>
+    <li><strong>Levels: All</strong> copies every underground level that has construction in the area. Otherwise copy the levels from <em>top</em> to <em>bottom</em>.</li>
+    <li><strong>Surface</strong> copies up to the surface, including surface rail, signals, depots and station exits.</li>
+    <li>The viewed level becomes the anchor level. Pasting puts it on the level you are viewing.</li>
+  </ul>
+
+  <h2>Paste</h2>
+  <ul>
+    <li>The north corner of the blueprint goes to the tile you click. A ghost shows what will be built on the viewed level; red means something is in the way.</li>
+    <li><kbd>R</kbd> turns the blueprint, <kbd>Shift</kbd>+<kbd>R</kbd> turns it the other way, and <kbd>M</kbd> mirrors it.</li>
+    <li><kbd>Ctrl</kbd>+click joins the stations to an adjacent station of yours.</li>
+    <li><kbd>Shift</kbd>+click shows the cost only, without building.</li>
+    <li>Pasting over an identical copy builds nothing and costs nothing.</li>
+  </ul>
+
+  <h2>Build what fits</h2>
+  <p>Off by default. With it off, nothing is built if any piece cannot be built or you cannot afford the whole. With it on, pieces that cannot be built are left out, and the paste reports how many were.</p>
+  <p><strong>Toolbar track</strong> builds everything with the track type you last chose in the railway construction toolbar.</p>
+
+  <h2>Save, share and text</h2>
+  <ul>
+    <li><strong>Save</strong>, <strong>Delete</strong> and <strong>Rescan</strong> manage blueprints on disk. Only those in your personal folder can be deleted or replaced.</li>
+    <li><strong>Copy as text</strong> puts a blueprint on the clipboard as one line of text, which you can share. <strong>Paste text</strong> reads one back.</li>
+  </ul>
+
+  <h2>What is not copied</h2>
+  <p>Trains, their reservations, owners, station names (each station of a blueprint becomes a new station), vanilla surface stations and waypoints, bridges, vanilla tunnels, roads and level crossings are not copied.</p>
+
+  <h2>Where blueprints are kept</h2>
+  <p>Blueprints are <code>.json</code> files in the <code>blueprint</code> folder of your OpenTTD personal directory. The console command <code>list_dirs blueprint</code> shows the folders that are searched.</p>
+</template>
+
+<template id="land-info" data-title="Land info and tooltips" data-group="Tools and reference">
+  <h1>Land info and tooltips</h1>
+  <p class="lead">Use the land information tool, or the tooltip of a tool, to see what is under a tile and what it costs.</p>
+
+  <h2>Land information</h2>
+  <p>Click a tile with the land information tool. For underground construction on a tile, the window says the level, how far below the ground it is, and the soil. For example:</p>
+  <ul>
+    <li><em>Underground track, level −1 (3 below ground, dark clay)</em></li>
+    <li><em>Underground platform, level −2 (2 below ground, clay)</em></li>
+    <li><em>Underground ramp between levels −1 and −2</em></li>
+    <li><em>Metro portal, level −1 (1 below ground, earth)</em></li>
+    <li><em>Foundation: 2 levels below ground</em> (a house above)</li>
+  </ul>
+  <p>On an empty tile in the slice view, the window also says what the level is made of at that depth: its soil, a house foundation, water, or the sea where nothing may be built.</p>
+
+  <h2>Tooltips while building</h2>
+  <p>Hover the cursor over a tile with a construction tool. The tooltip shows the soil and its multiplier for that depth, e.g. <em>Dark clay, ×2</em>, and the depth below the ground.</p>
+
+  <h2>Cost estimate</h2>
+  <p>Hold <kbd>Shift</kbd> while you use a tool, or in the demolish tool, to see the total price without building or removing anything. The estimate uses the same price as the real build, so the two agree.</p>
+</template>
+
+<!-- ============================================================ -->
+<!-- REFERENCE AND HELP                                            -->
+<!-- ============================================================ -->
+
+<template id="settings" data-title="Settings reference" data-group="Tools and reference">
+  <h1>Settings reference</h1>
+  <p class="lead">Every underground setting, with the name shown in the game, the default and the range. The game name is what you see in <strong>Settings</strong>, under <strong>Underground</strong>. The key is used in configuration files and scripts.</p>
+  <p>All these are game settings. They are saved in the save game and are the same for every player in a multiplayer game. Older saves get the default values.</p>
+
+  <h2>Depth page</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Setting in the game</th><th>Key</th><th>Default</th><th>Range</th></tr></thead>
+    <tbody>
+      <tr><td>Deepest level of tunnels</td><td><code>underground.deepest_tunnel_level</code></td><td>−3</td><td>−10 to −1</td></tr>
+      <tr><td>Deepest level of stations</td><td><code>underground.deepest_station_level</code></td><td>−3</td><td>−10 to −1, not deeper than tunnels</td></tr>
+      <tr><td>Deepest underground level below the surface</td><td><code>construction.max_underground_depth</code></td><td>10</td><td>1 to 15</td></tr>
+      <tr><td>Tunnels under the sea</td><td><code>underground.sea_tunnels</code></td><td>Below the water (normal)</td><td>Forbidden (stricter) or Below the water (normal)</td></tr>
+      <tr><td>Foundation of the tallest houses from</td><td><code>underground.foundation_high_percent</code></td><td>60%</td><td>10 to 100%</td></tr>
+      <tr><td>Foundation of medium houses from</td><td><code>underground.foundation_medium_percent</code></td><td>25%</td><td>0 to 100%, not above the tallest threshold</td></tr>
+      <tr><td>Maximum distance of a metro station exit from its platforms</td><td><code>construction.max_station_exit_distance</code></td><td>2 tiles</td><td>1 to 6 tiles</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2>Prices page</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Setting in the game</th><th>Key</th><th>Default</th><th>Range</th></tr></thead>
+    <tbody>
+      <tr><td>Base underground price multiplier</td><td><code>underground.base_cost_multiplier</code></td><td>×10</td><td>×1 to ×50, whole numbers</td></tr>
+      <tr><td>Ramp price multiplier</td><td><code>underground.ramp_cost_multiplier</code></td><td>×3 (30)</td><td>×1 to ×10 (10 to 100)</td></tr>
+      <tr><td>Portal price multiplier</td><td><code>underground.portal_cost_multiplier</code></td><td>×2 (20)</td><td>×1 to ×10 (10 to 100)</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>The soil multipliers are typed in tenths in the key: 15 means ×1.5.</p>
+
+  <h2>Tunnels by soil</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Setting in the game</th><th>Key</th><th>Default</th></tr></thead>
+    <tbody>
+      <tr><td>Tunnel in earth (depth 1)</td><td><code>underground.tunnel_cost_earth</code></td><td>10 (×1)</td></tr>
+      <tr><td>Tunnel in light clay (depth 2)</td><td><code>underground.tunnel_cost_clay_light</code></td><td>15 (×1.5)</td></tr>
+      <tr><td>Tunnel in clay (depth 3)</td><td><code>underground.tunnel_cost_clay</code></td><td>20 (×2)</td></tr>
+      <tr><td>Tunnel in dark clay (depth 4)</td><td><code>underground.tunnel_cost_clay_dark</code></td><td>25 (×2.5)</td></tr>
+      <tr><td>Tunnel in light marble (depth 5)</td><td><code>underground.tunnel_cost_marble_light</code></td><td>30 (×3)</td></tr>
+      <tr><td>Tunnel in grey marble (depth 6)</td><td><code>underground.tunnel_cost_marble_grey</code></td><td>35 (×3.5)</td></tr>
+      <tr><td>Tunnel in pink granite (depth 7)</td><td><code>underground.tunnel_cost_granite_pink</code></td><td>40 (×4)</td></tr>
+      <tr><td>Tunnel in grey granite (depth 8)</td><td><code>underground.tunnel_cost_granite_grey</code></td><td>50 (×5)</td></tr>
+      <tr><td>Tunnel in dark granite (depth 9)</td><td><code>underground.tunnel_cost_granite_dark</code></td><td>60 (×6)</td></tr>
+      <tr><td>Tunnel in black granite (depth 10)</td><td><code>underground.tunnel_cost_granite_black</code></td><td>70 (×7)</td></tr>
+      <tr><td>Tunnel in obsidian (depth 11+)</td><td><code>underground.tunnel_cost_obsidian</code></td><td>150 (×15)</td></tr>
+      <tr><td>Tunnel in sand below water (depth 1 to 3)</td><td><code>underground.tunnel_cost_sand</code></td><td>40 (×4)</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Each soil multiplier can be set from ×0.5 to ×50 (5 to 500).</p>
+
+  <h2>Stations by soil</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Setting in the game</th><th>Key</th><th>Default</th></tr></thead>
+    <tbody>
+      <tr><td>Station in earth (depth 1)</td><td><code>underground.station_cost_earth</code></td><td>10 (×1)</td></tr>
+      <tr><td>Station in light clay (depth 2)</td><td><code>underground.station_cost_clay_light</code></td><td>15 (×1.5)</td></tr>
+      <tr><td>Station in clay (depth 3)</td><td><code>underground.station_cost_clay</code></td><td>20 (×2)</td></tr>
+      <tr><td>Station in dark clay (depth 4)</td><td><code>underground.station_cost_clay_dark</code></td><td>25 (×2.5)</td></tr>
+      <tr><td>Station in light marble (depth 5)</td><td><code>underground.station_cost_marble_light</code></td><td>35 (×3.5)</td></tr>
+      <tr><td>Station in grey marble (depth 6)</td><td><code>underground.station_cost_marble_grey</code></td><td>40 (×4)</td></tr>
+      <tr><td>Station in pink granite (depth 7)</td><td><code>underground.station_cost_granite_pink</code></td><td>50 (×5)</td></tr>
+      <tr><td>Station in grey granite (depth 8)</td><td><code>underground.station_cost_granite_grey</code></td><td>60 (×6)</td></tr>
+      <tr><td>Station in dark granite (depth 9)</td><td><code>underground.station_cost_granite_dark</code></td><td>70 (×7)</td></tr>
+      <tr><td>Station in black granite (depth 10)</td><td><code>underground.station_cost_granite_black</code></td><td>80 (×8)</td></tr>
+      <tr><td>Station in obsidian (depth 11+)</td><td><code>underground.station_cost_obsidian</code></td><td>200 (×20)</td></tr>
+      <tr><td>Station in sand below water (depth 1 to 3)</td><td><code>underground.station_cost_sand</code></td><td>50 (×5)</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Station multipliers are relative to the price of a surface station tile, not of a rail piece.</p>
+
+  <h2>Refund page</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Setting in the game</th><th>Key</th><th>Default</th><th>Range</th></tr></thead>
+    <tbody>
+      <tr><td>Refund on removal</td><td><code>underground.refund_percent</code></td><td>25%</td><td>0 to 100%</td></tr>
+      <tr><td>Soil counts in the refund</td><td><code>underground.refund_soil</code></td><td>Yes</td><td>Yes or no</td></tr>
+    </tbody>
+  </table>
+  </div>
+</template>
+
+<template id="faq" data-title="FAQ and troubleshooting" data-group="Help">
+  <h1>FAQ and troubleshooting</h1>
+
+  <h2>Why can't I build here?</h2>
+  <p>Read the reason in the status line when a tool refuses. The most common ones are listed on <a href="#/building">Building underground</a> and <a href="#/rules">Houses and water</a>. In short: a house foundation or water is above that depth, another structure is in the way, the level is too deep, or the level is above ground.</p>
+
+  <h2>Why is underground track so expensive?</h2>
+  <p>The price is the surface price times the base multiplier (10 by default) times the soil multiplier. Deep soil such as granite and obsidian costs much more than earth. Check the soil in the tooltip and lower the level to save money. The <a href="#/soil">Soil and prices</a> page has the table.</p>
+
+  <h2>Can I raise the land above a tunnel?</h2>
+  <p>Yes. Raising the land makes the tile deeper below the ground, so the soil for later work there changes. Removing the tunnel later still refunds no more than you paid, so raising the land does not make removal profitable.</p>
+  <p>You cannot lower the land above a tunnel.</p>
+
+  <h2>My train does not come out of the tunnel.</h2>
+  <p>A train leaves a portal only when the track after it is free. Look at the signals beyond the portal and check whether another train is waiting in the block after the mouth. See <a href="#/signals">Signals and trains</a>.</p>
+
+  <h2>Trains are stuck at a dead end.</h2>
+  <p>A one-way signal at a dead end stops trains from turning back. Use a two-way path signal there, or give the trains a loop or a turning platform.</p>
+
+  <h2>Can I build under the sea?</h2>
+  <p>By default, yes: below the water, at the depth of the sea there. Nothing can be built within the water column itself. The <em>Tunnels under the sea</em> setting can forbid it altogether. See <a href="#/rules">Houses and water</a>.</p>
+
+  <h2>Will my old saves still work?</h2>
+  <p>Yes. A save from before these rules gets the default values for the new settings. Tunnels that were built under houses deeper than the new rule allows keep working. Nothing new can be built there, and the town will not build a tall house over them.</p>
+
+  <h2>Where are my blueprints?</h2>
+  <p>In the <code>blueprint</code> folder of your OpenTTD personal directory. The console command <code>list_dirs blueprint</code> shows the folders that are searched. See <a href="#/blueprints">Blueprints</a>.</p>
+
+  <h2>A blueprint paste is refused.</h2>
+  <p>A paste is refused if any piece cannot be built or you cannot afford all of it, unless <em>Build what fits</em> is on. Look at the ghost first: red shows what is in the way. Use <kbd>Shift</kbd>+click to see the cost before you paste.</p>
+
+  <h2>I see the surface, but not the underground.</h2>
+  <p>Switch on a view. The underground is drawn only in the views that show it: the slice of the viewed level, the X-ray, or the levels above and below. Use <kbd>Ctrl</kbd>+<kbd>Home</kbd> for X-ray.</p>
+
+  <h2>Is the game playable in a browser?</h2>
+  <p>Yes, a browser version lives at <a href="play/">play/</a>. It runs the same game in your browser, without a download.</p>
+
+  <h2>Can I use the settings in multiplayer?</h2>
+  <p>Yes. Underground settings are game settings, so they are stored in the save and the same for every player. Change them before the game, or with the other players agreed.</p>
+</template>
+
+<template id="build-source" data-title="Building from source" data-group="Tools and reference">
+  <h1>Building from source</h1>
+  <p class="lead">This page is for people who want to build OpenTTD Underground themselves. The full build instructions for OpenTTD are in <code>COMPILING.md</code> in the repository.</p>
+
+  <h2>Requirements</h2>
+  <ul>
+    <li>CMake 3.16 or newer.</li>
+    <li>A C++20 compiler.</li>
+    <li>The libraries listed in <code>COMPILING.md</code>, or the vcpkg manifest <code>vcpkg.json</code> in the repository.</li>
+  </ul>
+
+  <h2>Linux and macOS</h2>
+  <pre><code>mkdir build
+cd build
+cmake ..
+make</code></pre>
+  <p>By default this makes a Debug build, which is much slower. For a release build, add <code>-DCMAKE_BUILD_TYPE=RelWithDebInfo</code> or <code>Release</code> to the <code>cmake</code> line.</p>
+
+  <h2>Windows</h2>
+  <p>Open the folder as a CMake project in Visual Studio 2022, or generate a Visual Studio project from the command line. Set your vcpkg triplet and toolchain file as <code>COMPILING.md</code> describes, for example:</p>
+  <pre><code>cmake .. -G "Visual Studio 17 2022" -DCMAKE_TOOLCHAIN_FILE="path\to\vcpkg\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static</code></pre>
+
+  <h2>Graphics files and GRFCodec</h2>
+  <p>The game needs graphics files (OpenGFX and the underground sprites). You do not need GRFCodec to build the game or play it.</p>
+  <p>GRFCodec is only needed to recompile the base graphics, for example after changing the underground sprites. Having it installed can regenerate the <code>.grf</code> files in the source folder, which then show up as changes in git. Only install it if you intend to rebuild the graphics, and check the diff before you commit.</p>
+</template>
+
+<template id="credits" data-title="Credits and license" data-group="Tools and reference">
+  <h1>Credits and license</h1>
+
+  <h2>OpenTTD</h2>
+  <p>OpenTTD Underground is based on OpenTTD, a transport simulation game based on Transport Tycoon Deluxe by Chris Sawyer. The OpenTTD developers wrote the base game. The list of their names is in <code>CREDITS.md</code> in the repository.</p>
+
+  <h2>This fork</h2>
+  <p>The underground system, the soil and price rules, the house and water rules, the signals and the blueprints are the work of the author of this fork, <a href="https://github.com/povstenid">povstenid</a>. This fork is not part of the official OpenTTD project.</p>
+
+  <h2>License</h2>
+  <p>OpenTTD is released under the GNU General Public License, version 2. OpenTTD Underground is released under the same license. The full text is in <code>COPYING.md</code> in the repository. Some third-party parts have their own licenses; see the readme.</p>
+  <p>The game comes with no warranty.</p>
+</template>
+
+<!-- Scripts run last so the templates above are in place. -->
+<script src="assets/app.js"></script>
+</body>
+</html>
