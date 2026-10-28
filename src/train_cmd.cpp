@@ -4583,14 +4583,21 @@ bool TrainController(Train *v, Vehicle *nomove, bool reverse)
 					Track track = FindFirstTrack(v->track);
 					DiagDirection exitdir = TrackdirToExitdir(TrackDirectionToTrackdir(track, v->direction));
 					int dist = DistanceToTileExit(gp.x, gp.y, exitdir);
-					if (gp.old_tile != gp.new_tile || dist <= 1) {
-						if (gp.old_tile != gp.new_tile) {
-							gp.x = v->x_pos;
-							gp.y = v->y_pos;
-						}
+					/* Already at the stop: the train is leaving the platform. With
+					 * the same station as its next order (a single order) it would
+					 * "arrive" again on every step, as the stop is everything from
+					 * here to the tile edge, while a surface train only arrives when
+					 * it moves onto the stop position. */
+					bool leaving = DistanceToTileExit(v->x_pos, v->y_pos, exitdir) <= 1;
+					if (leaving) {
+						/* Drive on. */
+					} else if (gp.old_tile != gp.new_tile || dist <= 1) {
 						v->cur_speed = 0;
 						v->subspeed = 0;
 						TrainEnterStation(v, station);
+						/* Held back from the next tile: the parts behind it stay
+						 * where they are too, or they close up on the front. */
+						if (gp.old_tile != gp.new_tile) return false;
 						goto ug_no_move;
 					} else {
 						/* On the stopping tile brake down towards the stop, as
