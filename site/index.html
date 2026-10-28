@@ -54,6 +54,7 @@
     <li><strong>Soil.</strong> The ground is made of 11 layers by depth, from earth to obsidian. Deeper construction is more expensive.</li>
     <li><strong>House and water rules.</strong> Tall houses have foundations that you cannot dig under, and water (rivers, canals, the sea) keeps you out down to its depth.</li>
     <li><strong>Blueprints.</strong> Copy a 3D area of underground construction and paste it elsewhere.</li>
+    <li><strong>A metro set.</strong> Metro track and five generations of metro cars come with the game and are active in a first new game. See <a href="#/metro-set">Metro track and cars</a>.</li>
     <li><strong>An Underground settings page</strong> with the depth limits, prices, soil multipliers and refund rules.</li>
   </ul>
 
@@ -269,6 +270,39 @@
 <!-- ============================================================ -->
 <!-- BUILD AND PAY                                                 -->
 <!-- ============================================================ -->
+
+<template id="metro-set" data-title="Metro track and cars" data-group="Build">
+  <h1>Metro track and cars</h1>
+  <p class="lead">The game comes with a metro set: metro track and five generations of metro cars. It is active in a first new game, so you can build a metro right away, nothing to download.</p>
+
+  <h2>Where to find it</h2>
+  <p>The set is the NewGRF <strong>OpenTTD Underground Metro Set</strong>, installed with the game as <code>newgrf/metro_set.grf</code>. On the first start it is in the NewGRF list of a new game. Later the list in your configuration is yours: you can remove the set or add it again in <em>NewGRF Settings</em> of the main menu. A game that is already running keeps the NewGRFs it was started with.</p>
+
+  <h2>Metro track</h2>
+  <p>Open the railway construction menu of the main toolbar and choose <strong>Metro track</strong>. It is ordinary track with a yellow conductor rail beside one running rail, available from the start of any game, with no speed limit and the price of electrified rail. Build it on the surface or underground, with portals and ramps, like any other track; signals are the usual ones.</p>
+  <p>Metro cars run only on metro track, and ordinary trains do not run on it. Build a depot on metro track to buy metro cars.</p>
+
+  <h2>Assembling a train</h2>
+  <p>Every metro car is a self-propelled car of a multiple unit. Buy a car in a metro depot, buy more cars of the same type and drag each one onto the first in the depot window. Typical trains are 4 to 8 cars. The cars at both ends of a train show a cab, the cars in the middle do not. For the 717, put a 717 at each end and 714 cars in the middle. Clone the finished train with the <em>Clone train</em> button of the depot.</p>
+  <p>A car is half a tile long and carries passengers only, with fast loading.</p>
+
+  <h2>The cars</h2>
+  <table>
+    <thead><tr><th>Car</th><th>On sale from</th><th>Speed</th><th>Passengers per car</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Type A</strong></td><td>1935</td><td>65 km/h</td><td>147</td><td>Riveted car of the 1930s. On sale for 30 years.</td></tr>
+      <tr><td><strong>Type E</strong></td><td>1959</td><td>90 km/h</td><td>148</td><td>Light two-tone car of the 1960s.</td></tr>
+      <tr><td><strong>717</strong></td><td>1976</td><td>90 km/h</td><td>173</td><td>Car with a cab, for the ends of a train.</td></tr>
+      <tr><td><strong>714</strong></td><td>1976</td><td>90 km/h</td><td>173</td><td>Car without a cab, for the middle of a 717 train.</td></tr>
+      <tr><td><strong>720</strong></td><td>1991</td><td>100 km/h</td><td>185</td><td>Car of the 1990s with a sloped cab. On sale for 15 years.</td></tr>
+      <tr><td><strong>765</strong></td><td>2016</td><td>90 km/h</td><td>176</td><td>Modern car with wide glazing. Never goes off sale.</td></tr>
+    </tbody>
+  </table>
+  <p>The years and speeds follow the real Moscow metro cars of the same names. A car costs about as much as a passenger locomotive of its time, so a metro is a way to move many people through a city, not an easy money maker.</p>
+
+  <h2>Multiplayer and saved games</h2>
+  <p>The set is an ordinary NewGRF and is saved with the game. Everyone who plays this fork has it, so a server and its clients need nothing extra. A client of standard OpenTTD would be asked to download the set from online content, where it is not published.</p>
+</template>
 
 <template id="soil" data-title="Soil and prices" data-group="Build and pay">
   <h1>Soil and prices</h1>

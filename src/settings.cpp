@@ -1167,6 +1167,32 @@ static GRFConfigList GRFLoadConfig(const IniFile &ini, std::string_view grpname,
 	return list;
 }
 
+/** GRF ID of the metro set that ships with the game, "OUM" (media/metro_set). */
+static constexpr uint32_t METRO_SET_GRFID = 0x014D554F;
+
+/**
+ * NewGRFs of a first new game, when the configuration has no NewGRF list yet.
+ * The metro set ships with the game, so a fresh install can build metro lines
+ * without downloading anything. It is looked up by GRF ID among the scanned
+ * NewGRFs; when it is missing (or the scan was skipped) the list stays empty.
+ * Once the list is saved in the configuration, the player decides.
+ * @return The list of default NewGRF configurations.
+ */
+static GRFConfigList GRFDefaultNewGameConfig()
+{
+	GRFConfigList list;
+
+	const GRFConfig *s = FindGRFConfig(METRO_SET_GRFID, FGCM_NEWEST_VALID);
+	if (s == nullptr) return list;
+
+	auto c = std::make_unique<GRFConfig>(*s);
+	if (!FillGRFDetails(*c, false) || c->flags.Test(GRFConfigFlag::Invalid)) return list;
+
+	Debug(grf, 1, "No NewGRF list in the configuration, enabling the bundled metro set {}", c->filename);
+	list.push_back(std::move(c));
+	return list;
+}
+
 static IniFileVersion LoadVersionFromConfig(const IniFile &ini)
 {
 	const IniGroup *group = ini.GetGroup("version");
@@ -1451,7 +1477,13 @@ void LoadFromConfig(bool startup)
 			_settings_client.gui.right_click_wnd_close = old_value.value_or(false) ? RightClickClose::Yes : RightClickClose::No;
 		}
 
-		_grfconfig_newgame = GRFLoadConfig(generic_ini, "newgrf", false);
+		/* A configuration without a NewGRF list is a first start: enable the bundled metro set.
+		 * An existing list, even an empty one, is the player's choice and stays as it is. */
+		if (generic_ini.GetGroup("newgrf") == nullptr) {
+			_grfconfig_newgame = GRFDefaultNewGameConfig();
+		} else {
+			_grfconfig_newgame = GRFLoadConfig(generic_ini, "newgrf", false);
+		}
 		_grfconfig_static  = GRFLoadConfig(generic_ini, "newgrf-static", true);
 		AILoadConfig(generic_ini, "ai_players");
 		GameLoadConfig(generic_ini, "game_scripts");

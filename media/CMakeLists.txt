@@ -5,6 +5,24 @@ add_library(media
 )
 add_library(openttd::media ALIAS media)
 
+# The metro set ships with the game: copy it to the newgrf directory, where
+# the NewGRF scan finds it and a first new game enables it (settings.cpp).
+set(METRO_SET_BINARY_FILE ${CMAKE_BINARY_DIR}/newgrf/metro_set.grf)
+add_custom_command(OUTPUT ${METRO_SET_BINARY_FILE}
+        COMMAND ${CMAKE_COMMAND} -E copy
+                ${CMAKE_CURRENT_SOURCE_DIR}/metro_set/metro_set.grf
+                ${METRO_SET_BINARY_FILE}
+        MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/metro_set/metro_set.grf
+        COMMENT "Copying metro_set.grf NewGRF"
+)
+add_custom_target(newgrf_files
+        DEPENDS
+        ${METRO_SET_BINARY_FILE}
+)
+add_dependencies(media
+        newgrf_files
+)
+
 if(NOT UNIX OR APPLE)
     return()
 endif()

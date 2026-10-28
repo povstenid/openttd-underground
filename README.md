@@ -46,6 +46,7 @@ The rest of this file is the original OpenTTD README.
     - 1.3) [Supported platforms](#13-supported-platforms)
     - 1.4) [Installing and running OpenTTD](#14-installing-and-running-openttd)
     - 1.5) [Add-on content / mods](#15-add-on-content--mods)
+        - 1.5.2) [Bundled metro set](#152-bundled-metro-set)
     - 1.6) [OpenTTD directories](#16-openttd-directories)
     - 1.7) [Compiling OpenTTD](#17-compiling-openttd)
 - 2.0) [Contact and community](#20-contact-and-community)
@@ -157,6 +158,16 @@ OpenTTD has the ability to load plugins to integrate with Social Platforms like 
 To enable such integration, the plugin for the specific platform has to be downloaded and stored in the `social_integration` folder.
 
 See [OpenTTD's website](https://www.openttd.org), under Downloads, for what plugins are available.
+
+### 1.5.2) Bundled metro set
+
+OpenTTD Underground comes with its own NewGRF, the OpenTTD Underground Metro Set: metro track and five generations of metro cars (Type A, Type E, 717/714, 720, 765).
+It is installed with the game (`newgrf/metro_set.grf` next to the game data) and is active in a first new game: unpack the game, start a new game and build a metro, nothing to download.
+
+The set is enabled only while the configuration file has no NewGRF list yet, i.e. on the first start.
+After that the list in `openttd.cfg` is saved as usual and it is your choice: remove the set in "NewGRF Settings" and it stays removed.
+Servers and clients of this fork all have the set, so a multiplayer game with it needs no download either.
+See [media/metro_set/README.md](./media/metro_set/README.md) for the cars and for building the set.
 
 ### 1.6) OpenTTD directories
 
