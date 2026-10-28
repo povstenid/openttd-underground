@@ -445,6 +445,9 @@ enum UndergroundSeaTunnels : uint8_t {
 	UST_BY_SEA_DEPTH = 1, ///< The normal rule: below the depth of the sea, which grows with the distance to the shore.
 };
 
+/** Deepest foundation of an industry, in levels below the surface (setting underground.industry_foundation_depth). */
+static constexpr uint8_t MAX_INDUSTRY_FOUNDATION_DEPTH = 2;
+
 /**
  * Settings of underground (metro) construction and its prices.
  * The depth below the surface (construction.max_underground_depth) and the
@@ -487,6 +490,7 @@ struct UndergroundSettings {
 	uint16_t portal_cost_multiplier;      ///< extra price multiplier of a portal, in tenths
 	uint8_t refund_percent;               ///< percentage of the build price returned on removal (0..100)
 	bool refund_soil;                     ///< whether the refund on removal includes the soil multiplier
+	uint8_t industry_foundation_depth;    ///< depth below the surface of industry foundations (0..2): nothing can be built under an industry at depth 1..this
 };
 
 /** Settings related to construction in-game */

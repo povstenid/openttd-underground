@@ -382,6 +382,9 @@
   </ul>
   <p>The rule works both ways: the town does not put a tall house over your tunnel, and you cannot build a tunnel under a house's foundation. Tunnels that were already built under a house before the rule applied stay where they are.</p>
 
+  <h2>Industry foundations</h2>
+  <p>Industries have basements too: 2 levels by default, set by <em>Foundation of industries</em> on the settings page (0 to 2). You cannot build underground at or above that depth below an industry tile, and no industry is set up, funded or prospected over underground construction that shallow. A change of the setting only affects new construction: tunnels already under an industry stay. In the slice view the basement is drawn as a store room full of pallets, boxes and crates.</p>
+
   <h2>Water: rivers, canals and the sea</h2>
   <p>Water has a depth too. Nothing is built at or above that depth below the water.</p>
   <div class="table-wrap">
@@ -503,6 +506,7 @@
       <tr><td>Tunnels under the sea</td><td><code>underground.sea_tunnels</code></td><td>Below the water (normal)</td><td>Forbidden (stricter) or Below the water (normal)</td></tr>
       <tr><td>Foundation of the tallest houses from</td><td><code>underground.foundation_high_percent</code></td><td>60%</td><td>10 to 100%</td></tr>
       <tr><td>Foundation of medium houses from</td><td><code>underground.foundation_medium_percent</code></td><td>25%</td><td>0 to 100%, not above the tallest threshold</td></tr>
+      <tr><td>Foundation of industries</td><td><code>underground.industry_foundation_depth</code></td><td>2 levels</td><td>0 to 2 levels</td></tr>
       <tr><td>Maximum distance of a metro station exit from its platforms</td><td><code>construction.max_station_exit_distance</code></td><td>2 tiles</td><td>1 to 6 tiles</td></tr>
     </tbody>
   </table>

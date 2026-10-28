@@ -275,9 +275,11 @@ public:
 			this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_NEWGRF_NAME, std::move(*td.grf)));
 		}
 
-		/* How deep a house foundation or water takes the ground below the tile. */
+		/* How deep a house or industry foundation or water takes the ground below the tile. */
 		if (IsTileType(tile, TileType::House)) {
 			this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_HOUSE_FOUNDATION, GetHouseFoundationDepth(tile)));
+		} else if (IsTileType(tile, TileType::Industry) && !IsUndergroundWaterTile(tile)) {
+			this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_INDUSTRY_FOUNDATION, GetIndustryFoundationDepth(tile)));
 		} else if (IsUndergroundWaterTile(tile)) {
 			this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_WATER_DEPTH, GetWaterDepth(tile)));
 		}
@@ -342,6 +344,9 @@ public:
 				switch (GetUndergroundObstacle(tile, level, &obstacle_depth)) {
 					case UndergroundObstacle::HouseFoundation:
 						this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_UNDERGROUND_FOUNDATION_AT_LEVEL, level, GetDepthBelowSurface(tile, level), obstacle_depth));
+						break;
+					case UndergroundObstacle::IndustryFoundation:
+						this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_UNDERGROUND_INDUSTRY_FOUNDATION_AT_LEVEL, level, GetDepthBelowSurface(tile, level), obstacle_depth));
 						break;
 					case UndergroundObstacle::Water:
 						this->landinfo_data.push_back(GetString(STR_LAND_AREA_INFORMATION_UNDERGROUND_WATER_AT_LEVEL, level, GetDepthBelowSurface(tile, level), obstacle_depth));

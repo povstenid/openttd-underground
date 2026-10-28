@@ -1679,6 +1679,171 @@ def parking_tile(role):
     return from_scene(f'SPR_METRO_PARKING_BASE + {role}', s, comment=f'underground parking: {role_name}')
 
 
+# Basement of an industry where its foundation reaches down: a factory store
+# room packed with goods. The walls stand on the two back edges of the
+# industry (x = 0: north-east, y = 0: north-west) like those of the house
+# parking; pallet racks with cartons and crates run along them. Away from the
+# walls the floor holds pallets of cartons, stacks of wooden crates and steel
+# drums, with a painted aisle line in front of the racks. Two variants per
+# role, mixed over the map.
+BASEMENT_ROLES = PARKING_ROLES
+CARTON = [33, 34, 35, 36, 37, 38]                # cardboard, dark -> light
+CRATE = [104, 105, 106, 107, 108, 109, 110]      # wood of crates and pallets
+DRUM = [144, 145, 146, 147, 148, 149]            # blue steel: drums, rack uprights
+
+
+def ramp_mat(ramp, level, seams=None):
+    """Solid material from an explicit list of palette indices, darkened per face."""
+    def m(face, x, y, z, sx, sy):
+        lv = level + FACE_SHADE[face]
+        if seams is not None and seams(face, x, y, z):
+            lv -= 2
+        return ramp[max(0, min(len(ramp) - 1, lv))]
+    return m
+
+
+def carton_mat(seed):
+    def seams(face, x, y, z):
+        if face == 'top':  # the tape across the top
+            return abs((x + y) % 2.0 - 1.0) < 0.12
+        return abs(z % 1.6 - 0.8) < 0.1  # where the cartons of a stack meet
+    return ramp_mat(CARTON, 3 + (1 if hash01(seed, 7) > 0.5 else 0), seams)
+
+
+def crate_mat(seed):
+    def seams(face, x, y, z):  # the gaps between the boards
+        if face == 'top':
+            return x % 1.2 < 0.18
+        return z % 1.1 < 0.16
+    return ramp_mat(CRATE, 4 + (1 if hash01(seed, 3) > 0.5 else 0), seams)
+
+
+def basement_pallet(s, x0, y0, w, l, seed, layers):
+    """A wooden pallet with a stack of cartons on it, the top layer sometimes half full."""
+    s.add(Box(x0, x0 + w, y0, y0 + l, 0, 0.5, ramp_mat(CRATE, 3)))
+    z = 0.5
+    for layer in range(layers):
+        inset = 0.15 + 0.1 * hash01(seed, layer)
+        x1 = x0 + w / 2 if layer == layers - 1 and hash01(seed, 11) > 0.5 else x0 + w - inset
+        s.add(Box(x0 + inset, x1, y0 + inset, y0 + l - inset, z, z + 1.5, carton_mat(seed + layer)))
+        z += 1.5
+
+
+def basement_crates(s, x0, y0, seed):
+    """Two wooden crates side by side, often a third on top."""
+    s.add(Box(x0, x0 + 3.2, y0, y0 + 3.2, 0, 2.8, crate_mat(seed)))
+    s.add(Box(x0 + 3.4, x0 + 6.0, y0 + 0.3, y0 + 2.9, 0, 2.4, crate_mat(seed + 1)))
+    if hash01(seed, 5) > 0.3:
+        s.add(Box(x0 + 0.4, x0 + 2.8, y0 + 0.4, y0 + 2.8, 2.8, 5.0, crate_mat(seed + 2)))
+
+
+def basement_drums(s, x0, y0):
+    """Four steel drums on a pallet."""
+    s.add(Box(x0, x0 + 3.6, y0, y0 + 3.6, 0, 0.5, ramp_mat(CRATE, 3)))
+    for dx in (0.2, 1.9):
+        for dy in (0.2, 1.9):
+            s.add(Box(x0 + dx, x0 + dx + 1.5, y0 + dy, y0 + dy + 1.5, 0.5, 3.0, ramp_mat(DRUM, 3)))
+
+
+def basement_rack(s, along_y, seed):
+    """A pallet rack along a back wall: blue uprights, orange beams, goods on three shelves."""
+    depth = 3.4  # out from the wall
+    upright = ramp_mat(DRUM, 3)
+
+    def beam(face, x, y, z, sx, sy):
+        return 186 if face == 'top' else 185 if face in ('px', 'py') else 62
+
+    def put(u0, u1, v0, v1, z0, z1, mat):
+        """u runs along the wall, v out from it."""
+        if along_y:
+            s.add(Box(v0, v1, u0, u1, z0, z1, mat))
+        else:
+            s.add(Box(u0, u1, v0, v1, z0, z1, mat))
+    for u in (0.2, 7.9, 15.2):
+        put(u, u + 0.6, 0.4, 0.9, 0, 9.0, upright)
+        put(u, u + 0.6, depth - 0.5, depth, 0, 9.0, upright)
+    for z0 in (0.0, 3.0, 6.0):
+        put(0.2, 15.8, depth - 0.5, depth, z0 + 2.4, z0 + 3.0, beam)
+        put(0.2, 15.8, 0.4, 0.9, z0 + 2.4, z0 + 3.0, beam)
+    for shelf, z0 in enumerate((0.0, 3.0, 6.0)):
+        base = z0
+        for bay, (u0, u1) in enumerate(((1.0, 7.7), (8.7, 15.0))):
+            r = hash01(seed, shelf, bay)
+            if r < 0.12:
+                continue  # an empty bay
+            if r < 0.55:
+                put(u0, u1, 1.0, depth - 0.6, base, base + 2.3, carton_mat(seed + shelf * 3 + bay))
+            elif r < 0.8:
+                put(u0, (u0 + u1) / 2 - 0.1, 1.0, depth - 0.6, base, base + 2.2, crate_mat(seed + shelf + bay))
+                put((u0 + u1) / 2 + 0.1, u1, 1.1, depth - 0.7, base, base + 1.8, carton_mat(seed + bay))
+            else:
+                put(u0, u1, 1.0, depth - 0.6, base, base + 2.3, crate_mat(seed + shelf * 5 + bay))
+
+
+def basement_tile(role, variant):
+    s = Scene()
+    role_name = BASEMENT_ROLES[role]
+    wall_nw = role_name in ('corner', 'nw_wall')
+    wall_ne = role_name in ('corner', 'ne_wall')
+    seed = 700 + role * 10 + variant
+    fx = 4.4 if wall_ne else 0.0  # free floor starts here, in front of the racks
+    fy = 4.4 if wall_nw else 0.0
+
+    def floor(face, x, y, z, sx, sy):
+        # the yellow line in front of the racks and the joints of the concrete slabs
+        if (wall_ne and abs(x - 4.6) < 0.25) or (wall_nw and abs(y - 4.6) < 0.25):
+            return ('yellow', 1)
+        if (x % 8.0) < 0.2 or (y % 8.0) < 0.2:
+            return ('grey', 5)
+        return ('grey', 7 if speckle(sx, sy, 61 + variant, 0.07) else 6)
+    s.add(Box(0, 16, 0, 16, 0, 0, floor))
+
+    def wall(face, x, y, z, sx, sy):
+        if face == 'top':
+            return ('grey', 10)
+        return ('grey', 8 + (1 if int(z) % 4 == 0 else 0))
+    if wall_ne:
+        s.add(Box(0, 0.8, 0, 16, 0, 10, wall))
+        basement_rack(s, True, seed)
+    if wall_nw:
+        s.add(Box(0, 16, 0, 0.8, 0, 10, wall))
+        basement_rack(s, False, seed + 50)
+
+    # goods on the free floor
+    if role_name == 'open':
+        if variant == 0:
+            basement_pallet(s, 1.0, 1.0, 5.6, 5.6, seed, 4)
+            basement_pallet(s, 8.6, 1.0, 5.6, 5.6, seed + 1, 3)
+            basement_crates(s, 1.2, 9.2, seed + 2)
+            basement_drums(s, 9.8, 9.6)
+        else:
+            basement_crates(s, 1.0, 1.2, seed)
+            basement_pallet(s, 8.4, 1.0, 5.6, 5.6, seed + 1, 4)
+            basement_pallet(s, 1.0, 8.6, 5.6, 5.6, seed + 2, 3)
+            basement_pallet(s, 8.4, 8.6, 5.6, 5.6, seed + 3, 2)
+    elif role_name == 'corner':
+        if variant == 0:
+            basement_pallet(s, fx + 2.0, fy + 2.0, 5.0, 5.0, seed, 3)
+        else:
+            basement_crates(s, fx + 2.0, fy + 2.4, seed)
+    elif wall_ne:
+        if variant == 0:
+            basement_pallet(s, fx + 1.4, 1.0, 5.2, 5.2, seed, 2)
+            basement_drums(s, fx + 2.0, 9.6)
+        else:
+            basement_crates(s, fx + 1.2, 2.0, seed)
+            basement_pallet(s, fx + 1.4, 8.8, 5.2, 5.2, seed + 1, 3)
+    else:
+        if variant == 0:
+            basement_pallet(s, 1.0, fy + 1.4, 5.2, 5.2, seed, 2)
+            basement_drums(s, 9.6, fy + 2.0)
+        else:
+            basement_crates(s, 2.0, fy + 1.2, seed)
+            basement_pallet(s, 8.8, fy + 1.4, 5.2, 5.2, seed + 1, 3)
+    return from_scene(f'SPR_METRO_INDUSTRY_BASEMENT_BASE + {role * 2 + variant}', s,
+                      comment=f'industry basement: {role_name}, variant {variant}')
+
+
 def sea_forbidden():
     """Ground below the sea where nothing may be built: dark rock hatched in red."""
     def m(face, x, y, z, sx, sy):
@@ -1827,6 +1992,10 @@ def build_sprites():
     # 19. underground parking under houses, by the place of the tile in the house
     for role in range(4):
         sp.append(parking_tile(role))
+    # 20. basement of industries: a store room of goods, by role (as the parking) and variant
+    for role in range(4):
+        for variant in range(2):
+            sp.append(basement_tile(role, variant))
     return sp
 
 # --------------------------------------------------------------------------

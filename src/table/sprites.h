@@ -335,7 +335,7 @@ static const SpriteID SPR_BRIDGE_DECKS_ROAD = SPR_BRIDGE_DECKS_BASE + 18;
  * which checks these offsets and the count; keep them in sync.
  */
 static constexpr SpriteID SPR_METRO_STATION_BASE = SPR_BRIDGE_DECKS_BASE + BRIDGE_DECKS_SPRITE_COUNT;
-static constexpr uint16_t METRO_STATION_SPRITE_COUNT = 144;
+static constexpr uint16_t METRO_STATION_SPRITE_COUNT = 152;
 
 /* Underground station: ground sprites (64x31) and sortable platform pieces with
  * the bounding boxes of the vanilla rail platforms; boards/pillars stand on the
@@ -467,6 +467,11 @@ static constexpr uint8_t METRO_TUNNEL_ART_SPRITE_COUNT = 12;
  * +2 along the north-east wall, +3 open (the driving aisle). */
 static constexpr SpriteID SPR_METRO_PARKING_BASE = SPR_METRO_STATION_BASE + 140;
 static constexpr uint8_t METRO_PARKING_SPRITE_COUNT = 4;
+/* Basement of industries (a store room of goods), after the parking: two variants per
+ * role, +role * 2 + variant, the roles as the parking: +0 the back corner (both walls),
+ * +1 along the north-west wall, +2 along the north-east wall, +3 open. */
+static constexpr SpriteID SPR_METRO_INDUSTRY_BASEMENT_BASE = SPR_METRO_STATION_BASE + 144;
+static constexpr uint8_t METRO_INDUSTRY_BASEMENT_SPRITE_COUNT = 8;
 
 /**
  * Pedestrian sprites (base set Action 5 type 0x1D). Generated together with

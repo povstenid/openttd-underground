@@ -610,6 +610,15 @@ static void UndergroundFoundationHighChanged(int32_t new_value)
 	medium = static_cast<uint8_t>(std::min<int32_t>(medium, new_value));
 }
 
+/**
+ * The depth of industry foundations changed: only new construction follows it, what is
+ * built already under an industry stays. Redraw the slice views.
+ */
+static void UndergroundIndustryFoundationChanged(int32_t)
+{
+	MarkWholeScreenDirty();
+}
+
 /** Underground price multipliers are stored in tenths: show them as "x1.5". */
 static std::pair<StringParameter, StringParameter> UndergroundMultiplierValueParams(const IntSettingDesc &, int32_t value)
 {

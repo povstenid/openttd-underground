@@ -234,6 +234,7 @@
 | Туннели под морем | `underground.sea_tunnels` | `UST_FORBIDDEN` = 0, `UST_BY_SEA_DEPTH` = 1 | 1 (ниже воды) |
 | Порог «самые высокие дома» | `underground.foundation_high_percent` | %, 10…100 | 60 |
 | Порог «средние дома» | `underground.foundation_medium_percent` | %, 0…100, не выше первого (зажимается) | 25 |
+| Фундамент предприятий (2026-10-28) | `underground.industry_foundation_depth` | уровни, 0…2; правило только для новой стройки | 2 |
 | Базовый множитель | `underground.base_cost_multiplier` | целое, ×1…×50 | 10 |
 | Туннель по слоям | `underground.tunnel_cost_earth`, `_clay_light`, `_clay`, `_clay_dark`, `_marble_light`, `_marble_grey`, `_granite_pink`, `_granite_grey`, `_granite_dark`, `_granite_black`, `_obsidian` | десятые, 5…500 | 10, 15, 20, 25, 30, 35, 40, 50, 60, 70, 150 |
 | Станция по слоям | `underground.station_cost_<слой>`, те же суффиксы | десятые, 5…500 | 10, 15, 20, 25, 35, 40, 50, 60, 70, 80, 200 |

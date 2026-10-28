@@ -7,11 +7,12 @@
 
 /**
  * @file underground_rules.h What the surface takes of the ground below it:
- * the foundations of houses and the depth of water (metro v2, spec sections 3 and 4).
+ * the foundations of houses and industries and the depth of water (metro v2, spec sections 3 and 4).
  *
- * Both are measured as a depth below the surface, g = GetMetroSurfaceZ(tile) - level.
- * Underground construction at a depth g <= f (house foundation) or g <= w
- * (water depth) is refused; nothing of this is stored in the savegame.
+ * All are measured as a depth below the surface, g = GetMetroSurfaceZ(tile) - level.
+ * Underground construction at a depth g <= f (house or industry foundation) or g <= w
+ * (water depth) is refused; nothing of this is stored in the savegame but the
+ * settings it depends on.
  */
 
 #ifndef UNDERGROUND_RULES_H
@@ -35,6 +36,8 @@ uint8_t GetHouseTypeFoundationDepth(HouseID house);
 uint8_t GetHouseFoundationDepth(TileIndex tile);
 bool HasUndergroundWithinDepth(TileIndex tile, uint depth);
 bool CanHouseFoundationBeBuilt(HouseID house, TileIndex tile);
+uint8_t GetIndustryFoundationDepthSetting();
+uint8_t GetIndustryFoundationDepth(TileIndex tile);
 
 bool IsUndergroundWaterTile(TileIndex tile);
 uint8_t GetWaterDepth(TileIndex tile);
@@ -43,6 +46,7 @@ uint8_t GetWaterDepth(TileIndex tile);
 enum class UndergroundObstacle : uint8_t {
 	None,            ///< Nothing: the level is soil (or not below the ground at all).
 	HouseFoundation, ///< The foundation of a house reaches down to the level.
+	IndustryFoundation, ///< The foundation (basement) of an industry reaches down to the level.
 	Water,           ///< The level lies in the water column of a river, canal or the sea.
 	SeaForbidden,    ///< Below the water of the sea, where underground construction is not allowed.
 };

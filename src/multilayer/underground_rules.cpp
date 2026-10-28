@@ -5,7 +5,7 @@
  * See the GNU General Public License for more details. You should have received a copy of the GNU General Public License along with OpenTTD. If not, see <https://www.gnu.org/licenses/old-licenses/gpl-2.0>.
  */
 
-/** @file underground_rules.cpp House foundations and water depth above the underground. */
+/** @file underground_rules.cpp House and industry foundations and water depth above the underground. */
 
 #include "../stdafx.h"
 #include "underground_rules.h"
@@ -13,6 +13,7 @@
 #include "underground_cmd.h"
 #include "../command_func.h"
 #include "../house.h"
+#include "../industry_map.h"
 #include "../map_func.h"
 #include "../settings_type.h"
 #include "../tile_map.h"
@@ -229,6 +230,26 @@ bool CanHouseFoundationBeBuilt(HouseID house, TileIndex tile)
 }
 
 /**
+ * Foundation depth of every industry (setting underground.industry_foundation_depth).
+ * @return Levels below the surface, 0 to MAX_INDUSTRY_FOUNDATION_DEPTH.
+ */
+uint8_t GetIndustryFoundationDepthSetting()
+{
+	return std::min(_settings_game.underground.industry_foundation_depth, MAX_INDUSTRY_FOUNDATION_DEPTH);
+}
+
+/**
+ * Foundation depth of the industry on a tile: its basement, the same for every tile of every industry.
+ * @param tile Tile.
+ * @return Levels below the surface its foundation takes; 0 when there is no industry.
+ */
+uint8_t GetIndustryFoundationDepth(TileIndex tile)
+{
+	if (!IsValidTile(tile) || !IsTileType(tile, TileType::Industry)) return 0;
+	return GetIndustryFoundationDepthSetting();
+}
+
+/**
  * Whether a tile counts as water for the depth rules: sea, river or canal,
  * also with a lock, a ship depot, a buoy, a dock or an oil rig on it.
  * A shore (land sloping to the water) is land.
@@ -322,8 +343,8 @@ uint8_t GetWaterDepth(TileIndex tile)
 }
 
 /**
- * What the surface takes of the ground at a level of a column: a house
- * foundation, the water column, or the forbidden ground below the sea.
+ * What the surface takes of the ground at a level of a column: a house or
+ * industry foundation, the water column, or the forbidden ground below the sea.
  * It follows the same rules as CheckUndergroundClearance.
  * @param tile Column.
  * @param level Absolute level.
@@ -340,6 +361,11 @@ UndergroundObstacle GetUndergroundObstacle(TileIndex tile, int16_t level, uint *
 		if (depth != nullptr) *depth = f;
 		return UndergroundObstacle::HouseFoundation;
 	}
+	f = GetIndustryFoundationDepth(tile);
+	if (static_cast<uint>(g) <= f) {
+		if (depth != nullptr) *depth = f;
+		return UndergroundObstacle::IndustryFoundation;
+	}
 	if (!IsUndergroundWaterTile(tile)) return UndergroundObstacle::None;
 	bool sea = GetWaterClass(tile) == WaterClass::Sea;
 	uint w = GetWaterDepthWith(tile, sea, NewWater{});
@@ -350,7 +376,7 @@ UndergroundObstacle GetUndergroundObstacle(TileIndex tile, int16_t level, uint *
 
 /**
  * Check that the surface of a column leaves room for underground construction
- * at a level: no house foundation and no water reach down to it. Every
+ * at a level: no house or industry foundation and no water reach down to it. Every
  * underground build command uses this, so the test runs of the GUI (cost
  * estimate, blueprint paste) refuse the same.
  * @param tile Column.
@@ -366,6 +392,8 @@ CommandCost CheckUndergroundClearance(TileIndex tile, int16_t level)
 
 	uint f = GetHouseFoundationDepth(tile);
 	if (static_cast<uint>(g) <= f) return CommandCostWithParam(STR_ERROR_UNDERGROUND_HOUSE_FOUNDATION, f);
+	f = GetIndustryFoundationDepth(tile);
+	if (static_cast<uint>(g) <= f) return CommandCostWithParam(STR_ERROR_UNDERGROUND_INDUSTRY_FOUNDATION, f);
 
 	if (IsUndergroundWaterTile(tile)) {
 		bool sea = GetWaterClass(tile) == WaterClass::Sea;

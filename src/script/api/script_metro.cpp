@@ -532,6 +532,7 @@ static const TileSlice *GetMetroTrackPayload(TileIndex tile, ScriptRail::RailTra
 /* static */ SQInteger ScriptMetro::GetFoundationDepth(TileIndex tile)
 {
 	if (!::IsValidTile(tile)) return 0;
+	if (::IsTileType(tile, TileType::Industry)) return ::GetIndustryFoundationDepth(tile);
 	return ::GetHouseFoundationDepth(tile);
 }
 

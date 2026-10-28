@@ -106,6 +106,9 @@ public:
 
 		/** Nothing can be built underground below the sea */
 		ERR_UNDERGROUND_UNDER_SEA,              // [STR_ERROR_UNDERGROUND_UNDER_SEA]
+
+		/** The foundation of the industry on the tile reaches down to this depth, see GetFoundationDepth */
+		ERR_UNDERGROUND_INDUSTRY_FOUNDATION,    // [STR_ERROR_UNDERGROUND_INDUSTRY_FOUNDATION]
 	};
 
 	/**
@@ -470,12 +473,13 @@ public:
 	static SQInteger GetMetroDepth(TileIndex tile);
 
 	/**
-	 * Get how many levels below the surface the foundation of the house on a tile
-	 * takes. Nothing underground can be built there at a depth below the surface
-	 * of this many levels or fewer; towns and players do not build a house whose
-	 * foundation would reach underground construction.
+	 * Get how many levels below the surface the foundation of the house or the
+	 * industry on a tile takes. Nothing underground can be built there at a depth
+	 * below the surface of this many levels or fewer; towns and players do not
+	 * build a house or an industry whose foundation would reach underground construction.
+	 * The foundation of industries is the setting underground.industry_foundation_depth.
 	 * @param tile The tile.
-	 * @return 0 to 2; 0 when there is no house on the tile.
+	 * @return 0 to 2; 0 when there is no house or industry on the tile.
 	 */
 	static SQInteger GetFoundationDepth(TileIndex tile);
 

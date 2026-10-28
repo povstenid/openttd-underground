@@ -50,6 +50,7 @@
 #include "timer/timer_game_calendar.h"
 #include "timer/timer_game_economy.h"
 #include "timer/timer_game_tick.h"
+#include "multilayer/underground_rules.h"
 
 #include "table/strings.h"
 #include "table/industry_land.h"
@@ -1490,6 +1491,8 @@ static CommandCost CheckIfIndustryTilesAreFree(TileIndex tile, const IndustryTil
 			CommandCost ret = EnsureNoVehicleOnGround(cur_tile);
 			if (ret.Failed()) return ret;
 			if (IsBridgeAbove(cur_tile)) return CommandCost(STR_ERROR_SITE_UNSUITABLE);
+			/* The basement of the industry must not cut into underground construction. */
+			if (HasUndergroundWithinDepth(cur_tile, GetIndustryFoundationDepthSetting())) return CommandCost(STR_ERROR_UNDERGROUND_IN_THE_WAY);
 
 			const IndustryTileSpec *its = GetIndustryTileSpec(gfx);
 

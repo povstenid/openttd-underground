@@ -21,6 +21,7 @@
 #include "../spritecache.h"
 #include "../town.h"
 #include "../town_map.h"
+#include "../industry_map.h"
 #include "../slope_func.h"
 #include "../table/sprites.h"
 #include "../track_func.h"
@@ -52,7 +53,8 @@ static_assert(SPR_METRO_SAND_XRAY_PAL_BASE == SPR_METRO_SAND_PAL_BASE + SOIL_SAN
 static_assert(SPR_METRO_SAND_XRAY_PAL_BASE + SOIL_SAND_LAYER_COUNT == SPR_METRO_TUNNEL_ART_BASE);
 static_assert(SPR_METRO_TUNNEL_CABLES_DIAG_RIGHT + 1 == SPR_METRO_TUNNEL_ART_BASE + METRO_TUNNEL_ART_SPRITE_COUNT);
 static_assert(SPR_METRO_PARKING_BASE == SPR_METRO_TUNNEL_ART_BASE + METRO_TUNNEL_ART_SPRITE_COUNT);
-static_assert(SPR_METRO_PARKING_BASE + METRO_PARKING_SPRITE_COUNT == SPR_METRO_STATION_BASE + METRO_STATION_SPRITE_COUNT);
+static_assert(SPR_METRO_INDUSTRY_BASEMENT_BASE == SPR_METRO_PARKING_BASE + METRO_PARKING_SPRITE_COUNT);
+static_assert(SPR_METRO_INDUSTRY_BASEMENT_BASE + METRO_INDUSTRY_BASEMENT_SPRITE_COUNT == SPR_METRO_STATION_BASE + METRO_STATION_SPRITE_COUNT);
 
 /**
  * Whether the base set has the soil sprites; an older openttd.grf has a shorter
@@ -140,9 +142,30 @@ static void DrawUndergroundParking(const TileInfo *ti)
 }
 
 /**
+ * Draw the basement of an industry where its foundation reaches the viewed level:
+ * a store room packed with goods. Its walls, lined with pallet racks, stand on the
+ * back edges of the industry, where the tile next to it on the north-east or
+ * north-west side is not part of the same industry; the rest of the floor holds
+ * pallets of cartons, crates and drums, in one of two variants per tile.
+ * @param ti Tile being drawn; an industry tile.
+ */
+static void DrawUndergroundIndustryBasement(const TileInfo *ti)
+{
+	const IndustryID ind = GetIndustryIndex(ti->tile);
+	auto same_industry = [ind](TileIndex t) { return t != INVALID_TILE && IsTileType(t, TileType::Industry) && GetIndustryIndex(t) == ind; };
+	bool back_x = !same_industry(TileAddWrap(ti->tile, -1, 0)); ///< Wall on the north-east (x) edge.
+	bool back_y = !same_industry(TileAddWrap(ti->tile, 0, -1)); ///< Wall on the north-west (y) edge.
+	uint role = back_x ? (back_y ? 0 : 2) : (back_y ? 1 : 3);
+	uint32_t h = (TileX(ti->tile) * 0x9E3779B1U) ^ (TileY(ti->tile) * 0x85EBCA6BU);
+	uint variant = (h * 0x27D4EB2DU) >> 31;
+	DrawGroundSprite(SPR_METRO_INDUSTRY_BASEMENT_BASE + role * 2 + variant, PAL_NONE);
+}
+
+/**
  * Draw the floor of the slice view at the viewed level: light concrete where the
- * level has something built; the brick footing of a house foundation or the
- * water column of a river, canal or the sea where they reach down to the level,
+ * level has something built; the parking of a house foundation, the store room of
+ * an industry foundation or the water column of a river, canal or the sea where
+ * they reach down to the level,
  * and dark hatched rock below the sea where building is forbidden; otherwise the
  * cut soil of the tile at that depth. Where the level is not below the ground
  * (views of the levels below or above), the plain grey slab.
@@ -167,6 +190,9 @@ static void DrawUndergroundFloor(const TileInfo *ti, int16_t depth, bool built)
 	switch (GetUndergroundObstacle(ti->tile, depth)) {
 		case UndergroundObstacle::HouseFoundation:
 			DrawUndergroundParking(ti);
+			return;
+		case UndergroundObstacle::IndustryFoundation:
+			DrawUndergroundIndustryBasement(ti);
 			return;
 		case UndergroundObstacle::Water: {
 			/* Darker the deeper below the bed: the first, second, third level of the column. */

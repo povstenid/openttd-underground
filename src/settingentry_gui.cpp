@@ -795,6 +795,7 @@ SettingsContainer &GetSettingsTree()
 				depth->Add(new SettingEntry("underground.sea_tunnels"));
 				depth->Add(new SettingEntry("underground.foundation_high_percent"));
 				depth->Add(new SettingEntry("underground.foundation_medium_percent"));
+				depth->Add(new SettingEntry("underground.industry_foundation_depth"));
 				depth->Add(new SettingEntry("construction.max_station_exit_distance"));
 			}
 

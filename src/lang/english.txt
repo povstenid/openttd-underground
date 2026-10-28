@@ -1438,6 +1438,9 @@ STR_CONFIG_SETTING_UNDERGROUND_FOUNDATION_HIGH                  :Foundation of t
 STR_CONFIG_SETTING_UNDERGROUND_FOUNDATION_HIGH_HELPTEXT         :Houses with at least this share of the largest population per tile of all houses have a foundation of 2 levels: nothing can be built under them at depth 1 and 2
 STR_CONFIG_SETTING_UNDERGROUND_FOUNDATION_MEDIUM                :Foundation of medium houses from: {STRING2}
 STR_CONFIG_SETTING_UNDERGROUND_FOUNDATION_MEDIUM_HELPTEXT       :Houses with at least this share of the largest population per tile of all houses have a foundation of 1 level. Never above the threshold of the tallest houses
+STR_CONFIG_SETTING_UNDERGROUND_INDUSTRY_FOUNDATION              :Foundation of industries: {STRING2}
+STR_CONFIG_SETTING_UNDERGROUND_INDUSTRY_FOUNDATION_HELPTEXT     :How deep the basements of industries reach: nothing can be built under an industry down to this many levels below the ground, and no industry is set up above underground construction this shallow. Underground construction already under an industry stays when this changes
+STR_CONFIG_SETTING_UNDERGROUND_INDUSTRY_FOUNDATION_VALUE        :{COMMA} level{P "" s}
 STR_CONFIG_SETTING_UNDERGROUND_BASE_COST                        :Base underground price multiplier: {STRING2}
 STR_CONFIG_SETTING_UNDERGROUND_BASE_COST_HELPTEXT               :Underground construction costs the surface price of the same thing times this multiplier, times the multiplier of the soil
 STR_CONFIG_SETTING_UNDERGROUND_MULTIPLIER_WHOLE                 :×{COMMA}
@@ -3280,6 +3283,7 @@ STR_LANG_AREA_INFORMATION_RAIL_SPEED_LIMIT                      :{BLACK}Rail spe
 STR_LAND_AREA_INFORMATION_UNDERGROUND_TRACK                     :{BLACK}Underground track, level {LTBLUE}{NUM}{BLACK} ({LTBLUE}{NUM}{BLACK} below ground, {LTBLUE}{STRING}{BLACK})
 STR_LAND_AREA_INFORMATION_UNDERGROUND_SIGNALS                   :{BLACK}Underground signals on this tile
 STR_LAND_AREA_INFORMATION_HOUSE_FOUNDATION                      :{BLACK}Foundation: {LTBLUE}{NUM} level{P "" s} below ground
+STR_LAND_AREA_INFORMATION_INDUSTRY_FOUNDATION                   :{BLACK}Industry foundation: {LTBLUE}{NUM} level{P "" s} below ground
 STR_LAND_AREA_INFORMATION_WATER_DEPTH                           :{BLACK}Water depth: {LTBLUE}{NUM} level{P "" s} below the surface
 STR_LAND_AREA_INFORMATION_UNDERGROUND_PLATFORM                  :{BLACK}Underground platform, level {LTBLUE}{NUM}{BLACK} ({LTBLUE}{NUM}{BLACK} below ground, {LTBLUE}{STRING}{BLACK})
 STR_LAND_AREA_INFORMATION_UNDERGROUND_PLATFORM_OF               :{BLACK}Underground platform, level {LTBLUE}{NUM}{BLACK} ({LTBLUE}{NUM}{BLACK} below ground, {LTBLUE}{STRING}{BLACK}){BLACK}: {LTBLUE}{STATION}
@@ -3304,6 +3308,7 @@ STR_ERROR_UNDERGROUND_STATION_TOO_DEEP                          :stations cannot
 STR_UNDERGROUND_SOIL_TOOLTIP                                    :{BLACK}{STRING}, {NUM} below ground: tunnel ×{DECIMAL}, station ×{DECIMAL}
 STR_LAND_AREA_INFORMATION_UNDERGROUND_SOIL_AT_LEVEL             :{BLACK}Level {LTBLUE}{NUM}{BLACK}: {LTBLUE}{NUM}{BLACK} below ground, {LTBLUE}{STRING}
 STR_LAND_AREA_INFORMATION_UNDERGROUND_FOUNDATION_AT_LEVEL       :{BLACK}Level {LTBLUE}{NUM}{BLACK}: {LTBLUE}{NUM}{BLACK} below ground, {LTBLUE}house foundation{BLACK} (down to {NUM} level{P "" s})
+STR_LAND_AREA_INFORMATION_UNDERGROUND_INDUSTRY_FOUNDATION_AT_LEVEL :{BLACK}Level {LTBLUE}{NUM}{BLACK}: {LTBLUE}{NUM}{BLACK} below ground, {LTBLUE}industry foundation{BLACK} (down to {NUM} level{P "" s})
 STR_LAND_AREA_INFORMATION_UNDERGROUND_WATER_AT_LEVEL            :{BLACK}Level {LTBLUE}{NUM}{BLACK}: {LTBLUE}{NUM}{BLACK} below ground, {LTBLUE}water{BLACK} (depth {NUM} level{P "" s})
 STR_LAND_AREA_INFORMATION_UNDERGROUND_SEA_AT_LEVEL              :{BLACK}Level {LTBLUE}{NUM}{BLACK}: {LTBLUE}{NUM}{BLACK} below ground, {RED}no construction under the sea
 STR_LANG_AREA_INFORMATION_ROAD_SPEED_LIMIT                      :{BLACK}Road speed limit: {LTBLUE}{VELOCITY}
@@ -5496,6 +5501,7 @@ STR_ERROR_UNDERGROUND_EXIT_ALREADY_HERE                         :there is alread
 STR_ERROR_UNDERGROUND_NO_EXIT_HERE                              :there is no station exit here
 STR_ERROR_UNDERGROUND_MUST_REMOVE_EXIT_FIRST                    :remove the metro station exit first
 STR_ERROR_UNDERGROUND_HOUSE_FOUNDATION                          :building foundation here (down to {NUM} level{P "" s} below ground)
+STR_ERROR_UNDERGROUND_INDUSTRY_FOUNDATION                       :industry foundation here (down to {NUM} level{P "" s} below ground)
 STR_ERROR_UNDERGROUND_WATER_TOO_SHALLOW                         :too shallow under the water: must be deeper than {NUM} level{P "" s} here
 STR_ERROR_UNDERGROUND_UNDER_SEA                                 :no underground construction under the sea
 STR_UNDERGROUND_LEVEL_SURFACE                                   :Surface
