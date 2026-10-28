@@ -1,0 +1,25 @@
+##grflangid 0x01
+STR_GRF_NAME    :OpenTTD Underground Metro Set
+STR_GRF_DESC    :Metro cars of five generations (1935-2016) for OpenTTD Underground. Every car is a self-propelled multiple unit on normal rail: buy several cars in a depot and drag them into one train. The cars at the ends of a train show cabs. License: GPL v2.
+STR_GRF_URL     :https://github.com/povstenid/OpenTTD
+
+STR_NAME_METRO_TYPE_A   :Type A
+STR_NAME_METRO_TYPE_E   :Type E
+STR_NAME_METRO_717      :717
+STR_NAME_METRO_714      :714
+STR_NAME_METRO_720      :720
+STR_NAME_METRO_765      :765
+
+STR_INFO_METRO_TYPE_A   :Riveted metro car of the 1930s. Self-propelled: couple several in the depot.
+STR_INFO_METRO_TYPE_E   :Light two-tone metro car of the 1960s. Self-propelled: couple several in the depot.
+STR_INFO_METRO_717      :Metro car with a cab, for the ends of a train. Self-propelled: couple with 714 or more 717 cars in the depot.
+STR_INFO_METRO_714      :Metro car without a cab, for the middle of a 717 train. Self-propelled.
+STR_INFO_METRO_720      :Metro car of the 1990s with a sloped cab. Self-propelled: couple several in the depot.
+STR_INFO_METRO_765      :Modern metro car with wide glazing. Self-propelled: couple several in the depot.
+
+STR_MTRO_NAME           :Metro track
+STR_MTRO_TOOLBAR        :Metro Track Construction
+STR_MTRO_MENU           :Metro track
+STR_MTRO_BUILD_WINDOW   :New Metro Cars
+STR_MTRO_AUTOREPLACE    :Metro cars
+STR_MTRO_NEW_ENGINE     :New metro car
