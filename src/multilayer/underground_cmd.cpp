@@ -225,6 +225,43 @@ void AfterLoadUndergroundPortalRailtypes()
 }
 
 /**
+ * Bring the Station object of removed platforms in line with what vanilla does for
+ * surface rail stations: once no platform is left, the station complex and the train
+ * facility go away, and the station is deleted by the regular "unused station" timeout
+ * when nothing else is left of it either.
+ * @param station_id The station that lost platforms (or exits).
+ */
+static void UpdateStationAfterPlatformRemoval(uint16_t station_id)
+{
+	auto sc_it = _station_complexes.find(station_id);
+	bool has_platform = false;
+	if (sc_it != _station_complexes.end()) {
+		has_platform = !sc_it->second.GetPlatforms().empty();
+		if (!has_platform && !sc_it->second.HasSurfaceExit()) RemoveStationComplex(station_id);
+	}
+
+	Station *st = Station::GetIfValid(StationID(station_id));
+	if (st == nullptr) return;
+
+	if (!has_platform && st->facilities.Test(StationFacility::Train)) {
+		bool has_surface_rail = false;
+		if (st->train_station.tile != INVALID_TILE) {
+			for (TileIndex t : st->train_station) {
+				if (st->TileBelongsToRailStation(t)) {
+					has_surface_rail = true;
+					break;
+				}
+			}
+		}
+		if (!has_surface_rail) {
+			st->train_station = TileArea(INVALID_TILE, 0, 0);
+			st->facilities.Reset(StationFacility::Train);
+		}
+	}
+	st->AfterStationTileSetChange(false, StationType::Rail);
+}
+
+/**
  * Transfer or remove all underground slices of a company.
  * Called from ChangeOwnershipOfCompanyItems() after vanilla has deleted/transferred the
  * company's vehicles and changed the owner of (or cleared) its surface tiles, and before
@@ -322,37 +359,7 @@ void ChangeUndergroundOwnership(Owner old_owner, Owner new_owner)
 		}
 	}
 
-	/* Bring the Station objects of removed platforms in line with what vanilla does for
-	 * surface rail stations: once no platform is left the train facility goes away, and
-	 * the station will be deleted by the regular "unused station" timeout. */
-	for (uint16_t station_id : affected_stations) {
-		auto sc_it = _station_complexes.find(station_id);
-		bool has_platform = false;
-		if (sc_it != _station_complexes.end()) {
-			has_platform = !sc_it->second.GetPlatforms().empty();
-			if (!has_platform) RemoveStationComplex(station_id);
-		}
-
-		Station *st = Station::GetIfValid(StationID(station_id));
-		if (st == nullptr) continue;
-
-		if (!has_platform && st->facilities.Test(StationFacility::Train)) {
-			bool has_surface_rail = false;
-			if (st->train_station.tile != INVALID_TILE) {
-				for (TileIndex t : st->train_station) {
-					if (st->TileBelongsToRailStation(t)) {
-						has_surface_rail = true;
-						break;
-					}
-				}
-			}
-			if (!has_surface_rail) {
-				st->train_station = TileArea(INVALID_TILE, 0, 0);
-				st->facilities.Reset(StationFacility::Train);
-			}
-		}
-		st->AfterStationTileSetChange(false, StationType::Rail);
-	}
+	for (uint16_t station_id : affected_stations) UpdateStationAfterPlatformRemoval(station_id);
 
 	if (old_company != nullptr) DirtyCompanyInfrastructureWindows(old_company->index);
 	if (new_company != nullptr) DirtyCompanyInfrastructureWindows(new_company->index);
@@ -1603,6 +1610,10 @@ CommandCost CmdRemoveExitSurface(DoCommandFlags flags, TileIndex tile)
 			st->RecomputeCatchment();
 		}
 		MarkTileDirtyByTile(tile);
+
+		/* The last exit of a station whose platforms are gone takes the station with it. */
+		auto sc_it = _station_complexes.find(station_id);
+		if (sc_it == _station_complexes.end() || sc_it->second.GetPlatforms().empty()) UpdateStationAfterPlatformRemoval(station_id);
 	}
 
 	return cost;
@@ -1935,15 +1946,20 @@ CommandCost CmdRemoveUndergroundStation(DoCommandFlags flags, TileIndex tile, in
 		UpdateUndergroundSliceInfrastructure(slice, -1);
 
 		/* Remove from StationComplex. */
+		std::vector<TileIndex> exits;
+		bool last_platform = true;
 		auto sc_it = _station_complexes.find(station_id);
 		if (sc_it != _station_complexes.end()) {
-			auto &nodes = sc_it->second.nodes;
-			std::erase_if(nodes, [&](const StationComplexNode &n) {
-				return n.ref.tile == tile && n.ref.slice == sid;
+			std::erase_if(sc_it->second.nodes, [&](const StationComplexNode &n) {
+				return n.ref.tile == tile && n.role == StationRole::Platform && n.depth == depth;
 			});
-			/* Pavilions and underpasses built by the player stay. */
-			if (nodes.empty()) {
-				RemoveStationComplex(station_id);
+			InvalidateStationExitCache();
+			/* The exits of a station go with its last platform. */
+			last_platform = sc_it->second.GetPlatforms().empty();
+			if (last_platform) {
+				for (const StationComplexNode *n : sc_it->second.GetExits()) {
+					if (n->IsExplicitExit()) exits.push_back(n->ref.tile);
+				}
 			}
 		}
 
@@ -1959,17 +1975,17 @@ CommandCost CmdRemoveUndergroundStation(DoCommandFlags flags, TileIndex tile, in
 		TileIndexDiff delta = TileOffsByAxis(removed_axis);
 		if (IsValidTile(tile + delta)) MarkTileDirtyByTile(tile + delta);
 		if (IsValidTile(tile - delta)) MarkTileDirtyByTile(tile - delta);
+
+		/* The exits go free of charge: a test run of an area removal cannot know which
+		 * platform is the last one, and its cost must match the execution. An exit that
+		 * cannot go now (a bus on the pavilion) stays, and can be demolished later. */
+		for (TileIndex exit_tile : exits) CmdRemoveExitSurface(flags, exit_tile);
+		if (last_platform) UpdateStationAfterPlatformRemoval(station_id);
 	}
 
 	return CommandCost(EXPENSES_CONSTRUCTION, -GetUndergroundRemoveRefund(UndergroundCostKind::Station, railtype, tile, depth, paid_soil));
 }
 
-/**
- * Remove a portal together with the surface rail CmdBuildPortal laid on its tile.
- * @param flags Command flags.
- * @param tile  Portal tile.
- * @return Cost (refund) or an error.
- */
 /**
  * Check whether the portal on a tile may be removed by the current company.
  * @param tile Portal tile.
@@ -2025,6 +2041,12 @@ static CommandCost FreePortalSlice(DoCommandFlags flags, TileIndex tile, SliceID
 	return CommandCost(EXPENSES_CONSTRUCTION, -GetUndergroundRemoveRefund(UndergroundCostKind::Portal, railtype, tile, level, paid_soil));
 }
 
+/**
+ * Remove a portal together with the surface rail CmdBuildPortal laid on its tile.
+ * @param flags Command flags.
+ * @param tile  Portal tile.
+ * @return Cost (refund) or an error.
+ */
 CommandCost CmdRemovePortal(DoCommandFlags flags, TileIndex tile)
 {
 	if (!IsValidTile(tile)) return CMD_ERROR;
