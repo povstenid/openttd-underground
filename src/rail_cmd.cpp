@@ -1808,13 +1808,14 @@ static CommandCost ClearTile_Rail(TileIndex tile, DoCommandFlags flags)
 {
 	CommandCost cost(EXPENSES_CONSTRUCTION);
 
-	/* Demolishing a metro portal's surface rail would orphan the portal. */
-	if (IsPlainRail(tile)) {
-		CommandCost ret = CheckPortalSurfaceRailRemoval(tile, TRACK_BIT_ALL, flags);
-		if (ret.Failed()) return ret;
-	}
-
 	if (flags.Test(DoCommandFlag::Auto)) {
+		/* Building over a metro portal's surface rail would orphan the portal. */
+		if (IsPlainRail(tile)) {
+			CommandCost ret = CheckPortalSurfaceRailRemoval(tile, TRACK_BIT_ALL, flags);
+			if (ret.Failed()) return ret;
+		}
+
+
 		if (!IsTileOwner(tile, _current_company)) {
 			return CommandCost(STR_ERROR_AREA_IS_OWNED_BY_ANOTHER);
 		}
@@ -1833,13 +1834,20 @@ static CommandCost ClearTile_Rail(TileIndex tile, DoCommandFlags flags)
 			/* Is there flat water on the lower halftile that gets cleared expensively? */
 			bool water_ground = (GetRailGroundType(tile) == RailGroundType::HalfTileWater && IsSlopeWithOneCornerRaised(tileh));
 
-			TrackBits tracks = GetTrackBits(tile);
-			while (tracks != TRACK_BIT_NONE) {
-				Track track = RemoveFirstTrack(&tracks);
-				CommandCost ret = Command<Commands::RemoveRail>::Do(flags, tile, track);
-				if (ret.Failed()) return ret;
-				cost.AddCost(ret.GetCost());
-			}
+			/* The dynamite demolishes a metro portal together with its surface rail. */
+			CommandCost rail_cost = ClearPortalSurfaceTile(flags, tile, [&]() {
+				CommandCost removed(EXPENSES_CONSTRUCTION);
+				TrackBits tracks = GetTrackBits(tile);
+				while (tracks != TRACK_BIT_NONE) {
+					Track track = RemoveFirstTrack(&tracks);
+					CommandCost ret = Command<Commands::RemoveRail>::Do(flags, tile, track);
+					if (ret.Failed()) return ret;
+					removed.AddCost(ret.GetCost());
+				}
+				return removed;
+			});
+			if (rail_cost.Failed()) return rail_cost;
+			cost.AddCost(rail_cost.GetCost());
 
 			/* When bankrupting, don't make water dirty, there could be a ship on lower halftile.
 			 * Same holds for non-companies clearing the tile, e.g. disasters. */

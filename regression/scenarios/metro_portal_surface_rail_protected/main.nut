@@ -3,9 +3,9 @@
  *
  *   [portal A]--UG(-1) x3--[portal B]   [ramp -1/-2]   [plain rail]
  *
- * Vanilla removal of a portal's surface rail (single track removal, tile
- * demolition) must be refused while the portal exists. GSMetro.RemovePortal
- * removes the portal slice and its surface rail together. GSMetro.RemoveRamp
+ * Removing a portal's surface rail track by track must be refused while the
+ * portal exists. The dynamite (tile demolition) and GSMetro.RemovePortal
+ * remove the portal slice and its surface rail together. GSMetro.RemoveRamp
  * removes a ramp. Plain rail elsewhere is still demolished normally.
  */
 class MetroPortalSurfaceRailProtected extends GSController {
@@ -51,21 +51,23 @@ class MetroPortalSurfaceRailProtected extends GSController {
 				report.check_true("remove_rail_drag_refused", !removed_drag, "GSRail.RemoveRail on a portal tile must fail.");
 				report.check_true("rail_after_remove_drag", GSRail.IsRailTile(portal_a), "Portal surface rail must survive dragged removal.");
 
-				/* Demolition is refused. */
+				/* The dynamite demolishes the portal together with its surface rail. */
 				local demolished = GSTile.DemolishTile(portal_a);
-				report.check_true("demolish_refused", !demolished, "GSTile.DemolishTile on a portal tile must fail.");
-				report.check_true("rail_after_demolish", GSRail.IsRailTile(portal_a), "Portal surface rail must survive demolition.");
-				report.check_true("portal_after_demolish", GSMetro.IsPortalTile(portal_a), "Portal must survive demolition.");
-				report.check_true("link_after_attempts", GSMetro.HasPortalConnection(portal_a, portal_b, depth), "Portal link must survive refused removals.");
-
-				/* Proper removal through the metro API takes both away. */
-				local portal_removed = GSMetro.RemovePortal(portal_a);
-				report.check_true("remove_portal_ok", portal_removed, "GSMetro.RemovePortal should succeed (err=" + GSError.GetLastErrorString() + ").");
+				report.check_true("demolish_ok", demolished, "GSTile.DemolishTile on a portal tile should succeed (err=" + GSError.GetLastErrorString() + ").");
 				report.check_true("no_portal_slice", !GSMetro.IsPortalTile(portal_a), "Portal slice should be gone.");
 				report.check_eq("no_slice_at_depth", GSMetro.TK_NONE, GSMetro.GetUndergroundTileKind(portal_a, depth), "No underground slice should remain on the portal tile.");
 				report.check_true("no_surface_rail", !GSRail.IsRailTile(portal_a), "Surface rail of the portal should be gone.");
 				report.check_true("link_gone", !GSMetro.HasPortalConnection(portal_a, portal_b, depth) && !GSMetro.HasPortalConnection(portal_b, portal_a, depth), "Portal connection should be gone.");
 				report.check_true("portal_b_kept", GSMetro.IsPortalTile(portal_b) && GSRail.IsRailTile(portal_b), "The other portal must be untouched.");
+
+				/* A portal can be built again on the cleared tile. */
+				report.check_true("portal_a_rebuilt", metro.build_portal(portal_a, GSMetro.DIAGDIR_SW, depth), "Portal A should be built again.");
+				report.check_true("portal_link_rebuilt", GSMetro.HasPortalConnection(portal_a, portal_b, depth), "Portals should be connected again.");
+
+				/* Removal through the metro API takes both away too. */
+				local portal_removed = GSMetro.RemovePortal(portal_a);
+				report.check_true("remove_portal_ok", portal_removed, "GSMetro.RemovePortal should succeed (err=" + GSError.GetLastErrorString() + ").");
+				report.check_true("api_no_portal", !GSMetro.IsPortalTile(portal_a) && !GSRail.IsRailTile(portal_a), "Portal and its rail should be gone.");
 				report.check_true("remove_portal_twice_fails", !GSMetro.RemovePortal(portal_a), "Removing a missing portal must fail.");
 
 				report.check_true("remove_portal_b_ok", GSMetro.RemovePortal(portal_b), "GSMetro.RemovePortal on portal B should succeed.");

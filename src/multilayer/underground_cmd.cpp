@@ -1970,21 +1970,17 @@ CommandCost CmdRemoveUndergroundStation(DoCommandFlags flags, TileIndex tile, in
  * @param tile  Portal tile.
  * @return Cost (refund) or an error.
  */
-CommandCost CmdRemovePortal(DoCommandFlags flags, TileIndex tile)
+/**
+ * Check whether the portal on a tile may be removed by the current company.
+ * @param tile Portal tile.
+ * @param sid  The portal slice on it.
+ * @return An error, or success.
+ */
+static CommandCost CheckPortalRemovable(TileIndex tile, SliceID sid)
 {
-	if (!IsValidTile(tile)) return CMD_ERROR;
-	if (!_multilayer_map.IsAllocated()) return CommandCost(STR_ERROR_UNDERGROUND_NO_PORTAL_HERE);
-
-	SliceID sid = _multilayer_map.FindSliceByKind(tile, SliceKind::Portal);
-	if (sid == INVALID_SLICE_ID) return CommandCost(STR_ERROR_UNDERGROUND_NO_PORTAL_HERE);
-
 	const TileSlice &slice = _multilayer_map.GetSlice(sid);
 	CommandCost owner_ret = CheckUndergroundSliceOwnership(slice, tile);
 	if (owner_ret.Failed()) return owner_ret;
-	DiagDirection dir = static_cast<DiagDirection>(slice.portal.direction);
-	RailType railtype = static_cast<RailType>(slice.portal.railtype);
-	int16_t level = slice.span.z_bot;
-	uint16_t paid_soil = slice.portal.paid_soil;
 
 	/* A train diving into or emerging from the portal holds its slice. */
 	if (UndergroundSliceInUse(tile, sid)) return CommandCost(STR_ERROR_TRAIN_IN_THE_WAY);
@@ -2000,6 +1996,46 @@ CommandCost CmdRemovePortal(DoCommandFlags flags, TileIndex tile)
 			}
 		}
 	}
+	return CommandCost();
+}
+
+/**
+ * Free a portal slice whose surface rail has been removed, and refund part of its build cost.
+ * @param flags Command flags.
+ * @param tile  Portal tile.
+ * @param sid   The portal slice on it.
+ * @return The refund.
+ */
+static CommandCost FreePortalSlice(DoCommandFlags flags, TileIndex tile, SliceID sid)
+{
+	const TileSlice &slice = _multilayer_map.GetSlice(sid);
+	RailType railtype = static_cast<RailType>(slice.portal.railtype);
+	int16_t level = slice.span.z_bot;
+	uint16_t paid_soil = slice.portal.paid_soil;
+
+	if (flags.Test(DoCommandFlag::Execute)) {
+		/* The surface rail was uncounted by RemoveRail; this is the portal slice itself. */
+		UpdateUndergroundSliceInfrastructure(slice, -1);
+		_multilayer_map.RemoveSliceFromColumn(tile, sid);
+		_multilayer_map.FreeSlice(sid);
+		MarkTileDirtyByTile(tile);
+		RecomputePortalConnections();
+	}
+
+	return CommandCost(EXPENSES_CONSTRUCTION, -GetUndergroundRemoveRefund(UndergroundCostKind::Portal, railtype, tile, level, paid_soil));
+}
+
+CommandCost CmdRemovePortal(DoCommandFlags flags, TileIndex tile)
+{
+	if (!IsValidTile(tile)) return CMD_ERROR;
+	if (!_multilayer_map.IsAllocated()) return CommandCost(STR_ERROR_UNDERGROUND_NO_PORTAL_HERE);
+
+	SliceID sid = _multilayer_map.FindSliceByKind(tile, SliceKind::Portal);
+	if (sid == INVALID_SLICE_ID) return CommandCost(STR_ERROR_UNDERGROUND_NO_PORTAL_HERE);
+
+	CommandCost check = CheckPortalRemovable(tile, sid);
+	if (check.Failed()) return check;
+	DiagDirection dir = static_cast<DiagDirection>(_multilayer_map.GetSlice(sid).portal.direction);
 
 	CommandCost total(EXPENSES_CONSTRUCTION);
 
@@ -2025,17 +2061,25 @@ CommandCost CmdRemovePortal(DoCommandFlags flags, TileIndex tile)
 		if (ret.Failed()) return ret;
 	}
 
-	if (flags.Test(DoCommandFlag::Execute)) {
-		/* The surface rail was uncounted by RemoveRail above; this is the portal slice itself. */
-		UpdateUndergroundSliceInfrastructure(_multilayer_map.GetSlice(sid), -1);
-		_multilayer_map.RemoveSliceFromColumn(tile, sid);
-		_multilayer_map.FreeSlice(sid);
-		MarkTileDirtyByTile(tile);
-		RecomputePortalConnections();
-	}
+	total.AddCost(FreePortalSlice(flags, tile, sid).GetCost());
+	return total;
+}
 
-	/* Refund part of the portal build cost. */
-	total.AddCost(-GetUndergroundRemoveRefund(UndergroundCostKind::Portal, railtype, tile, level, paid_soil));
+CommandCost ClearPortalSurfaceTile(DoCommandFlags flags, TileIndex tile, const std::function<CommandCost()> &clear_rail)
+{
+	SliceID sid = _multilayer_map.IsAllocated() ? _multilayer_map.FindSliceByKind(tile, SliceKind::Portal) : INVALID_SLICE_ID;
+	if (sid == INVALID_SLICE_ID || flags.Test(DoCommandFlag::Bankrupt)) return clear_rail();
+
+	CommandCost check = CheckPortalRemovable(tile, sid);
+	if (check.Failed()) return check;
+
+	TileIndex saved_guard = _portal_surface_rail_removal_tile;
+	_portal_surface_rail_removal_tile = tile;
+	CommandCost total = clear_rail();
+	_portal_surface_rail_removal_tile = saved_guard;
+	if (total.Failed()) return total;
+
+	total.AddCost(FreePortalSlice(flags, tile, sid).GetCost());
 	return total;
 }
 
@@ -2100,6 +2144,18 @@ CommandCost CmdRemoveUndergroundArea(DoCommandFlags flags, TileIndex tile, TileI
 		/* Surface exits of underground stations (any depth is shown below them). */
 		if (FindExplicitStationExitAt(t) != nullptr) {
 			CommandCost ret = CmdRemoveExitSurface(flags, t);
+			if (ret.Failed()) {
+				last_error = ret;
+			} else {
+				removed_any = true;
+				total.AddCost(ret.GetCost());
+			}
+		}
+
+		/* Portals stand on the surface; they go at any depth too. */
+		SliceID portal_sid = _multilayer_map.FindSliceByKind(t, SliceKind::Portal);
+		if (portal_sid != INVALID_SLICE_ID && !_multilayer_map.GetSlice(portal_sid).span.Contains(depth)) {
+			CommandCost ret = CmdRemovePortal(flags, t);
 			if (ret.Failed()) {
 				last_error = ret;
 			} else {
