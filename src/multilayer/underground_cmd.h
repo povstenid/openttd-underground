@@ -22,6 +22,7 @@
 #include "../station_type.h"
 #include "station_complex.h"
 #include "multilayer_map.h"
+#include <functional>
 #include <vector>
 
 /** station_id of CmdBuildUndergroundStation: always build a separate, new station. */
@@ -128,6 +129,16 @@ CommandCost CmdRemoveUndergroundArea(DoCommandFlags flags, TileIndex tile, TileI
 CommandCost CmdConvertUndergroundRail(DoCommandFlags flags, TileIndex tile, TileIndex area_start, RailType totype, int16_t depth);
 CommandCost CmdRemoveRamp(DoCommandFlags flags, TileIndex tile, int16_t depth);
 CommandCost CmdRemovePortal(DoCommandFlags flags, TileIndex tile);
+
+/**
+ * Clear the surface rail of a tile, demolishing the metro portal on it with it.
+ * The dynamite clears a portal tile like any other rail tile.
+ * @param flags      Flags of the clearing command.
+ * @param tile       Surface tile being cleared.
+ * @param clear_rail Removes all rail of the tile.
+ * @return The cost of the rail removal and the portal refund, or an error.
+ */
+CommandCost ClearPortalSurfaceTile(DoCommandFlags flags, TileIndex tile, const std::function<CommandCost()> &clear_rail);
 
 /**
  * Check whether removing surface rail from a tile would orphan a metro portal.
