@@ -46,6 +46,8 @@
 #include "../road_map.h"
 #include "../economy_func.h"
 #include "../strings_func.h"
+#include "../order_base.h"
+#include "../window_func.h"
 
 #include <set>
 
@@ -1630,6 +1632,89 @@ CommandCost CmdRemoveExitSurface(DoCommandFlags flags, TileIndex tile)
 	}
 
 	return cost;
+}
+
+/**
+ * Join a station that is only underground (platforms, no exit yet) to another
+ * own station, e.g. the airport above it: its platforms become platforms of
+ * that station, orders to it go to that station, and the emptied station goes
+ * away like any unused station. A station's first exit is then built for the
+ * joined station.
+ * @param flags Command flags.
+ * @param from  The underground station.
+ * @param into  The station to join it to.
+ * @return Free of charge, or an error.
+ */
+CommandCost CmdJoinUndergroundStation(DoCommandFlags flags, StationID from, StationID into)
+{
+	Station *src = Station::GetIfValid(from);
+	Station *dst = Station::GetIfValid(into);
+	if (src == nullptr || dst == nullptr || from == into) return CMD_ERROR;
+	CommandCost ret = CheckOwnership(src->owner);
+	if (ret.Failed()) return ret;
+	ret = CheckOwnership(dst->owner);
+	if (ret.Failed()) return ret;
+
+	auto sc_it = _station_complexes.find(from.base());
+	if (sc_it == _station_complexes.end() || sc_it->second.GetPlatforms().empty()) return CommandCost(STR_ERROR_UNDERGROUND_NO_STATION_HERE);
+	if (!StationUsesPortalRouting(from.base()) || src->facilities != StationFacilities{StationFacility::Train}) return CommandCost(STR_ERROR_UNDERGROUND_STATION_NOT_UNDERGROUND_ONLY);
+	if (sc_it->second.HasSurfaceExit()) return CommandCost(STR_ERROR_UNDERGROUND_STATION_HAS_EXITS);
+	for (const GoodsEntry &ge : src->goods) {
+		if (ge.HasData() && ge.GetData().cargo.TotalCount() != 0) return CommandCost(STR_ERROR_UNDERGROUND_STATION_HAS_CARGO);
+	}
+	for (const Train *t : Train::Iterate()) {
+		if (t->IsFrontEngine() && t->current_order.IsType(OT_LOADING) && t->last_station_visited == from) return CommandCost(STR_ERROR_TRAIN_IN_THE_WAY);
+	}
+
+	/* The joined station must stay within the station spread. */
+	std::vector<const StationComplexNode *> platforms = sc_it->second.GetPlatforms();
+	StationRect rect = dst->rect;
+	for (const StationComplexNode *n : platforms) {
+		if (rect.BeforeAddTile(n->ref.tile, StationRect::ADD_TRY).Failed()) return CommandCost(STR_ERROR_STATION_TOO_SPREAD_OUT);
+	}
+	if (!flags.Test(DoCommandFlag::Execute)) return CommandCost();
+
+	/* The platforms change station. */
+	StationComplex &dst_sc = GetOrCreateStationComplex(into.base());
+	for (StationComplexNode node : sc_it->second.nodes) {
+		SliceID sid = _multilayer_map.FindSliceAt(node.ref.tile, node.depth);
+		if (node.role == StationRole::Platform && sid != INVALID_SLICE_ID && _multilayer_map.GetSlice(sid).kind == SliceKind::StationTile) {
+			_multilayer_map.GetSlice(sid).station.station_id = into.base();
+		}
+		node.station_id = into.base();
+		dst_sc.nodes.push_back(node);
+		dst->rect.BeforeAddTile(node.ref.tile, StationRect::ADD_FORCE);
+		if (!dst->facilities.Test(StationFacility::Train)) {
+			dst->AddFacility(StationFacility::Train, node.ref.tile);
+			dst->train_station = TileArea(node.ref.tile, 1, 1);
+		} else if (dst->train_station.tile == INVALID_TILE) {
+			dst->train_station = TileArea(node.ref.tile, 1, 1);
+		}
+		MarkTileDirtyByTile(node.ref.tile);
+	}
+	RemoveStationComplex(from.base());
+
+	/* Orders to the underground station go to the joined station. */
+	for (OrderList *list : OrderList::Iterate()) {
+		for (Order &order : list->GetOrders()) {
+			if ((order.IsType(OT_GOTO_STATION) || order.IsType(OT_IMPLICIT)) && order.GetDestination() == from) order.SetDestination(into);
+		}
+	}
+	for (Vehicle *v : Vehicle::Iterate()) {
+		if ((v->current_order.IsType(OT_GOTO_STATION) || v->current_order.IsType(OT_IMPLICIT)) && v->current_order.GetDestination() == from) v->current_order.SetDestination(into);
+		if (v->last_station_visited == from) v->last_station_visited = into;
+		if (v->last_loading_station == from) v->last_loading_station = into;
+	}
+
+	/* The emptied station goes like any unused station. */
+	src->train_station = TileArea(INVALID_TILE, 0, 0);
+	src->facilities.Reset(StationFacility::Train);
+	src->AfterStationTileSetChange(false, StationType::Rail);
+	dst->RecomputeCatchment();
+	dst->AfterStationTileSetChange(true, StationType::Rail);
+	InvalidateWindowClassesData(WC_VEHICLE_ORDERS);
+	InvalidateWindowData(WC_STATION_VIEW, into);
+	return CommandCost();
 }
 
 /**

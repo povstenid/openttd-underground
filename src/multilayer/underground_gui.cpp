@@ -25,6 +25,7 @@
 #include "../station_base.h"
 #include "../station_func.h"
 #include "../station_gui.h"
+#include "../roadstop_base.h"
 #include "../picker_gui.h"
 #include "../rail_gui.h"
 #include "../rail.h"
@@ -689,11 +690,47 @@ void CloseUndergroundStationBuilder()
 }
 
 /**
+ * The own surface stations an underground station without exits may be joined
+ * to when its first exit is built (see CmdJoinUndergroundStation): stations
+ * near the exit that are not only underground, with which it stays within the
+ * station spread.
+ * @param tile The exit's tile.
+ * @param underground The underground stations the exit may belong to.
+ * @return Pairs of (surface station, underground station joined to it).
+ */
+static std::vector<std::pair<StationID, StationID>> FindSurfaceStationsToJoinAtExit(TileIndex tile, const std::vector<StationID> &underground)
+{
+	/* A station with something on the surface besides metro pavilions. */
+	auto on_surface = [](const Station *st) {
+		if (!StationUsesPortalRouting(st->index.base())) return true;
+		if (st->facilities.Any({StationFacility::Airport, StationFacility::Dock, StationFacility::TruckStop})) return true;
+		for (const RoadStop *rs = st->bus_stops; rs != nullptr; rs = rs->next) {
+			if (!IsStationExitPavilionTile(rs->xy)) return true;
+		}
+		return false;
+	};
+	std::vector<std::pair<StationID, StationID>> result;
+	for (const Station *st : Station::Iterate()) {
+		if (st->owner != _local_company || !on_surface(st)) continue;
+		if (DistanceMax(st->xy, tile) >= _settings_game.station.station_spread) continue;
+		for (StationID from : underground) {
+			if (Command<Commands::JoinUndergroundStation>::Do({}, from, st->index).Succeeded()) {
+				result.emplace_back(st->index, from);
+				break;
+			}
+		}
+	}
+	return result;
+}
+
+/**
  * Build a surface exit for one of the local company's underground stations.
  * The candidates are the stations with a platform within
  * construction.max_station_exit_distance; one candidate is built directly,
  * several open the "Join station" window (without "Build a separate station":
- * an exit always belongs to a station).
+ * an exit always belongs to a station). The window also offers the own surface
+ * stations nearby (an airport, a bus or rail terminal): picking one joins an
+ * underground station without exits to it, and the exit is built for it.
  * @param tile      Tile the exit is to be built on.
  * @param exit_type Pavilion or underpass.
  */
@@ -705,22 +742,30 @@ static void PlaceUndergroundStationExit(TileIndex tile, StationExitType exit_typ
 			WL_INFO, TileX(tile) * TILE_SIZE, TileY(tile) * TILE_SIZE);
 		return;
 	}
+	std::vector<std::pair<StationID, StationID>> joins = FindSurfaceStationsToJoinAtExit(tile, candidates);
 
-	auto proc = [tile, exit_type](bool test, StationID to_join) -> bool {
+	auto proc = [tile, exit_type, joins](bool test, StationID to_join) -> bool {
 		if (!Station::IsValidID(to_join)) return false;
-		if (test) {
+		auto join = std::ranges::find(joins, to_join, &std::pair<StationID, StationID>::first);
+		if (join != joins.end()) {
+			/* A surface station: join the underground station to it first. */
+			if (test) return true;
+			if (!Command<Commands::JoinUndergroundStation>::Post(STR_ERROR_CAN_T_JOIN_UNDERGROUND_STATION, join->second, to_join)) return false;
+		} else if (test) {
 			return Command<Commands::BuildExitSurface>::Do(CommandFlagsToDCFlags(GetCommandFlags<Commands::BuildExitSurface>()), tile, to_join.base(), exit_type).Succeeded();
 		}
 		return Command<Commands::BuildExitSurface>::Post(STR_ERROR_CAN_T_BUILD_STATION_EXIT, tile, to_join.base(), exit_type);
 	};
 
-	if (candidates.size() == 1) {
+	if (candidates.size() == 1 && joins.empty()) {
 		proc(false, candidates.front());
 		return;
 	}
 
 	ShowSelectStationFromCandidates(TileArea(tile, 1, 1), [tile]() {
-		return FindUndergroundStationsForExit(tile, _local_company);
+		std::vector<StationID> list = FindUndergroundStationsForExit(tile, _local_company);
+		for (const auto &join : FindSurfaceStationsToJoinAtExit(tile, list)) list.push_back(join.first);
+		return list;
 	}, proc);
 }
 

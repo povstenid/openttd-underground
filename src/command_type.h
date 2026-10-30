@@ -399,6 +399,7 @@ enum class Commands : uint8_t {
 	RemoveExitSurface, ///< remove a surface exit (pavilion or underpass) of an underground station
 	ConvertUndergroundRail, ///< convert the rail type of underground track, stations, ramps and portals in an area
 	PasteUndergroundBlueprint, ///< build (a part of) a metro blueprint
+	JoinUndergroundStation, ///< join a station that is only underground to another station
 
 	End, ///< @important Must ALWAYS be on the end of this list!! (period)
 };
