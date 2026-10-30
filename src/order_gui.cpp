@@ -454,6 +454,15 @@ static Order GetOrderCmdFromTile(const Vehicle *v, TileIndex tile)
 		return order;
 	}
 
+	/* In the views below ground the platform on the viewed level goes before the surface station above it. */
+	if (v->type == VEH_TRAIN && IsUndergroundViewActive()) {
+		SliceID sid = _multilayer_map.FindSliceAt(tile, GetUndergroundViewDepth());
+		if (sid != INVALID_SLICE_ID) {
+			const TileSlice &slice = _multilayer_map.GetSlice(sid);
+			if (slice.kind == SliceKind::StationTile && make_station_order(StationID(slice.station.station_id))) return order;
+		}
+	}
+
 	/* check for station or industry with neutral station */
 	if (IsTileType(tile, TileType::Station) || IsTileType(tile, TileType::Industry)) {
 		const Station *st = nullptr;

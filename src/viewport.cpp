@@ -2395,6 +2395,24 @@ static bool CheckClickOnViewportSign(const Viewport &vp, int x, int y, const Vie
 }
 
 /**
+ * Of two station signs under the cursor, which to open: the sign of a station
+ * that is only underground and the sign of the surface station above it often
+ * cover each other. The view decides: the underground station in the views
+ * below ground, the surface station otherwise; else the later sign, as before.
+ * @param current The sign picked so far, or nullptr.
+ * @param candidate Another sign under the cursor.
+ * @return Whether  candidate is to be picked instead.
+ */
+static bool PreferClickedStationSign(const BaseStation *current, const BaseStation *candidate)
+{
+	if (current == nullptr) return true;
+	bool current_below = StationUsesPortalRouting(current->index.base());
+	bool candidate_below = StationUsesPortalRouting(candidate->index.base());
+	if (current_below == candidate_below) return true;
+	return candidate_below == IsUndergroundViewActive();
+}
+
+/**
  * Check whether any viewport sign was clicked, and dispatch the click.
  * @param vp the clicked viewport
  * @param x X position of click
@@ -2434,7 +2452,7 @@ static bool CheckClickOnViewportSign(const Viewport &vp, int x, int y)
 				if (facilities.None()) facilities = STATION_FACILITY_GHOST;
 				if (!facilities.Any(_facility_display_opt)) break;
 
-				if (CheckClickOnViewportSign(vp, x, y, &st->sign)) last_st = st;
+				if (CheckClickOnViewportSign(vp, x, y, &st->sign) && PreferClickedStationSign(last_st, st)) last_st = st;
 				break;
 			}
 
@@ -2639,6 +2657,11 @@ bool HandleViewportClicked(const Viewport &vp, int x, int y)
 					SetUndergroundViewDepth(other);
 					MarkWholeScreenDirty();
 					InvalidateWindowClassesData(WC_BUILD_TOOLBAR);
+					return true;
+				}
+				/* A platform on the viewed level (not a train on it) opens its station, not the surface station above it. */
+				if (s.kind == SliceKind::StationTile && v == nullptr && Station::IsValidID(StationID(s.station.station_id))) {
+					ShowStationViewWindow(StationID(s.station.station_id));
 					return true;
 				}
 			}
