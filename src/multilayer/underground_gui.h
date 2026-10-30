@@ -42,6 +42,15 @@ bool UndergroundRailToolPlaceMouseUp(WidgetID tool, ViewportPlaceMethod select_m
 	TileIndex start_tile, TileIndex end_tile, RailType railtype, bool remove);
 void UpdateUndergroundRailToolGhost(WidgetID tool, RailType railtype);
 
+/** What the station exit tools show on a surface tile: where the own underground stations are and where their exits may go. */
+enum class StationExitAreaHighlight : uint8_t {
+	None,     ///< Not shown, or nothing here.
+	Platform, ///< A platform of an own underground station lies below the tile.
+	Area,     ///< An exit may be built here (within construction.max_station_exit_distance of a platform).
+};
+
+StationExitAreaHighlight GetStationExitAreaHighlight(TileIndex tile);
+
 /** The ramp a ramp tool would build, shown under the cursor before it is built (client-side only). */
 struct UndergroundRampGhost {
 	TileIndex tile = INVALID_TILE; ///< Tile of the ramp, INVALID_TILE when none is shown.

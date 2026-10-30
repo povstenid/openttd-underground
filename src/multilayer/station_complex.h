@@ -160,4 +160,7 @@ uint16_t ForgetExplicitStationExitAt(TileIndex tile);
 /** Mark the per-tile lookup of explicit exits stale; call after changing exit nodes. */
 void InvalidateStationExitCache();
 
+/** Redraw the surface tiles of the explicit exits of a station, e.g. when their highlight changes. */
+void MarkStationExitTilesDirty(uint16_t station_id);
+
 #endif /* STATION_COMPLEX_H */

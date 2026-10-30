@@ -25,6 +25,9 @@ bool PlaceDivePortalSignal(TileIndex tile, Axis axis, uint &x, uint &y);
 /** Draw portal overlay on the surface tile (always visible). */
 void DrawPortalOverlay(const TileInfo *ti);
 
+/** Draw the tile of a hillside portal on the surface like its level shows it; false if it is none. */
+bool DrawHillsidePortalSurfaceTile(TileInfo *ti);
+
 /** Draw the ghost of the portal the portal tool would build on the surface tile. */
 void DrawSurfacePortalGhost(const TileInfo *ti);
 

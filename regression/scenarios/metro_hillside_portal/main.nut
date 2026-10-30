@@ -86,6 +86,10 @@ class MetroHillsidePortal extends GSController {
 					report.check_true("hillside_portal_removed", GSMetro.RemovePortal(incline), "Removing the hillside portal should succeed (err=" + GSError.GetLastErrorString() + ").");
 					report.check_true("hillside_portal_gone", !GSMetro.IsPortalTile(incline) && GSMetro.GetUndergroundTileKind(incline, h) == GSMetro.TK_NONE, "The portal slice should be gone.");
 					report.check_true("hillside_surface_rail_gone", !GSRail.IsRailTile(incline), "The surface rail of the portal should be gone.");
+
+					/* The hillside mouth again, kept in the saved game for looking at it. */
+					report.check_true("hillside_portal_rebuilt", GSMetro.BuildPortal(incline, GSMetro.DIAGDIR_SW, h), "The hillside portal should be built again (err=" + GSError.GetLastErrorString() + ").");
+					report.check_true("final_save_written", GSTest.SaveGame("metro_hillside_portal_final.sav"), "Scenario should save final state for manual inspection.");
 				}
 
 				company_mode = null;

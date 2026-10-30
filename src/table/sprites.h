@@ -335,7 +335,7 @@ static const SpriteID SPR_BRIDGE_DECKS_ROAD = SPR_BRIDGE_DECKS_BASE + 18;
  * which checks these offsets and the count; keep them in sync.
  */
 static constexpr SpriteID SPR_METRO_STATION_BASE = SPR_BRIDGE_DECKS_BASE + BRIDGE_DECKS_SPRITE_COUNT;
-static constexpr uint16_t METRO_STATION_SPRITE_COUNT = 157;
+static constexpr uint16_t METRO_STATION_SPRITE_COUNT = 161;
 
 /* Underground station: ground sprites (64x31) and sortable platform pieces with
  * the bounding boxes of the vanilla rail platforms; boards/pillars stand on the
@@ -381,7 +381,8 @@ static constexpr SpriteID SPR_METRO_CEILING          = SPR_METRO_STATION_BASE + 
 
 /* Metro portals on the surface, per DiagDirection (into the tunnel): +dir*2 rear
  * (ground sprite), +dir*2+1 front (sortable, vanilla tunnel roof bounds).
- * HILL: concrete headwall at the top edge of an incline (mouth at the foot level);
+ * HILL: concrete headwall at the top edge of an incline (no longer drawn: a hillside
+ *       mouth is drawn like on its level, SPR_METRO_TUNNEL_BASE; kept so the IDs after it do not shift);
  * DIVE: entrance block on flat ground (portal below the surface). */
 static constexpr SpriteID SPR_METRO_PORTAL_HILL_BASE = SPR_METRO_STATION_BASE + 33;
 static constexpr SpriteID SPR_METRO_PORTAL_DIVE_BASE = SPR_METRO_STATION_BASE + 41;
@@ -389,7 +390,7 @@ static constexpr SpriteID SPR_METRO_PORTAL_DIVE_BASE = SPR_METRO_STATION_BASE + 
 static constexpr SpriteID SPR_METRO_PORTAL_CUT_SHALLOW_BASE = SPR_METRO_STATION_BASE + 74;
 
 /* Slice view of a dive portal at its level, per DiagDirection: the gate on the open
- * edge (box: one tile-unit thick along that edge, 20 high) and the concrete ramp
+ * edge (box: one tile-unit thick along that edge, 28 high) and the concrete ramp
  * rising from the plane one level up to the open edge (ground sprite). */
 static constexpr SpriteID SPR_METRO_PORTAL_GATE_BASE = SPR_METRO_STATION_BASE + 49;
 static constexpr SpriteID SPR_METRO_PORTAL_RAMP_BASE = SPR_METRO_STATION_BASE + 53;
@@ -480,6 +481,12 @@ static constexpr SpriteID SPR_METRO_ICON_SHOW_ABOVE  = SPR_METRO_STATION_BASE + 
 static constexpr SpriteID SPR_METRO_ICON_SHOW_BELOW  = SPR_METRO_STATION_BASE + 154;
 static constexpr SpriteID SPR_METRO_ICON_UNDERGROUND = SPR_METRO_STATION_BASE + 155;
 static constexpr SpriteID SPR_METRO_ICON_COVERAGE    = SPR_METRO_STATION_BASE + 156;
+/** Recolour of the tile selection to green: the highlight of the surface exits of a station whose window is open. */
+static constexpr PaletteID SPR_METRO_EXIT_HIGHLIGHT_PAL = SPR_METRO_STATION_BASE + 157;
+/** On the surface, the front of a hillside mouth facing away from the viewer (+0 SE, +1 SW): the back of the block is solid. */
+static constexpr SpriteID SPR_METRO_TUNNEL_SURFACE_BASE = SPR_METRO_STATION_BASE + 158;
+/** Recolour of the tile selection to yellow: where the station exit tools may build an exit. */
+static constexpr PaletteID SPR_METRO_EXIT_AREA_PAL = SPR_METRO_STATION_BASE + 160;
 static constexpr uint8_t METRO_MORE_ICON_SPRITE_COUNT = 5;
 
 /**

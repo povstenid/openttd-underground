@@ -648,9 +648,18 @@ def station_portal(name, axis_y):
     return from_scene(name, s, ref=(0, 0, 0), comment='station end portal ' + ('Y' if axis_y else 'X'))
 
 
-def tunnel(d):
+# The tunnel mouth block: vault springing 11 above the floor, 5 wide on each
+# side (the inside of the tunnel ribs), a concrete ring and a crown above it.
+MOUTH_SPRING, MOUTH_HALF = 11.0, 5.0
+MOUTH_HEIGHT = 20
+
+
+def tunnel(d, surface=False):
     """Tunnel mouth on the slab for DiagDirection d (direction into the tunnel,
-    like the vanilla tunnel sprites): a rock block with a concrete headwall."""
+    like the vanilla tunnel sprites): a rock block with a concrete headwall.
+    With `surface`, only the front of a mouth facing away from the viewer, as
+    the surface shows it: the back of the block is solid, the section of the
+    tunnel is shown on the level only."""
     s = Scene()
     axis_y = d in ('SE', 'NW')
     visible_mouth = d in ('NE', 'NW')   # the mouth faces the viewer
@@ -660,17 +669,20 @@ def tunnel(d):
     else:
         bx0, bx1, face_x = 8, 16, 16    # far end of the block shows the section
 
+    # the opening is as big as the inside of the tunnel ribs, so a train fits it
+    spring, half = MOUTH_SPRING, MOUTH_HALF
+
     def in_arch(w, z, grow=0.0):
-        r = 4.5 + grow
+        r = half + grow
         if abs(w - 8) > r:
             return False
-        return z <= 7 or (w - 8) ** 2 + (z - 7) ** 2 <= r * r
+        return z <= spring or (w - 8) ** 2 + (z - spring) ** 2 <= r * r
 
     def block(face, x, y, z, sx, sy):
         if face == 'px' and abs(x - face_x) < 1e-6:
-            if in_arch(y, z):
+            if in_arch(y, z) and not surface:
                 return None if visible_mouth else 2
-            if in_arch(y, z, 1.3):
+            if in_arch(y, z, 1.3) and not surface:
                 return ('grey', 13)      # concrete ring
             lvl = 11 if int(z) % 4 else 10  # headwall courses
             return ('grey', lvl)
@@ -678,7 +690,7 @@ def tunnel(d):
             if y < 1.6 or y > 14.4 or x < bx0 + 0.6 or x > bx1 - 0.6:
                 return ('grey', 12)      # coping
         return rock_mat(5, 30 + len(d))(face, x, y, z, sx, sy)
-    s.add(Box(bx0, bx1, 1, 15, 0, 15, block, tag='front', swap=axis_y))
+    s.add(Box(bx0, bx1, 1, 15, 0, MOUTH_HEIGHT, block, tag='front', swap=axis_y))
 
     if visible_mouth:
         def void(face, x, y, z, sx, sy):
@@ -688,13 +700,16 @@ def tunnel(d):
                     return 5 if depth < 3 else 3
                 return 2
             return 3 if depth < 2.5 else (2 if depth < 5 else 1)
-        s.add(Box(0, 8, 3.5, 12.5, 0, 11.5, void, tag='rear', inside=True, swap=axis_y))
+        s.add(Box(0, 8, 8 - half, 8 + half, 0, spring + half, void, tag='rear', inside=True, swap=axis_y))
     else:
         def shade(face, x, y, z, sx, sy):
             return 2 if (sx + sy) % 2 == 0 else None
         s.add(Box(6.5, 8, 3.5, 12.5, 0, 0, shade, tag='rear', swap=axis_y))
 
     base = {'NE': 0, 'SE': 1, 'SW': 2, 'NW': 3}[d]
+    if surface:
+        return from_scene(f'SPR_METRO_TUNNEL_SURFACE_BASE + {base - 1}', s, ref=(15, 15, 0), tags={'front'},
+                          comment=f'tunnel mouth {d} on the surface: front with a solid back')
     rear = from_scene(f'SPR_METRO_TUNNEL_BASE + {base * 2}', s, tags={'rear'},
                       comment=f'tunnel mouth {d}: rear (ground)')
     front = from_scene(f'SPR_METRO_TUNNEL_BASE + {base * 2 + 1}', s, ref=(15, 15, 0), tags={'front'},
@@ -1147,26 +1162,33 @@ def surface_portal(d, hill):
 
 
 # Bounding boxes of the slice-view portal gates: a thin box on the open edge.
+# The gate's arch: like the tunnel mouth of the open cut (vault springing 12
+# above the floor, 4.5 wide on each side), with a concrete crown above it.
+GATE_SPRING, GATE_HALF = 12.0, 4.5
+GATE_HEIGHT = 20
 GATE_ORIGIN = {'NE': (15, 0, 0), 'SE': (0, 0, 0), 'SW': (0, 0, 0), 'NW': (0, 15, 0)}
 
 
 def portal_gate(d):
     """Slice view, dive portal: the concrete frame at the top of the exit
     ramp (open edge, one level above the plane) through which the rail
-    leaves for the surface."""
+    leaves for the surface. Its opening is as big as the tunnel mouth of the
+    open cut (and the tunnel ribs), so the train passes through it."""
     f = DirFrame(d)
     s = Scene()
+    spring, half = GATE_SPRING, GATE_HALF
 
     def gate(face, u, w, z, sx, sy):
-        if face in ('front', 'back', 'side') and arch(w, z, 8):
+        if face in ('front', 'back', 'side') and arch(w, z, 8, half, spring):
             return None
-        if face in ('front', 'back') and arch(w, z, 8, 5.2, 6.0):
+        if face in ('front', 'back') and arch(w, z, 8, half + 1.2, spring):
             return ('grey', 13)
         if face == 'top':
             return ('grey', 12)
         return concrete(face, u, w, z, sx, sy)
-    s.add(f.box(15, 16, 0.5, 15.5, 0, 8 + 12, gate))
-    s.stamp(f.point(15.5, 8, 8 + 12), SIGN_ICON, SIGN_CMAP)
+    # from the top of the ramp up: below it the wall would hide the end of the rail
+    s.add(f.box(15, 16, 0.5, 15.5, 8, 8 + GATE_HEIGHT, gate))
+    s.stamp(f.point(15.5, 8, 8 + GATE_HEIGHT), SIGN_ICON, SIGN_CMAP)
     i = DIRS.index(d)
     return from_scene(f'SPR_METRO_PORTAL_GATE_BASE + {i}', s, ref=GATE_ORIGIN[d],
                       comment=f'slice view dive portal {d}: gate on the open edge')
@@ -2025,6 +2047,26 @@ class Recolour:
         self.comment = comment
 
 
+def exit_highlight_recolour():
+    """Recolour of the tile selection sprite (greys 1..15) to green, like
+    PALETTE_SEL_TILE_BLUE does it to blue: the highlight of station exits."""
+    table = list(range(256))
+    # the three brightest greens of the palette: it has to stand out on grass
+    greens = {grey: 0xCF if grey <= 6 else 0xD0 if grey <= 10 else 0xD1 for grey in range(1, 16)}
+    for grey, green in greens.items():
+        table[grey] = green
+    return Recolour('SPR_METRO_EXIT_HIGHLIGHT_PAL', table, 'green tile highlight of station exits')
+
+
+def exit_area_recolour():
+    """Recolour of the tile selection sprite (greys 1..15) to yellow: the area
+    where the exits of the own underground stations may be built."""
+    table = list(range(256))
+    for grey in range(1, 16):
+        table[grey] = 0x42 if grey <= 6 else 0xBE if grey <= 10 else 0x33
+    return Recolour('SPR_METRO_EXIT_AREA_PAL', table, 'yellow tile highlight of the station exit area')
+
+
 def luminance(rgb):
     return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 
@@ -2158,6 +2200,13 @@ def build_sprites():
             sp.append(basement_tile(role, variant))
     # 21. more toolbar icons: blueprints, views of the levels above / below, underground, station coverage
     sp.extend(more_toolbar_icons())
+    # 22. green tile highlight of the surface exits of a station whose window is open
+    sp.append(exit_highlight_recolour())
+    # 23. on the surface, the front of a hillside mouth facing away: its back is solid
+    for d in ('SE', 'SW'):
+        sp.append(tunnel(d, surface=True))
+    # 24. yellow tile highlight of the area the station exit tools may build on
+    sp.append(exit_area_recolour())
     return sp
 
 # --------------------------------------------------------------------------

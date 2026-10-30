@@ -1350,6 +1350,8 @@ struct StationViewWindow : public Window {
 		this->sort_orders[0] = SO_ASCENDING;
 		this->SelectSortOrder((SortOrder)_settings_client.gui.station_gui_sort_order);
 		this->owner = Station::Get(window_number)->owner;
+		/* Light up the surface exits of an underground station while its window is open. */
+		MarkStationExitTilesDirty(window_number);
 	}
 
 	void OnInit() override
@@ -1368,6 +1370,7 @@ struct StationViewWindow : public Window {
 
 		SetViewportCatchmentStation(Station::Get(this->window_number), false);
 		this->Window::Close();
+		MarkStationExitTilesDirty(this->window_number);
 	}
 
 	/**
