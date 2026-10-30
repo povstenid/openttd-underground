@@ -102,9 +102,16 @@ Z_WALL = 6.6         # top of the side wall
 Z_ROOF = 0.5         # extra height of the roof crown
 
 
-def car_material(st, face, u, v, w, front_cab, rear_cab):
+# The third of a car at its cab end is painted darker, so cab cars stand out
+# from middle cars at a glance, also in the middle of a train where no cab is drawn.
+MARK_LEN = 2 * HALF_LEN / 3
+MARK_DARKEN = {'cc': 3.5, 'grey': 4.0, 'cream': 3.0, 'bluegrey': 3.0, 'brown': 3.0}
+
+
+def car_material(st, face, u, v, w, front_cab, rear_cab, mark_front=False, mark_rear=False):
     """Return (ramp name, level) arrays for surface points; face is an int array:
-    0 side, 1 roof, 2 end, 3 windscreen slope, 4 bogie/underframe."""
+    0 side, 1 roof, 2 end, 3 windscreen slope, 4 bogie/underframe.
+    mark_front / mark_rear paint the cab third of that end darker."""
     n = u.shape[0]
     ramp = np.full(n, 'cc', dtype=object)
     lvl = np.full(n, float(st['body_lvl']))
@@ -206,6 +213,17 @@ def car_material(st, face, u, v, w, front_cab, rear_cab):
                 ramp[m2] = 'cc'
                 lvl[m2] = 5
 
+    # ---- the darker cab third ----
+    marked = np.zeros(n, dtype=bool)
+    if mark_front:
+        marked |= u > HALF_LEN - MARK_LEN
+    if mark_rear:
+        marked |= u < MARK_LEN - HALF_LEN
+    marked &= ~under
+    for name, k in MARK_DARKEN.items():
+        m = marked & (ramp == name)
+        lvl[m] -= k
+
     # ---- bogies and underframe ----
     ramp[under] = 'steel'
     lvl[under] = 1
@@ -262,7 +280,7 @@ CANVAS = (64, 48)
 ORIGIN = (32, 32)
 
 
-def render(st, d, front_cab, rear_cab):
+def render(st, d, front_cab, rear_cab, mark_front=False, mark_rear=False):
     fx, fy = DIRS[d]
     diag = fx != 0 and fy != 0
     f = np.array([fx, fy], float)       # one vehicle step in world units
@@ -297,7 +315,7 @@ def render(st, d, front_cab, rear_cab):
     if got.any():
         u, v, w = hit[got].T
         face = hit_face[got]
-        ramp, lvl = car_material(st, face, u, v, w, front_cab, rear_cab)
+        ramp, lvl = car_material(st, face, u, v, w, front_cab, rear_cab, mark_front, mark_rear)
         # face normals in world space
         n = np.zeros((u.shape[0], 3))
         sv = np.sign(v)[:, None]
@@ -365,7 +383,15 @@ VEHICLES = [
          cost=25, running=105, te=0.35, cabs=True),
 ]
 
-VARIANTS = [('front', True, False), ('rear', False, True), ('mid', False, False), ('both', True, True)]
+# name, cab at the front, cab at the rear, darker front third, darker rear third.
+# 'midcab' is a cab car in the middle of a train: no cab drawn, but still marked.
+VARIANTS = [
+    ('front', True, False, True, False),
+    ('rear', False, True, False, True),
+    ('mid', False, False, False, False),
+    ('both', True, True, True, True),
+    ('midcab', False, False, True, False),
+]
 
 
 def build_sheet():
@@ -373,14 +399,14 @@ def build_sheet():
     cell_w, cell_h = 40, 32
     rows = []
     for st_name in STYLES:
-        for var, fc, rc in VARIANTS:
-            rows.append((st_name, var, fc, rc))
+        for var, fc, rc, mf, mr in VARIANTS:
+            rows.append((st_name, var, fc, rc, mf, mr))
     sheet = np.zeros((cell_h * len(rows) + 1, cell_w * 8 + 1), np.uint8)
     table = {}
-    for r, (st_name, var, fc, rc) in enumerate(rows):
+    for r, (st_name, var, fc, rc, mf, mr) in enumerate(rows):
         sprites = []
         for d in range(8):
-            img, xo, yo = render(STYLES[st_name], d, fc, rc)
+            img, xo, yo = render(STYLES[st_name], d, fc, rc, mf, mr)
             h, w = img.shape
             assert w < cell_w and h < cell_h, (st_name, d, w, h)
             px, py = d * cell_w + 1, r * cell_h + 1
@@ -451,7 +477,7 @@ grf {
     name: string(STR_GRF_NAME);
     desc: string(STR_GRF_DESC);
     url: string(STR_GRF_URL);
-    version: 1;
+    version: 2;
     min_compatible_version: 1;
 }
 
@@ -463,10 +489,10 @@ railtypetable { MTRO }
         out.append(nml_spriteset(f'set_{st_name}_{var}', sprites))
         out.append('')
     for st_name in STYLES:
-        out.append(f'''// Cab at whichever end of the train the car is, no cab in the middle.
+        out.append(f'''// Cab at whichever end of the train the car is; in the middle no cab, but the darker cab third.
 switch (FEAT_TRAINS, SELF, sw_{st_name}_end, position_in_consist_from_end) {{
     0: set_{st_name}_rear;
-    set_{st_name}_mid;
+    set_{st_name}_midcab;
 }}
 switch (FEAT_TRAINS, SELF, sw_{st_name}_single, position_in_consist_from_end) {{
     0: set_{st_name}_both;
@@ -481,7 +507,7 @@ switch (FEAT_TRAINS, SELF, sw_{st_name}_gfx, position_in_consist) {{
         hp = round(veh['power_kw'] * 1.341)
         ml = 'VEHICLE_NEVER_EXPIRES' if veh['model_life'] is None else veh['model_life']
         gfx = f'sw_{veh["style"]}_gfx' if veh['cabs'] else f'set_{veh["style"]}_mid'
-        purchase = f'set_{veh["style"]}_both' if veh['cabs'] else f'set_{veh["style"]}_mid'
+        purchase = f'set_{veh["style"]}_front' if veh['cabs'] else f'set_{veh["style"]}_mid'
         key = veh['id'].upper()
         out.append(f'''item(FEAT_TRAINS, {veh['id']}, {veh['num']}) {{
     property {{
