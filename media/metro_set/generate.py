@@ -71,7 +71,7 @@ STYLES = {
     'a': dict(body='cc', body_lvl=4, roof='grey', roof_lvl=4, roof_dome=1.0,
               belt=None, window_band=(4.0, 5.5), window='glass', window_frames=True,
               rivets=True, doors=4, door='cc', door_lvl=3, chamfer=0.25, slope=None,
-              front_window=(4.0, 5.5), front_split=True, skirt='steel'),
+              front_window=(4.0, 5.5), front_split=True, skirt='steel', cab_mark=False),
     # 1959: smooth, two-tone, rounded cab corners.
     'e': dict(body='cc', body_lvl=4, roof='grey', roof_lvl=6, roof_dome=0.8,
               belt=('cream', 4, 3.3, 3.8), window_band=(4.0, 5.5), window='glass', window_frames=False,
@@ -104,8 +104,9 @@ Z_ROOF = 0.5         # extra height of the roof crown
 
 
 # The third of a car at its cab end is painted darker, so the head and the tail
-# of a train stand out from the middle cars at a glance. Types whose cars are
-# all alike (cab_mark=False) are not marked.
+# of a train stand out from the middle cars at a glance. The old types, whose
+# cars are all alike (cab_mark=False: Type A, Type E), are not marked; the
+# numbered types from the 717 on have middle cars.
 MARK_LEN = 2 * HALF_LEN / 3
 MARK_DARKEN = {'cc': 3.5, 'grey': 4.0, 'cream': 3.0, 'bluegrey': 3.0, 'brown': 3.0}
 
