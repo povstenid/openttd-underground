@@ -68,19 +68,19 @@ class MetroErrorMessages extends GSController {
 				this.expect_error("remove_missing_signal", GSMetro.RemoveUndergroundSignal(probe, GSRail.RAILTRACK_NE_SW, depth), GSRail.ERR_UNSUITABLE_TRACK);
 				this.expect_error("signal_without_track", GSMetro.BuildUndergroundSignal(probe, GSRail.RAILTRACK_NE_SW, depth), GSRail.ERR_UNSUITABLE_TRACK);
 
-				/* 4. A second portal on a portal tile; vanilla rail removal on it. */
+				/* 4. A second portal on a portal tile; vanilla rail removal takes the portal with it. */
 				report.check_true("portal_built", metro.build_portal(portal, GSMetro.DIAGDIR_SW, GSTile.GetCornerHeight(portal, GSTile.CORNER_N) - 1), "Portal should be built (err=" + GSError.GetLastErrorString() + ").");
 				local portal_depth = GSTile.GetCornerHeight(portal, GSTile.CORNER_N) - 1;
 				this.expect_error("portal_twice", GSMetro.BuildPortal(portal, GSMetro.DIAGDIR_SW, portal_depth), GSMetro.ERR_UNDERGROUND_PORTAL_ALREADY_BUILT);
 				report.check_true("portal_surface_rail", GSRail.IsRailTile(portal), "Portal should have surface rail.");
-				this.expect_error("remove_portal_rail", GSRail.RemoveRailTrack(portal, GSRail.RAILTRACK_NE_SW), GSMetro.ERR_MUST_REMOVE_PORTAL_FIRST);
-				report.check_true("portal_survives", GSMetro.IsPortalTile(portal) && GSRail.IsRailTile(portal), "Portal and its rail must survive.");
+				report.check_true("remove_portal_rail", GSRail.RemoveRailTrack(portal, GSRail.RAILTRACK_NE_SW), "Removing the portal's rail should remove the portal (err=" + GSError.GetLastErrorString() + ").");
+				report.check_true("portal_gone_with_rail", !GSMetro.IsPortalTile(portal) && !GSRail.IsRailTile(portal), "Portal and its rail should be gone.");
 
 				/* 5. Rail through a station platform of the other axis. */
 				report.check_true("station_built", metro.build_station_x(station, depth), "Underground station should be built (err=" + GSError.GetLastErrorString() + ").");
 				this.expect_error("rail_across_station", GSMetro.BuildUndergroundRail(station, GSRail.RAILTRACK_NW_SE, depth), GSMetro.ERR_UNDERGROUND_SOMETHING_IN_THE_WAY);
 				this.expect_error("station_twice", metro.build_station_x(station, depth), GSError.ERR_ALREADY_BUILT);
-				this.expect_error("remove_rail_on_station", GSMetro.RemoveUndergroundRail(station, GSRail.RAILTRACK_NE_SW, depth), GSRail.ERR_UNSUITABLE_TRACK);
+				this.expect_error("remove_rail_across_station", GSMetro.RemoveUndergroundRail(station, GSRail.RAILTRACK_NW_SE, depth), GSRail.ERR_UNSUITABLE_TRACK);
 
 				/* 6. Ramps must join adjacent levels. */
 				this.expect_error("ramp_not_adjacent", GSMetro.BuildRamp(ramp, GSMetro.DIAGDIR_SW, depth, depth - 2), GSMetro.ERR_UNDERGROUND_RAMP_NOT_ADJACENT);

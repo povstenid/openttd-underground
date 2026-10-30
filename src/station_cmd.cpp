@@ -64,6 +64,7 @@
 #include "rail_cmd.h"
 #include "newgrf_roadstop.h"
 #include "multilayer/station_complex.h"
+#include "multilayer/underground_cmd.h"
 #include "timer/timer.h"
 #include "timer/timer_game_calendar.h"
 #include "timer/timer_game_economy.h"
@@ -2397,12 +2398,14 @@ static CommandCost RemoveRoadStop(TileIndex tile, DoCommandFlags flags, int repl
 		if (ret.Failed()) return ret;
 	}
 
-	/* The bus station tile of a metro exit pavilion goes only with its exit. Bankruptcy
-	 * and flooding still remove it; the exit node is then dropped with it. A spec
-	 * replacement keeps the tile a bus stop of the same station. */
+	/* The bus station tile of a metro exit pavilion goes only with its exit: removing
+	 * the bus stop (the dynamite, the road stop remover) removes the exit. Building over
+	 * it does not. Bankruptcy and flooding still remove the tile; the exit node is then
+	 * dropped with it. A spec replacement keeps the tile a bus stop of the same station. */
 	bool is_exit_pavilion = replacement_spec_index < 0 && IsStationExitPavilionTile(tile);
 	if (is_exit_pavilion && !_removing_station_exit_pavilion && !flags.Test(DoCommandFlag::Bankrupt) && _current_company != OWNER_WATER) {
-		return CommandCost(STR_ERROR_UNDERGROUND_MUST_REMOVE_EXIT_FIRST);
+		if (flags.Test(DoCommandFlag::Auto)) return CommandCost(STR_ERROR_UNDERGROUND_MUST_REMOVE_EXIT_FIRST);
+		return CmdRemoveExitSurface(flags, tile);
 	}
 
 	bool is_truck = IsTruckStop(tile);

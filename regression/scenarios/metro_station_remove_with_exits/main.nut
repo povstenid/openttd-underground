@@ -58,8 +58,8 @@ class MetroStationRemoveWithExits extends GSController {
 				report.check_eq("pavilion_kept", GSMetro.EXIT_PAVILION, GSMetro.GetExitType(pavilion), "The pavilion should still be found on its tile.");
 				report.check_eq("underpass_kept", GSMetro.EXIT_UNDERPASS, GSMetro.GetExitType(underpass), "The underpass should still be found on its tile.");
 
-				/* The last platform takes the exits with it. */
-				report.check_true("remove_a1", GSMetro.RemoveUndergroundStation(a1, depth), "Platform A1 should be removed (err=" + GSError.GetLastErrorString() + ").");
+				/* The last platform takes the exits with it; the underground track remover takes the platform. */
+				report.check_true("remove_a1", GSMetro.RemoveUndergroundRail(a1, GSRail.RAILTRACK_NE_SW, depth), "Platform A1 should be removed with the track tool (err=" + GSError.GetLastErrorString() + ").");
 				report.check_eq("pavilion_gone", GSMetro.EXIT_INVALID, GSMetro.GetExitType(pavilion), "No exit should be left on the pavilion tile.");
 				report.check_true("pavilion_tile_cleared", !GSTile.IsStationTile(pavilion), "The pavilion building should be gone.");
 				report.check_eq("underpass_gone", GSMetro.EXIT_INVALID, GSMetro.GetExitType(underpass), "No exit should be left on the road tile.");

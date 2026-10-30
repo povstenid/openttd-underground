@@ -695,14 +695,16 @@ struct BuildRailToolbarWindow : Window {
 			case WID_RAT_BUILD_WAYPOINT:
 			case WID_RAT_BUILD_STATION:
 			case WID_RAT_BUILD_SIGNALS:
+			case WID_RAT_BUILD_EXIT_PAVILION:
+			case WID_RAT_BUILD_EXIT_UNDERPASS:
+			case WID_RAT_BUILD_PORTAL:
+			case WID_RAT_BUILD_RAMP_DOWN:
+			case WID_RAT_BUILD_RAMP_UP:
 				/* Removal button is enabled only if the rail/signal/waypoint/station
-				 * button is still lowered.  Once raised, it has to be disabled.
-				 * Underground stations are removed with the demolish tool. */
-				if (clicked_widget != WID_RAT_BUILD_STATION || !IsUndergroundSliceMode()) {
-					this->SetWidgetDisabledState(WID_RAT_REMOVE, !this->IsWidgetLowered(clicked_widget));
-					break;
-				}
-				[[fallthrough]];
+				 * (or metro exit, portal, ramp) button is still lowered.  Once raised,
+				 * it has to be disabled. */
+				this->SetWidgetDisabledState(WID_RAT_REMOVE, !this->IsWidgetLowered(clicked_widget));
+				break;
 
 			default:
 				/* When any other buttons than rail/signal/waypoint/station, raise and
@@ -899,7 +901,7 @@ struct BuildRailToolbarWindow : Window {
 
 	void OnPlaceObject([[maybe_unused]] Point pt, TileIndex tile) override
 	{
-		if (UndergroundRailToolPlaceObject(this->last_user_action, tile, this->railtype)) return;
+		if (UndergroundRailToolPlaceObject(this->last_user_action, tile, this->railtype, _remove_button_clicked)) return;
 
 		switch (this->last_user_action) {
 			case WID_RAT_BUILD_NS:

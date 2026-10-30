@@ -625,6 +625,12 @@ CommandCost CmdRemoveSingleRail(DoCommandFlags flags, TileIndex tile, Track trac
 	if (!ValParamTrackOrientation(track)) return CMD_ERROR;
 	TrackBits trackbit = TrackToTrackBits(track);
 
+	/* Removing the surface rail of a metro portal removes the portal with it, like the dynamite does. */
+	if (IsTileType(tile, TileType::Railway) && IsPlainRail(tile) && (GetTrackBits(tile) & trackbit) != TRACK_BIT_NONE &&
+			CheckPortalSurfaceRailRemoval(tile, trackbit, flags).Failed()) {
+		return CmdRemovePortal(flags, tile);
+	}
+
 	/* Need to read tile owner now because it may change when the rail is removed
 	 * Also, in case of floods, _current_company != owner
 	 * There may be invalid tiletype even in exec run (when removing long track),

@@ -316,7 +316,7 @@ CommandCost CheckAllowRemoveRoad(TileIndex tile, RoadBits remove, Owner owner, R
  * @param town_check should we check if the town allows removal?
  * @return The cost or an error message.
  */
-static CommandCost RemoveRoad(TileIndex tile, DoCommandFlags flags, RoadBits pieces, RoadTramType rtt, bool town_check)
+static CommandCost RemoveRoadPieces(TileIndex tile, DoCommandFlags flags, RoadBits pieces, RoadTramType rtt, bool town_check)
 {
 	assert(pieces != ROAD_NONE);
 
@@ -524,6 +524,29 @@ static CommandCost RemoveRoad(TileIndex tile, DoCommandFlags flags, RoadBits pie
 	}
 }
 
+/**
+ * Delete a piece of road, and the metro underpass on the tile with it: its
+ * stairs need the straight road.
+ * @param tile tile where to remove road from
+ * @param flags operation to perform
+ * @param pieces roadbits to remove
+ * @param rtt Road type to remove.
+ * @param town_check should we check if the town allows removal?
+ * @return The cost or an error message.
+ */
+static CommandCost RemoveRoad(TileIndex tile, DoCommandFlags flags, RoadBits pieces, RoadTramType rtt, bool town_check)
+{
+	const StationComplexNode *exit = rtt == RTT_ROAD && IsTileType(tile, TileType::Road) ? FindExplicitStationExitAt(tile) : nullptr;
+	if (exit == nullptr || exit->exit_type != StationExitType::Underpass) return RemoveRoadPieces(tile, flags, pieces, rtt, town_check);
+
+	CommandCost exit_cost = CmdRemoveExitSurface(DoCommandFlags{flags}.Reset(DoCommandFlag::Execute), tile);
+	if (exit_cost.Failed()) return exit_cost;
+	CommandCost cost = RemoveRoadPieces(tile, flags, pieces, rtt, town_check);
+	if (cost.Failed()) return cost;
+	if (flags.Test(DoCommandFlag::Execute)) CmdRemoveExitSurface(flags, tile);
+	cost.AddCost(exit_cost.GetCost());
+	return cost;
+}
 
 /**
  * Calculate the costs for roads on slopes
