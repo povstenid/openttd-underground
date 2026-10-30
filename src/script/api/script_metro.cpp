@@ -249,6 +249,14 @@ static bool AreStationOrderFlagsValid(ScriptOrder::ScriptOrderFlags order_flags)
 	return ScriptObject::Command<Commands::RemoveExitSurface>::Do(tile);
 }
 
+/* static */ bool ScriptMetro::JoinUndergroundStation(StationID from, StationID into)
+{
+	EnforceCompanyModeValid(false);
+	EnforcePrecondition(false, ScriptStation::IsValidStation(from) && ScriptStation::IsValidStation(into));
+
+	return ScriptObject::Command<Commands::JoinUndergroundStation>::Do(from, into);
+}
+
 /* static */ ScriptMetro::ExitType ScriptMetro::GetExitType(TileIndex tile)
 {
 	if (!::IsValidTile(tile)) return EXIT_INVALID;

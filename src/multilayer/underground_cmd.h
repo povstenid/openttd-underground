@@ -111,6 +111,7 @@ CommandCost CmdBuildPortal(DoCommandFlags flags, TileIndex tile, RailType railty
 CommandCost CmdBuildUndergroundStation(DoCommandFlags flags, TileIndex tile, RailType railtype, int16_t depth, uint16_t station_id, Axis axis, uint8_t numtracks, uint8_t plat_len);
 CommandCost CmdBuildExitSurface(DoCommandFlags flags, TileIndex tile, uint16_t station_id, StationExitType exit_type);
 CommandCost CmdRemoveExitSurface(DoCommandFlags flags, TileIndex tile);
+CommandCost CmdJoinUndergroundStation(DoCommandFlags flags, StationID from, StationID into);
 
 /** Distance (DistanceMax) from a tile to the nearest platform of an underground station, UINT_MAX without platforms. */
 uint GetUndergroundExitDistanceToStation(uint16_t station_id, TileIndex tile);
@@ -176,6 +177,7 @@ DEF_CMD_TRAIT(Commands::RemoveUndergroundArea, CmdRemoveUndergroundArea, Command
 DEF_CMD_TRAIT(Commands::RemoveRamp, CmdRemoveRamp, CommandFlag::Auto, CommandType::LandscapeConstruction)
 DEF_CMD_TRAIT(Commands::RemovePortal, CmdRemovePortal, CommandFlag::Auto, CommandType::LandscapeConstruction)
 DEF_CMD_TRAIT(Commands::RemoveExitSurface, CmdRemoveExitSurface, CommandFlag::Auto, CommandType::LandscapeConstruction)
+DEF_CMD_TRAIT(Commands::JoinUndergroundStation, CmdJoinUndergroundStation, {}, CommandType::LandscapeConstruction)
 DEF_CMD_TRAIT(Commands::ConvertUndergroundRail, CmdConvertUndergroundRail, CommandFlags({}), CommandType::LandscapeConstruction)
 
 #endif /* UNDERGROUND_CMD_H */

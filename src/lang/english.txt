@@ -5499,6 +5499,10 @@ STR_ERROR_UNDERGROUND_NOTHING_TO_REMOVE                         :nothing to remo
 STR_ERROR_UNDERGROUND_PORTAL_NEEDS_STRAIGHT_TRACK               :a tunnel mouth needs a straight track
 STR_ERROR_UNDERGROUND_PORTAL_TRACK_ONLY                         :only the metro portal's own track can be laid on its tile
 STR_ERROR_CAN_T_REMOVE_STATION_EXIT                             :Can't remove station exit here...
+STR_ERROR_CAN_T_JOIN_UNDERGROUND_STATION                        :Can't join the underground station to this station...
+STR_ERROR_UNDERGROUND_STATION_HAS_EXITS                         :the underground station already has exits
+STR_ERROR_UNDERGROUND_STATION_HAS_CARGO                         :cargo is waiting at the underground station
+STR_ERROR_UNDERGROUND_STATION_NOT_UNDERGROUND_ONLY              :the station is not only underground
 STR_ERROR_UNDERGROUND_EXIT_TOO_FAR_FROM_PLATFORM                :exit too far from the station's platforms
 STR_ERROR_UNDERGROUND_EXIT_NEEDS_STRAIGHT_ROAD                  :an underpass needs a straight road without junctions
 STR_ERROR_UNDERGROUND_EXIT_ALREADY_HERE                         :there is already a station exit here

@@ -303,6 +303,17 @@ public:
 	static bool RemoveExitSurface(TileIndex tile);
 
 	/**
+	 * Join a station that is only underground and has no exit yet to another own
+	 * station (e.g. the airport above it): its platforms become platforms of that
+	 * station and orders to it go to that station.
+	 * @param from The underground station.
+	 * @param into The station to join it to.
+	 * @pre ScriptStation::IsValidStation(from) && ScriptStation::IsValidStation(into).
+	 * @return Whether the station was joined.
+	 */
+	static bool JoinUndergroundStation(StationID from, StationID into);
+
+	/**
 	 * Get the type of the explicit surface exit on a tile.
 	 * @param tile Surface tile.
 	 * @return The exit type, or EXIT_INVALID when there is no pavilion or underpass.
