@@ -76,7 +76,8 @@ STYLES = {
     'e': dict(body='cc', body_lvl=4, roof='grey', roof_lvl=6, roof_dome=0.8,
               belt=('cream', 4, 3.3, 3.8), window_band=(4.0, 5.5), window='glass', window_frames=False,
               rivets=False, doors=4, door='cc', door_lvl=3, chamfer=0.6, slope=None,
-              front_window=(4.0, 5.5), front_split=True, skirt='steel', upper=('cream', 4)),
+              front_window=(4.0, 5.5), front_split=True, skirt='steel', upper=('cream', 4),
+              cab_mark=False),
     # 1976: boxy, a light stripe under the windows, big flat front windows.
     '717': dict(body='cc', body_lvl=4, roof='grey', roof_lvl=7, roof_dome=0.5,
                 belt=('grey', 13, 3.2, 3.8), window_band=(4.0, 5.6), window='glass', window_frames=False,
@@ -102,8 +103,9 @@ Z_WALL = 6.6         # top of the side wall
 Z_ROOF = 0.5         # extra height of the roof crown
 
 
-# The third of a car at its cab end is painted darker, so cab cars stand out
-# from middle cars at a glance, also in the middle of a train where no cab is drawn.
+# The third of a car at its cab end is painted darker, so the head and the tail
+# of a train stand out from the middle cars at a glance. Types whose cars are
+# all alike (cab_mark=False) are not marked.
 MARK_LEN = 2 * HALF_LEN / 3
 MARK_DARKEN = {'cc': 3.5, 'grey': 4.0, 'cream': 3.0, 'bluegrey': 3.0, 'brown': 3.0}
 
@@ -215,6 +217,8 @@ def car_material(st, face, u, v, w, front_cab, rear_cab, mark_front=False, mark_
 
     # ---- the darker cab third ----
     marked = np.zeros(n, dtype=bool)
+    if not st.get('cab_mark', True):
+        mark_front = mark_rear = False   # all cars of the type are alike
     if mark_front:
         marked |= u > HALF_LEN - MARK_LEN
     if mark_rear:
@@ -384,13 +388,11 @@ VEHICLES = [
 ]
 
 # name, cab at the front, cab at the rear, darker front third, darker rear third.
-# 'midcab' is a cab car in the middle of a train: no cab drawn, but still marked.
 VARIANTS = [
     ('front', True, False, True, False),
     ('rear', False, True, False, True),
     ('mid', False, False, False, False),
     ('both', True, True, True, True),
-    ('midcab', False, False, True, False),
 ]
 
 
@@ -489,10 +491,10 @@ railtypetable { MTRO }
         out.append(nml_spriteset(f'set_{st_name}_{var}', sprites))
         out.append('')
     for st_name in STYLES:
-        out.append(f'''// Cab at whichever end of the train the car is; in the middle no cab, but the darker cab third.
+        out.append(f'''// Cab and darker cab third at whichever end of the train the car is, plain in the middle.
 switch (FEAT_TRAINS, SELF, sw_{st_name}_end, position_in_consist_from_end) {{
     0: set_{st_name}_rear;
-    set_{st_name}_midcab;
+    set_{st_name}_mid;
 }}
 switch (FEAT_TRAINS, SELF, sw_{st_name}_single, position_in_consist_from_end) {{
     0: set_{st_name}_both;

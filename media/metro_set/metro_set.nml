@@ -204,7 +204,7 @@ spriteset(set_a_both, "gfx/metro_cars.png") {
     [281,  97, 18, 15,  -5,  -7]
 }
 
-spriteset(set_a_midcab, "gfx/metro_cars.png") {
+spriteset(set_e_front, "gfx/metro_cars.png") {
     [  1, 129,  8, 21,  -4, -12]
     [ 41, 129, 18, 15, -13,  -7]
     [ 81, 129, 30,  9, -15,  -6]
@@ -215,7 +215,7 @@ spriteset(set_a_midcab, "gfx/metro_cars.png") {
     [281, 129, 18, 15,  -5,  -7]
 }
 
-spriteset(set_e_front, "gfx/metro_cars.png") {
+spriteset(set_e_rear, "gfx/metro_cars.png") {
     [  1, 161,  8, 21,  -4, -12]
     [ 41, 161, 18, 15, -13,  -7]
     [ 81, 161, 30,  9, -15,  -6]
@@ -226,7 +226,7 @@ spriteset(set_e_front, "gfx/metro_cars.png") {
     [281, 161, 18, 15,  -5,  -7]
 }
 
-spriteset(set_e_rear, "gfx/metro_cars.png") {
+spriteset(set_e_mid, "gfx/metro_cars.png") {
     [  1, 193,  8, 21,  -4, -12]
     [ 41, 193, 18, 15, -13,  -7]
     [ 81, 193, 30,  9, -15,  -6]
@@ -237,7 +237,7 @@ spriteset(set_e_rear, "gfx/metro_cars.png") {
     [281, 193, 18, 15,  -5,  -7]
 }
 
-spriteset(set_e_mid, "gfx/metro_cars.png") {
+spriteset(set_e_both, "gfx/metro_cars.png") {
     [  1, 225,  8, 21,  -4, -12]
     [ 41, 225, 18, 15, -13,  -7]
     [ 81, 225, 30,  9, -15,  -6]
@@ -248,29 +248,29 @@ spriteset(set_e_mid, "gfx/metro_cars.png") {
     [281, 225, 18, 15,  -5,  -7]
 }
 
-spriteset(set_e_both, "gfx/metro_cars.png") {
-    [  1, 257,  8, 21,  -4, -12]
-    [ 41, 257, 18, 15, -13,  -7]
-    [ 81, 257, 30,  9, -15,  -6]
-    [121, 257, 18, 15,  -5,  -7]
-    [161, 257,  8, 21,  -4, -12]
-    [201, 257, 18, 15, -13,  -7]
-    [241, 257, 30,  9, -15,  -6]
-    [281, 257, 18, 15,  -5,  -7]
-}
-
-spriteset(set_e_midcab, "gfx/metro_cars.png") {
-    [  1, 289,  8, 21,  -4, -12]
-    [ 41, 289, 18, 15, -13,  -7]
-    [ 81, 289, 30,  9, -15,  -6]
-    [121, 289, 18, 15,  -5,  -7]
-    [161, 289,  8, 21,  -4, -12]
-    [201, 289, 18, 15, -13,  -7]
-    [241, 289, 30,  9, -15,  -6]
-    [281, 289, 18, 15,  -5,  -7]
-}
-
 spriteset(set_717_front, "gfx/metro_cars.png") {
+    [  1, 257,  8, 21,  -4, -12]
+    [ 41, 257, 20, 16, -14,  -8]
+    [ 81, 257, 30, 10, -15,  -7]
+    [121, 257, 20, 16,  -6,  -8]
+    [161, 257,  8, 21,  -4, -12]
+    [201, 257, 20, 16, -14,  -8]
+    [241, 257, 30, 10, -15,  -7]
+    [281, 257, 20, 16,  -6,  -8]
+}
+
+spriteset(set_717_rear, "gfx/metro_cars.png") {
+    [  1, 289,  8, 21,  -4, -12]
+    [ 41, 289, 20, 16, -14,  -8]
+    [ 81, 289, 30, 10, -15,  -7]
+    [121, 289, 20, 16,  -6,  -8]
+    [161, 289,  8, 21,  -4, -12]
+    [201, 289, 20, 16, -14,  -8]
+    [241, 289, 30, 10, -15,  -7]
+    [281, 289, 20, 16,  -6,  -8]
+}
+
+spriteset(set_717_mid, "gfx/metro_cars.png") {
     [  1, 321,  8, 21,  -4, -12]
     [ 41, 321, 20, 16, -14,  -8]
     [ 81, 321, 30, 10, -15,  -7]
@@ -281,7 +281,7 @@ spriteset(set_717_front, "gfx/metro_cars.png") {
     [281, 321, 20, 16,  -6,  -8]
 }
 
-spriteset(set_717_rear, "gfx/metro_cars.png") {
+spriteset(set_717_both, "gfx/metro_cars.png") {
     [  1, 353,  8, 21,  -4, -12]
     [ 41, 353, 20, 16, -14,  -8]
     [ 81, 353, 30, 10, -15,  -7]
@@ -292,153 +292,98 @@ spriteset(set_717_rear, "gfx/metro_cars.png") {
     [281, 353, 20, 16,  -6,  -8]
 }
 
-spriteset(set_717_mid, "gfx/metro_cars.png") {
-    [  1, 385,  8, 21,  -4, -12]
-    [ 41, 385, 20, 16, -14,  -8]
-    [ 81, 385, 30, 10, -15,  -7]
-    [121, 385, 20, 16,  -6,  -8]
-    [161, 385,  8, 21,  -4, -12]
-    [201, 385, 20, 16, -14,  -8]
-    [241, 385, 30, 10, -15,  -7]
-    [281, 385, 20, 16,  -6,  -8]
-}
-
-spriteset(set_717_both, "gfx/metro_cars.png") {
-    [  1, 417,  8, 21,  -4, -12]
-    [ 41, 417, 20, 16, -14,  -8]
-    [ 81, 417, 30, 10, -15,  -7]
-    [121, 417, 20, 16,  -6,  -8]
-    [161, 417,  8, 21,  -4, -12]
-    [201, 417, 20, 16, -14,  -8]
-    [241, 417, 30, 10, -15,  -7]
-    [281, 417, 20, 16,  -6,  -8]
-}
-
-spriteset(set_717_midcab, "gfx/metro_cars.png") {
-    [  1, 449,  8, 21,  -4, -12]
-    [ 41, 449, 20, 16, -14,  -8]
-    [ 81, 449, 30, 10, -15,  -7]
-    [121, 449, 20, 16,  -6,  -8]
-    [161, 449,  8, 21,  -4, -12]
-    [201, 449, 20, 16, -14,  -8]
-    [241, 449, 30, 10, -15,  -7]
-    [281, 449, 20, 16,  -6,  -8]
-}
-
 spriteset(set_720_front, "gfx/metro_cars.png") {
+    [  1, 385,  8, 20,  -4, -11]
+    [ 41, 385, 18, 15, -13,  -7]
+    [ 81, 385, 30, 10, -15,  -7]
+    [121, 385, 18, 15,  -5,  -7]
+    [161, 385,  8, 21,  -4, -12]
+    [201, 385, 18, 15, -13,  -7]
+    [241, 385, 30, 10, -15,  -7]
+    [281, 385, 18, 15,  -5,  -7]
+}
+
+spriteset(set_720_rear, "gfx/metro_cars.png") {
+    [  1, 417,  8, 21,  -4, -12]
+    [ 41, 417, 18, 15, -13,  -7]
+    [ 81, 417, 30, 10, -15,  -7]
+    [121, 417, 18, 15,  -5,  -7]
+    [161, 417,  8, 20,  -4, -11]
+    [201, 417, 18, 15, -13,  -7]
+    [241, 417, 30, 10, -15,  -7]
+    [281, 417, 18, 15,  -5,  -7]
+}
+
+spriteset(set_720_mid, "gfx/metro_cars.png") {
+    [  1, 449,  8, 21,  -4, -12]
+    [ 41, 449, 18, 15, -13,  -7]
+    [ 81, 449, 30, 10, -15,  -7]
+    [121, 449, 18, 15,  -5,  -7]
+    [161, 449,  8, 21,  -4, -12]
+    [201, 449, 18, 15, -13,  -7]
+    [241, 449, 30, 10, -15,  -7]
+    [281, 449, 18, 15,  -5,  -7]
+}
+
+spriteset(set_720_both, "gfx/metro_cars.png") {
     [  1, 481,  8, 20,  -4, -11]
     [ 41, 481, 18, 15, -13,  -7]
     [ 81, 481, 30, 10, -15,  -7]
     [121, 481, 18, 15,  -5,  -7]
-    [161, 481,  8, 21,  -4, -12]
+    [161, 481,  8, 20,  -4, -11]
     [201, 481, 18, 15, -13,  -7]
     [241, 481, 30, 10, -15,  -7]
     [281, 481, 18, 15,  -5,  -7]
 }
 
-spriteset(set_720_rear, "gfx/metro_cars.png") {
-    [  1, 513,  8, 21,  -4, -12]
-    [ 41, 513, 18, 15, -13,  -7]
+spriteset(set_765_front, "gfx/metro_cars.png") {
+    [  1, 513,  8, 19,  -4, -10]
+    [ 41, 513, 18, 14, -13,  -6]
     [ 81, 513, 30, 10, -15,  -7]
     [121, 513, 18, 15,  -5,  -7]
-    [161, 513,  8, 20,  -4, -11]
+    [161, 513,  8, 21,  -4, -12]
     [201, 513, 18, 15, -13,  -7]
     [241, 513, 30, 10, -15,  -7]
-    [281, 513, 18, 15,  -5,  -7]
+    [281, 513, 18, 14,  -5,  -6]
 }
 
-spriteset(set_720_mid, "gfx/metro_cars.png") {
+spriteset(set_765_rear, "gfx/metro_cars.png") {
     [  1, 545,  8, 21,  -4, -12]
     [ 41, 545, 18, 15, -13,  -7]
     [ 81, 545, 30, 10, -15,  -7]
-    [121, 545, 18, 15,  -5,  -7]
-    [161, 545,  8, 21,  -4, -12]
-    [201, 545, 18, 15, -13,  -7]
+    [121, 545, 18, 14,  -5,  -6]
+    [161, 545,  8, 19,  -4, -10]
+    [201, 545, 18, 14, -13,  -6]
     [241, 545, 30, 10, -15,  -7]
     [281, 545, 18, 15,  -5,  -7]
 }
 
-spriteset(set_720_both, "gfx/metro_cars.png") {
-    [  1, 577,  8, 20,  -4, -11]
+spriteset(set_765_mid, "gfx/metro_cars.png") {
+    [  1, 577,  8, 21,  -4, -12]
     [ 41, 577, 18, 15, -13,  -7]
     [ 81, 577, 30, 10, -15,  -7]
     [121, 577, 18, 15,  -5,  -7]
-    [161, 577,  8, 20,  -4, -11]
+    [161, 577,  8, 21,  -4, -12]
     [201, 577, 18, 15, -13,  -7]
     [241, 577, 30, 10, -15,  -7]
     [281, 577, 18, 15,  -5,  -7]
 }
 
-spriteset(set_720_midcab, "gfx/metro_cars.png") {
-    [  1, 609,  8, 21,  -4, -12]
-    [ 41, 609, 18, 15, -13,  -7]
-    [ 81, 609, 30, 10, -15,  -7]
-    [121, 609, 18, 15,  -5,  -7]
-    [161, 609,  8, 21,  -4, -12]
-    [201, 609, 18, 15, -13,  -7]
-    [241, 609, 30, 10, -15,  -7]
-    [281, 609, 18, 15,  -5,  -7]
-}
-
-spriteset(set_765_front, "gfx/metro_cars.png") {
-    [  1, 641,  8, 19,  -4, -10]
-    [ 41, 641, 18, 14, -13,  -6]
-    [ 81, 641, 30, 10, -15,  -7]
-    [121, 641, 18, 15,  -5,  -7]
-    [161, 641,  8, 21,  -4, -12]
-    [201, 641, 18, 15, -13,  -7]
-    [241, 641, 30, 10, -15,  -7]
-    [281, 641, 18, 14,  -5,  -6]
-}
-
-spriteset(set_765_rear, "gfx/metro_cars.png") {
-    [  1, 673,  8, 21,  -4, -12]
-    [ 41, 673, 18, 15, -13,  -7]
-    [ 81, 673, 30, 10, -15,  -7]
-    [121, 673, 18, 14,  -5,  -6]
-    [161, 673,  8, 19,  -4, -10]
-    [201, 673, 18, 14, -13,  -6]
-    [241, 673, 30, 10, -15,  -7]
-    [281, 673, 18, 15,  -5,  -7]
-}
-
-spriteset(set_765_mid, "gfx/metro_cars.png") {
-    [  1, 705,  8, 21,  -4, -12]
-    [ 41, 705, 18, 15, -13,  -7]
-    [ 81, 705, 30, 10, -15,  -7]
-    [121, 705, 18, 15,  -5,  -7]
-    [161, 705,  8, 21,  -4, -12]
-    [201, 705, 18, 15, -13,  -7]
-    [241, 705, 30, 10, -15,  -7]
-    [281, 705, 18, 15,  -5,  -7]
-}
-
 spriteset(set_765_both, "gfx/metro_cars.png") {
-    [  1, 737,  8, 19,  -4, -10]
-    [ 41, 737, 18, 14, -13,  -6]
-    [ 81, 737, 30, 10, -15,  -7]
-    [121, 737, 18, 14,  -5,  -6]
-    [161, 737,  8, 19,  -4, -10]
-    [201, 737, 18, 14, -13,  -6]
-    [241, 737, 30, 10, -15,  -7]
-    [281, 737, 18, 14,  -5,  -6]
+    [  1, 609,  8, 19,  -4, -10]
+    [ 41, 609, 18, 14, -13,  -6]
+    [ 81, 609, 30, 10, -15,  -7]
+    [121, 609, 18, 14,  -5,  -6]
+    [161, 609,  8, 19,  -4, -10]
+    [201, 609, 18, 14, -13,  -6]
+    [241, 609, 30, 10, -15,  -7]
+    [281, 609, 18, 14,  -5,  -6]
 }
 
-spriteset(set_765_midcab, "gfx/metro_cars.png") {
-    [  1, 769,  8, 21,  -4, -12]
-    [ 41, 769, 18, 15, -13,  -7]
-    [ 81, 769, 30, 10, -15,  -7]
-    [121, 769, 18, 15,  -5,  -7]
-    [161, 769,  8, 21,  -4, -12]
-    [201, 769, 18, 15, -13,  -7]
-    [241, 769, 30, 10, -15,  -7]
-    [281, 769, 18, 15,  -5,  -7]
-}
-
-// Cab at whichever end of the train the car is; in the middle no cab, but the darker cab third.
+// Cab and darker cab third at whichever end of the train the car is, plain in the middle.
 switch (FEAT_TRAINS, SELF, sw_a_end, position_in_consist_from_end) {
     0: set_a_rear;
-    set_a_midcab;
+    set_a_mid;
 }
 switch (FEAT_TRAINS, SELF, sw_a_single, position_in_consist_from_end) {
     0: set_a_both;
@@ -449,10 +394,10 @@ switch (FEAT_TRAINS, SELF, sw_a_gfx, position_in_consist) {
     sw_a_end;
 }
 
-// Cab at whichever end of the train the car is; in the middle no cab, but the darker cab third.
+// Cab and darker cab third at whichever end of the train the car is, plain in the middle.
 switch (FEAT_TRAINS, SELF, sw_e_end, position_in_consist_from_end) {
     0: set_e_rear;
-    set_e_midcab;
+    set_e_mid;
 }
 switch (FEAT_TRAINS, SELF, sw_e_single, position_in_consist_from_end) {
     0: set_e_both;
@@ -463,10 +408,10 @@ switch (FEAT_TRAINS, SELF, sw_e_gfx, position_in_consist) {
     sw_e_end;
 }
 
-// Cab at whichever end of the train the car is; in the middle no cab, but the darker cab third.
+// Cab and darker cab third at whichever end of the train the car is, plain in the middle.
 switch (FEAT_TRAINS, SELF, sw_717_end, position_in_consist_from_end) {
     0: set_717_rear;
-    set_717_midcab;
+    set_717_mid;
 }
 switch (FEAT_TRAINS, SELF, sw_717_single, position_in_consist_from_end) {
     0: set_717_both;
@@ -477,10 +422,10 @@ switch (FEAT_TRAINS, SELF, sw_717_gfx, position_in_consist) {
     sw_717_end;
 }
 
-// Cab at whichever end of the train the car is; in the middle no cab, but the darker cab third.
+// Cab and darker cab third at whichever end of the train the car is, plain in the middle.
 switch (FEAT_TRAINS, SELF, sw_720_end, position_in_consist_from_end) {
     0: set_720_rear;
-    set_720_midcab;
+    set_720_mid;
 }
 switch (FEAT_TRAINS, SELF, sw_720_single, position_in_consist_from_end) {
     0: set_720_both;
@@ -491,10 +436,10 @@ switch (FEAT_TRAINS, SELF, sw_720_gfx, position_in_consist) {
     sw_720_end;
 }
 
-// Cab at whichever end of the train the car is; in the middle no cab, but the darker cab third.
+// Cab and darker cab third at whichever end of the train the car is, plain in the middle.
 switch (FEAT_TRAINS, SELF, sw_765_end, position_in_consist_from_end) {
     0: set_765_rear;
-    set_765_midcab;
+    set_765_mid;
 }
 switch (FEAT_TRAINS, SELF, sw_765_single, position_in_consist_from_end) {
     0: set_765_both;
