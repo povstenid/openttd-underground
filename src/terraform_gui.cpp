@@ -40,6 +40,8 @@
 #include "object_cmd.h"
 
 #include "widgets/terraform_widget.h"
+#include "multilayer/underground_cmd.h"
+#include "multilayer/underground_view.h"
 
 #include "table/strings.h"
 
@@ -128,7 +130,12 @@ bool GUIPlaceProcDragXY(ViewportDragDropSelectionProcess proc, TileIndex start_t
 
 	switch (proc) {
 		case DDSP_DEMOLISH_AREA:
-			Command<Commands::ClearArea>::Post(STR_ERROR_CAN_T_CLEAR_THIS_AREA, CcPlaySound_EXPLOSION, end_tile, start_tile, _ctrl_pressed);
+			/* In the slice view every dynamite demolishes on the viewed level; Ctrl demolishes the surface. */
+			if (IsUndergroundSliceMode() && !_ctrl_pressed) {
+				Command<Commands::RemoveUndergroundArea>::Post(STR_ERROR_CAN_T_CLEAR_THIS_AREA, start_tile, end_tile, GetUndergroundViewDepth());
+				break;
+			}
+			Command<Commands::ClearArea>::Post(STR_ERROR_CAN_T_CLEAR_THIS_AREA, CcPlaySound_EXPLOSION, end_tile, start_tile, IsUndergroundSliceMode() ? false : _ctrl_pressed);
 			break;
 		case DDSP_RAISE_AND_LEVEL_AREA:
 			Command<Commands::LevelLand>::Post(STR_ERROR_CAN_T_RAISE_LAND_HERE, CcTerraform, end_tile, start_tile, _ctrl_pressed, LM_RAISE);

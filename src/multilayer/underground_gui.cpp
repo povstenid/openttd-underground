@@ -191,7 +191,8 @@ static void MarkPortalGhostDirty(const UndergroundPortalGhost &ghost)
  */
 void UpdateUndergroundRailToolGhost(WidgetID tool, RailType railtype)
 {
-	bool placing = _thd.window_class == WC_BUILD_TOOLBAR && (_thd.place_mode & HT_DRAG_MASK) != HT_NONE;
+	/* Nothing is built while the remove button is down (the selection is red then). */
+	bool placing = _thd.window_class == WC_BUILD_TOOLBAR && (_thd.place_mode & HT_DRAG_MASK) != HT_NONE && !_thd.make_square_red;
 
 	UndergroundRampGhost ghost;
 	if ((tool == WID_RAT_BUILD_RAMP_DOWN || tool == WID_RAT_BUILD_RAMP_UP) && IsUndergroundSliceMode() && placing) {
@@ -728,19 +729,34 @@ static void PlaceUndergroundSignals(TileIndex start_tile, TileIndex end_tile, Tr
  * @param tool The tool's button.
  * @param tile The tile clicked.
  * @param railtype The track type built.
+ * @param remove The remove button is down: the tool removes what it builds.
  * @return False if the tool works like on the surface.
  */
-bool UndergroundRailToolPlaceObject(WidgetID tool, TileIndex tile, RailType railtype)
+bool UndergroundRailToolPlaceObject(WidgetID tool, TileIndex tile, RailType railtype, bool remove)
 {
 	switch (tool) {
 		case WID_RAT_BUILD_EXIT_PAVILION:
 		case WID_RAT_BUILD_EXIT_UNDERPASS:
+			if (remove) {
+				Command<Commands::RemoveExitSurface>::Post(STR_ERROR_CAN_T_REMOVE_STATION_EXIT, tile);
+				return true;
+			}
 			PlaceUndergroundStationExit(tile, tool == WID_RAT_BUILD_EXIT_PAVILION ? StationExitType::Pavilion : StationExitType::Underpass);
 			return true;
 
 		case WID_RAT_BUILD_PORTAL:
+			if (remove) {
+				Command<Commands::RemovePortal>::Post(STR_ERROR_CAN_T_CLEAR_THIS_AREA, tile);
+				return true;
+			}
+			[[fallthrough]];
+
 		case WID_RAT_BUILD_RAMP_DOWN:
 		case WID_RAT_BUILD_RAMP_UP:
+			if (remove) {
+				if (IsUndergroundSliceMode()) Command<Commands::RemoveRamp>::Post(STR_ERROR_CAN_T_CLEAR_THIS_AREA, tile, GetUndergroundViewDepth());
+				return true;
+			}
 			/* Towards the tile edge nearest to the click, as the ghost showed it;
 			 * a drag along a line leads it towards the drag instead. */
 			_ramp_click_dir = GetNearestTileEdge(_tile_fract_coords);
@@ -756,6 +772,10 @@ bool UndergroundRailToolPlaceObject(WidgetID tool, TileIndex tile, RailType rail
 
 	switch (tool) {
 		case WID_RAT_BUILD_STATION:
+			if (remove) {
+				VpStartPlaceSizing(tile, VPM_X_AND_Y, DDSP_REMOVE_STATION);
+				return true;
+			}
 			ClampUndergroundStationSettings();
 			if (_settings_client.gui.station_dragdrop) {
 				VpStartPlaceSizing(tile, _underground_station_axis == AXIS_X ? VPM_X_LIMITED : VPM_Y_LIMITED, DDSP_BUILD_STATION);
@@ -850,6 +870,15 @@ bool UndergroundRailToolPlaceMouseUp(WidgetID tool, ViewportPlaceMethod select_m
 		case DDSP_BUILD_STATION:
 			/* A full platform rectangle in the chosen station orientation. */
 			PostBuildUndergroundStationArea(TileArea(start_tile, end_tile), railtype, depth, _underground_station_axis);
+			return true;
+
+		case DDSP_REMOVE_STATION:
+			/* The platforms in the area; their track goes with them. */
+			for (TileIndex t : TileArea(start_tile, end_tile)) {
+				SliceID sid = _multilayer_map.FindSliceAt(t, depth);
+				if (sid == INVALID_SLICE_ID || _multilayer_map.GetSlice(sid).kind != SliceKind::StationTile) continue;
+				Command<Commands::RemoveUndergroundStation>::Post(STR_ERROR_CAN_T_REMOVE_PART_OF_STATION, t, depth);
+			}
 			return true;
 
 		default:

@@ -37,7 +37,7 @@ void ToggleUndergroundViewButton(UndergroundViewMode mode);
 void ShowUndergroundStationBuilder(Window *parent, RailType railtype);
 void SetUndergroundStationBuilderRailType(RailType railtype);
 void CloseUndergroundStationBuilder();
-bool UndergroundRailToolPlaceObject(WidgetID tool, TileIndex tile, RailType railtype);
+bool UndergroundRailToolPlaceObject(WidgetID tool, TileIndex tile, RailType railtype, bool remove);
 bool UndergroundRailToolPlaceMouseUp(WidgetID tool, ViewportPlaceMethod select_method, ViewportDragDropSelectionProcess select_proc,
 	TileIndex start_tile, TileIndex end_tile, RailType railtype, bool remove);
 void UpdateUndergroundRailToolGhost(WidgetID tool, RailType railtype);

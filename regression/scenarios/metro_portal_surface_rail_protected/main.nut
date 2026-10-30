@@ -3,10 +3,10 @@
  *
  *   [portal A]--UG(-1) x3--[portal B]   [ramp -1/-2]   [plain rail]
  *
- * Removing a portal's surface rail track by track must be refused while the
- * portal exists. The dynamite (tile demolition) and GSMetro.RemovePortal
- * remove the portal slice and its surface rail together. GSMetro.RemoveRamp
- * removes a ramp. Plain rail elsewhere is still demolished normally.
+ * Every remover takes a portal away together with its surface rail: the rail
+ * remover (single track or dragged), the dynamite (tile demolition) and
+ * GSMetro.RemovePortal. GSMetro.RemoveRamp removes a ramp. Plain rail
+ * elsewhere is still demolished normally.
  */
 class MetroPortalSurfaceRailProtected extends GSController {
 	function Start()
@@ -41,15 +41,18 @@ class MetroPortalSurfaceRailProtected extends GSController {
 				report.check_true("portal_link", GSMetro.HasPortalConnection(portal_a, portal_b, depth), "Portals should be connected underground.");
 				report.check_true("portal_a_surface_rail", GSRail.IsRailTile(portal_a), "Portal A should have surface rail.");
 
-				/* Single track removal of the portal rail is refused. */
-				local removed_track = GSRail.RemoveRailTrack(portal_a, GSRail.RAILTRACK_NE_SW);
-				report.check_true("remove_rail_track_refused", !removed_track, "GSRail.RemoveRailTrack on a portal tile must fail.");
-				report.check_true("rail_after_remove_track", GSRail.IsRailTile(portal_a) && GSRail.GetRailTracks(portal_a) == GSRail.RAILTRACK_NE_SW, "Portal surface rail must survive track removal.");
+				/* Single track removal of the portal rail removes the portal. */
+				report.check_true("remove_rail_track_ok", GSRail.RemoveRailTrack(portal_a, GSRail.RAILTRACK_NE_SW), "GSRail.RemoveRailTrack on a portal tile should remove the portal (err=" + GSError.GetLastErrorString() + ").");
+				report.check_true("track_removed_portal_gone", !GSMetro.IsPortalTile(portal_a) && !GSRail.IsRailTile(portal_a), "Portal and its rail should be gone after track removal.");
+				report.check_true("track_removed_link_gone", !GSMetro.HasPortalConnection(portal_a, portal_b, depth), "Portal connection should be gone after track removal.");
 
-				/* Dragged removal across the portal tile is refused for that tile. */
-				local removed_drag = GSRail.RemoveRail(build.make_tile(x - 1, y), portal_a, build.make_tile(x + 1, y));
-				report.check_true("remove_rail_drag_refused", !removed_drag, "GSRail.RemoveRail on a portal tile must fail.");
-				report.check_true("rail_after_remove_drag", GSRail.IsRailTile(portal_a), "Portal surface rail must survive dragged removal.");
+				/* Dragged removal across the portal tile removes it too. */
+				report.check_true("portal_a_rebuilt_for_drag", metro.build_portal(portal_a, GSMetro.DIAGDIR_SW, depth), "Portal A should be built again.");
+				report.check_true("remove_rail_drag_ok", GSRail.RemoveRail(build.make_tile(x - 1, y), portal_a, build.make_tile(x + 1, y)), "GSRail.RemoveRail across a portal tile should remove the portal (err=" + GSError.GetLastErrorString() + ").");
+				report.check_true("drag_removed_portal_gone", !GSMetro.IsPortalTile(portal_a) && !GSRail.IsRailTile(portal_a), "Portal and its rail should be gone after dragged removal.");
+
+				report.check_true("portal_a_rebuilt_for_dynamite", metro.build_portal(portal_a, GSMetro.DIAGDIR_SW, depth), "Portal A should be built again.");
+				report.check_true("portal_link_again", GSMetro.HasPortalConnection(portal_a, portal_b, depth), "Portals should be connected again.");
 
 				/* The dynamite demolishes the portal together with its surface rail. */
 				local demolished = GSTile.DemolishTile(portal_a);
@@ -80,6 +83,11 @@ class MetroPortalSurfaceRailProtected extends GSController {
 				report.check_eq("ramp_gone_upper", GSMetro.TK_NONE, GSMetro.GetUndergroundTileKind(ramp_tile, -1), "Ramp should be gone at depth -1.");
 				report.check_eq("ramp_gone_lower", GSMetro.TK_NONE, GSMetro.GetUndergroundTileKind(ramp_tile, -2), "Ramp should be gone at depth -2.");
 				report.check_true("remove_ramp_twice_fails", !GSMetro.RemoveRamp(ramp_tile, -1), "Removing a missing ramp must fail.");
+
+				/* The underground track remover takes the ramp its track runs over. */
+				report.check_true("ramp_rebuilt", GSMetro.BuildRamp(ramp_tile, GSMetro.DIAGDIR_SW, -1, -2), "Ramp should be built again.");
+				report.check_true("ramp_removed_by_track_tool", GSMetro.RemoveUndergroundRail(ramp_tile, GSRail.RAILTRACK_NE_SW, -1), "Removing the ramp's track should remove the ramp (err=" + GSError.GetLastErrorString() + ").");
+				report.check_eq("ramp_gone_by_track_tool", GSMetro.TK_NONE, GSMetro.GetUndergroundTileKind(ramp_tile, -1), "Ramp should be gone after removing its track.");
 
 				/* Vanilla demolition of ordinary rail is unaffected. */
 				report.check_true("plain_rail_built", GSRail.BuildRailTrack(plain_tile, GSRail.RAILTRACK_NE_SW), "Plain rail should be built.");

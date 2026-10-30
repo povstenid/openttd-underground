@@ -909,7 +909,20 @@ CommandCost CmdRemoveUndergroundRail(DoCommandFlags flags, TileIndex tile, Track
 	if (sid == INVALID_SLICE_ID) return CommandCost(STR_ERROR_THERE_IS_NO_RAILROAD_TRACK);
 
 	TileSlice &slice = _multilayer_map.GetSlice(sid);
-	if (slice.kind != SliceKind::Track) return CommandCost(STR_ERROR_THERE_IS_NO_RAILROAD_TRACK);
+	/* The track tool removes what carries the track too: a platform, a ramp, a portal. */
+	switch (slice.kind) {
+		case SliceKind::Track: break;
+		case SliceKind::StationTile:
+			if ((slice.station.tracks & trackbit) == 0) return CommandCost(STR_ERROR_THERE_IS_NO_RAILROAD_TRACK);
+			return CmdRemoveUndergroundStation(flags, tile, depth);
+		case SliceKind::Ramp:
+			if (GetRampTrack(slice.ramp) != track) return CommandCost(STR_ERROR_THERE_IS_NO_RAILROAD_TRACK);
+			return CmdRemoveRamp(flags, tile, depth);
+		case SliceKind::Portal:
+			if ((AxisToTrackBits(DiagDirToAxis(static_cast<DiagDirection>(slice.portal.direction))) & trackbit) == 0) return CommandCost(STR_ERROR_THERE_IS_NO_RAILROAD_TRACK);
+			return CmdRemovePortal(flags, tile);
+		default: return CommandCost(STR_ERROR_THERE_IS_NO_RAILROAD_TRACK);
+	}
 
 	/* Check if this track bit exists. */
 	if (!(slice.track.tracks & trackbit)) return CommandCost(STR_ERROR_THERE_IS_NO_RAILROAD_TRACK);

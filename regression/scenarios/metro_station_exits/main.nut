@@ -94,11 +94,6 @@ class MetroStationExits extends GSController {
 				report.check_true("pavilion_covers_distance_3", this.covered(station_a, probe_a), "Pavilion should cover a tile 3 tiles away.");
 				report.check_true("pavilion_not_distance_4", !this.covered(station_a, probe_a_out), "Pavilion should not cover a tile 4 tiles away.");
 
-				/* The pavilion tile can only be removed together with its exit. */
-				this.expect_error("pavilion_demolish", GSTile.DemolishTile(pavilion), GSMetro.ERR_UNDERGROUND_MUST_REMOVE_EXIT_FIRST);
-				this.expect_error("pavilion_remove_road_station", GSRoad.RemoveRoadStation(pavilion), GSMetro.ERR_UNDERGROUND_MUST_REMOVE_EXIT_FIRST);
-				report.check_true("pavilion_survives", GSTile.IsStationTile(pavilion) && GSMetro.GetExitType(pavilion) == GSMetro.EXIT_PAVILION, "Pavilion should survive demolition attempts.");
-
 				/* Too far: 3 tiles with the default limit of 2; and a second exit on the same tile. */
 				this.expect_error("pavilion_too_far", GSMetro.BuildExitSurface(pavilion_far, station_a, GSMetro.EXIT_PAVILION), GSMetro.ERR_UNDERGROUND_EXIT_TOO_FAR);
 				report.check_true("pavilion_far_untouched", !GSTile.IsStationTile(pavilion_far), "Refused pavilion should not build anything.");
@@ -131,6 +126,19 @@ class MetroStationExits extends GSController {
 				report.check_true("underpass_removed", GSMetro.RemoveExitSurface(underpass), "Underpass should be removed (err=" + GSError.GetLastErrorString() + ").");
 				report.check_true("underpass_road_after_remove", GSRoad.IsRoadTile(underpass), "Road should remain after removing the underpass.");
 				report.check_eq("underpass_exit_gone", GSMetro.EXIT_INVALID, GSMetro.GetExitType(underpass), "No exit should be left on the road tile.");
+
+				/* The ordinary removers take the exits away too: the dynamite and the road
+				 * stop remover a pavilion, removing the road of an underpass the underpass. */
+				report.check_true("pavilion_rebuilt", GSMetro.BuildExitSurface(pavilion, station_a, GSMetro.EXIT_PAVILION), "Pavilion should be built again (err=" + GSError.GetLastErrorString() + ").");
+				report.check_true("pavilion_demolished", GSTile.DemolishTile(pavilion), "The dynamite should remove a pavilion (err=" + GSError.GetLastErrorString() + ").");
+				report.check_true("pavilion_demolished_gone", !GSTile.IsStationTile(pavilion) && GSMetro.GetExitType(pavilion) == GSMetro.EXIT_INVALID, "The pavilion and its exit should be gone after the dynamite.");
+				report.check_true("pavilion_rebuilt_2", GSMetro.BuildExitSurface(pavilion, station_a, GSMetro.EXIT_PAVILION), "Pavilion should be built again (err=" + GSError.GetLastErrorString() + ").");
+				report.check_true("pavilion_road_stop_removed", GSRoad.RemoveRoadStation(pavilion), "The road stop remover should remove a pavilion (err=" + GSError.GetLastErrorString() + ").");
+				report.check_true("pavilion_road_stop_gone", !GSTile.IsStationTile(pavilion) && GSMetro.GetExitType(pavilion) == GSMetro.EXIT_INVALID, "The pavilion and its exit should be gone after the road stop remover.");
+				report.check_true("underpass_rebuilt", GSMetro.BuildExitSurface(underpass, station_b, GSMetro.EXIT_UNDERPASS), "Underpass should be built again (err=" + GSError.GetLastErrorString() + ").");
+				report.check_true("underpass_road_removed", GSRoad.RemoveRoad(underpass, build.make_tile(bx + 1, road_y)), "Road at the underpass should be removable (err=" + GSError.GetLastErrorString() + ").");
+				report.check_eq("underpass_gone_with_road", GSMetro.EXIT_INVALID, GSMetro.GetExitType(underpass), "The underpass should go with its road.");
+				report.check_eq("exits_left_b", 0, GSMetro.GetStationComplexExitCount(station_b), "Station B should have no exit left.");
 
 				/* A larger limit allows exits further away. */
 				report.check_true("setting_changed", GSGameSettings.SetValue("construction.max_station_exit_distance", 4), "Exit distance setting should be changeable.");
