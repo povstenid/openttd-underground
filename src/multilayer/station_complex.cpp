@@ -14,6 +14,7 @@
 #include "../station_map.h"
 #include "../settings_type.h"
 #include "../tile_map.h"
+#include "../viewport_func.h"
 
 #include "../safeguards.h"
 
@@ -111,6 +112,15 @@ uint16_t ForgetExplicitStationExitAt(TileIndex tile)
 	}
 	InvalidateStationExitCache();
 	return station_id;
+}
+
+void MarkStationExitTilesDirty(uint16_t station_id)
+{
+	auto it = _station_complexes.find(station_id);
+	if (it == _station_complexes.end()) return;
+	for (const StationComplexNode &n : it->second.nodes) {
+		if (n.IsExplicitExit()) MarkTileDirtyByTile(n.ref.tile);
+	}
 }
 
 uint GetStationExitCatchmentRadius(StationExitType type)

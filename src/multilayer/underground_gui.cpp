@@ -45,6 +45,7 @@
 #include "../landscape_cmd.h"
 #include "../terraform_cmd.h"
 #include "../core/backup_type.hpp"
+#include <unordered_set>
 
 #include "../table/sprites.h"
 #include "../table/strings.h"
@@ -182,6 +183,65 @@ static void MarkPortalGhostDirty(const UndergroundPortalGhost &ghost)
 	if (IsValidTile(behind)) MarkTileDirtyByTile(behind);
 }
 
+/** Whether the station exit tools show the platforms and the exit area of the own underground stations. */
+static bool _exit_area_shown = false;
+/** What the shown area was built from: changes when stations get or lose platforms. */
+static size_t _exit_area_key = 0;
+/** Surface tiles above platforms of the own underground stations. */
+static std::unordered_set<uint32_t> _exit_area_platforms;
+/** Surface tiles an exit may be built on. */
+static std::unordered_set<uint32_t> _exit_area_tiles;
+
+/**
+ * Show or hide where the own underground stations lie and where their exits
+ * may go, while a station exit tool is in use; keep it up to date with the stations.
+ * @param show A station exit tool is in use.
+ */
+static void UpdateStationExitArea(bool show)
+{
+	size_t key = 0;
+	if (show) {
+		for (const auto &[station_id, sc] : _station_complexes) {
+			const Station *st = Station::GetIfValid(StationID(station_id));
+			if (st == nullptr || st->owner != _local_company) continue;
+			key = key * 31 + station_id * 7 + sc.nodes.size();
+		}
+		key = key * 31 + _settings_game.construction.max_station_exit_distance + 1;
+	}
+	if (show == _exit_area_shown && key == _exit_area_key) return;
+
+	_exit_area_shown = show;
+	_exit_area_key = key;
+	_exit_area_platforms.clear();
+	_exit_area_tiles.clear();
+	if (show) {
+		const int limit = _settings_game.construction.max_station_exit_distance;
+		for (const auto &[station_id, sc] : _station_complexes) {
+			const Station *st = Station::GetIfValid(StationID(station_id));
+			if (st == nullptr || st->owner != _local_company) continue;
+			for (const StationComplexNode *n : sc.GetPlatforms()) {
+				if (!IsValidTile(n->ref.tile)) continue;
+				_exit_area_platforms.insert(n->ref.tile.base());
+				for (int dx = -limit; dx <= limit; dx++) {
+					for (int dy = -limit; dy <= limit; dy++) {
+						TileIndex t = TileAddWrap(n->ref.tile, dx, dy);
+						if (t != INVALID_TILE) _exit_area_tiles.insert(t.base());
+					}
+				}
+			}
+		}
+	}
+	MarkWholeScreenDirty();
+}
+
+StationExitAreaHighlight GetStationExitAreaHighlight(TileIndex tile)
+{
+	if (!_exit_area_shown) return StationExitAreaHighlight::None;
+	if (_exit_area_platforms.contains(tile.base())) return StationExitAreaHighlight::Platform;
+	if (_exit_area_tiles.contains(tile.base())) return StationExitAreaHighlight::Area;
+	return StationExitAreaHighlight::None;
+}
+
 /**
  * Show the ramp a ramp tool, or the portal the portal tool, would build under
  * the cursor, or while it is dragged; hide it with any other tool.
@@ -191,6 +251,8 @@ static void MarkPortalGhostDirty(const UndergroundPortalGhost &ghost)
  */
 void UpdateUndergroundRailToolGhost(WidgetID tool, RailType railtype)
 {
+	UpdateStationExitArea(tool == WID_RAT_BUILD_EXIT_PAVILION || tool == WID_RAT_BUILD_EXIT_UNDERPASS);
+
 	/* Nothing is built while the remove button is down (the selection is red then). */
 	bool placing = _thd.window_class == WC_BUILD_TOOLBAR && (_thd.place_mode & HT_DRAG_MASK) != HT_NONE && !_thd.make_square_red;
 

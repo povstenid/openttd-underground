@@ -14,6 +14,7 @@
 #include "multilayer_map.h"
 #include "../viewport_func.h"
 #include "../rail.h"
+#include "../rail_map.h"
 #include "../newgrf_railtype.h"
 #include "../signal_func.h"
 #include "../signal_type.h"
@@ -56,7 +57,10 @@ static_assert(SPR_METRO_TUNNEL_CABLES_DIAG_RIGHT + 1 == SPR_METRO_TUNNEL_ART_BAS
 static_assert(SPR_METRO_PARKING_BASE == SPR_METRO_TUNNEL_ART_BASE + METRO_TUNNEL_ART_SPRITE_COUNT);
 static_assert(SPR_METRO_INDUSTRY_BASEMENT_BASE == SPR_METRO_PARKING_BASE + METRO_PARKING_SPRITE_COUNT);
 static_assert(SPR_METRO_INDUSTRY_BASEMENT_BASE + METRO_INDUSTRY_BASEMENT_SPRITE_COUNT == SPR_METRO_ICON_BLUEPRINTS);
-static_assert(SPR_METRO_ICON_BLUEPRINTS + METRO_MORE_ICON_SPRITE_COUNT == SPR_METRO_STATION_BASE + METRO_STATION_SPRITE_COUNT);
+static_assert(SPR_METRO_ICON_BLUEPRINTS + METRO_MORE_ICON_SPRITE_COUNT == SPR_METRO_EXIT_HIGHLIGHT_PAL);
+static_assert(SPR_METRO_EXIT_HIGHLIGHT_PAL + 1 == SPR_METRO_TUNNEL_SURFACE_BASE);
+static_assert(SPR_METRO_TUNNEL_SURFACE_BASE + 2 == SPR_METRO_EXIT_AREA_PAL);
+static_assert(SPR_METRO_EXIT_AREA_PAL + 1 == SPR_METRO_STATION_BASE + METRO_STATION_SPRITE_COUNT);
 
 /**
  * Whether the base set has the soil sprites; an older openttd.grf has a shorter
@@ -466,17 +470,58 @@ void DrawPortalOverlay(const TileInfo *ti)
 	if (sid == INVALID_SLICE_ID) return;
 
 	const TileSlice &ps = _multilayer_map.GetSlice(sid);
+	/* A hillside mouth draws its whole tile, see DrawHillsidePortalSurfaceTile. */
+	if (IsHillsidePortal(ti->tile, ps)) return;
 	DiagDirection dir = static_cast<DiagDirection>(ps.portal.direction);
 	PaletteID pal = GetPortalPalette(ps);
 
 	/* Sprite pair: rear at +dir*2, front at +dir*2+1. */
-	SpriteID base = SPR_METRO_PORTAL_HILL_BASE;
-	if (!IsHillsidePortal(ti->tile, ps)) {
-		base = GetOpenCutDropLevels(ti->tile, ps) == 1 ? SPR_METRO_PORTAL_CUT_SHALLOW_BASE : SPR_METRO_PORTAL_DIVE_BASE;
-	}
+	SpriteID base = GetOpenCutDropLevels(ti->tile, ps) == 1 ? SPR_METRO_PORTAL_CUT_SHALLOW_BASE : SPR_METRO_PORTAL_DIVE_BASE;
 	SpriteID image = base + dir * 2;
 	DrawGroundSprite(image, pal);
 	AddSortableSpriteToDraw(image + 1, pal, *ti, _portal_roof_bounds[dir], false);
+}
+
+static void DrawTrackPieces(const LevelDrawContext &ctx, TrackBits tracks, const RailTypeInfo *rti, PaletteID pal);
+
+/**
+ * Draw the tile of a hillside portal on the surface as its level shows it, so a
+ * metro mouth is not taken for a vanilla tunnel: the track runs flat at the foot
+ * of the incline into the concrete block of the mouth, and trains run on it at
+ * that height (see GetVehicleViewportZ).
+ * @param ti The tile; drawn flat at its lowest corner.
+ * @return False if the tile has no hillside portal (nothing drawn).
+ */
+bool DrawHillsidePortalSurfaceTile(TileInfo *ti)
+{
+	if (!_multilayer_map.IsAllocated() || !IsTileType(ti->tile, TileType::Railway) || !IsPlainRail(ti->tile)) return false;
+	SliceID sid = _multilayer_map.FindSliceByKind(ti->tile, SliceKind::Portal);
+	if (sid == INVALID_SLICE_ID) return false;
+	const TileSlice &ps = _multilayer_map.GetSlice(sid);
+	if (!IsHillsidePortal(ti->tile, ps)) return false;
+
+	ti->tileh = SLOPE_FLAT;
+	SpriteID ground;
+	switch (GetRailGroundType(ti->tile)) {
+		case RailGroundType::Barren: ground = SPR_FLAT_BARE_LAND; break;
+		case RailGroundType::SnowOrDesert: ground = SPR_FLAT_SNOW_DESERT_TILE; break;
+		default: ground = SPR_FLAT_GRASS_TILE; break;
+	}
+	DrawGroundSprite(ground, PAL_NONE);
+
+	DiagDirection dir = static_cast<DiagDirection>(ps.portal.direction);
+	LevelDrawContext ctx(ti, 0, true);
+	const RailTypeInfo *rti = GetRailTypeInfo(GetRailType(ti->tile));
+	DrawTrackPieces(ctx, GetTrackBits(ti->tile), rti, PAL_NONE);
+	if (_settings_client.gui.show_track_reservation && GetRailReservationTrackBits(ti->tile) != TRACK_BIT_NONE) {
+		DrawTrackPieces(ctx, GetRailReservationTrackBits(ti->tile), rti, PALETTE_CRASH);
+	}
+	SpriteID image = SPR_METRO_TUNNEL_BASE + dir * 2;
+	ctx.Flat(image, PAL_NONE);
+	/* A mouth facing away shows its back, solid on the surface (the section is the level's). */
+	SpriteID front = (dir == DIAGDIR_SE || dir == DIAGDIR_SW) ? SPR_METRO_TUNNEL_SURFACE_BASE + (dir - DIAGDIR_SE) : image + 1;
+	ctx.Box(front, PAL_NONE, _portal_roof_bounds[dir]);
+	return true;
 }
 
 bool HasStationExitOverlay(TileIndex tile)
@@ -797,10 +842,10 @@ static void DrawUndergroundLevelContent(const TileInfo *ti, int16_t depth, Slice
 				 * from the tunnel side to the open side, with the inclined rail and a
 				 * gate on the open edge where the line leaves for the surface. */
 				static constexpr SpriteBounds gate_bounds[DIAGDIR_END] = {
-					{{TILE_SIZE - 1, 0, 0}, {1, TILE_SIZE, 20}, {0, 0, 0}}, // NE: open edge south-west
-					{{0, 0, 0}, {TILE_SIZE, 1, 20}, {0, 0, 0}},             // SE: open edge north-west
-					{{0, 0, 0}, {1, TILE_SIZE, 20}, {0, 0, 0}},             // SW: open edge north-east
-					{{0, TILE_SIZE - 1, 0}, {TILE_SIZE, 1, 20}, {0, 0, 0}}, // NW: open edge south-east
+					{{TILE_SIZE - 1, 0, 0}, {1, TILE_SIZE, 28}, {0, 0, 0}}, // NE: open edge south-west
+					{{0, 0, 0}, {TILE_SIZE, 1, 28}, {0, 0, 0}},             // SE: open edge north-west
+					{{0, 0, 0}, {1, TILE_SIZE, 28}, {0, 0, 0}},             // SW: open edge north-east
+					{{0, TILE_SIZE - 1, 0}, {TILE_SIZE, 1, 28}, {0, 0, 0}}, // NW: open edge south-east
 				};
 				ctx.Flat(SPR_METRO_PORTAL_RAMP_BASE + dir, PAL_NONE);
 				ctx.Flat(GetInclinedRailSprite(dir, static_cast<RailType>(slice.portal.railtype)), PAL_NONE);
@@ -1135,13 +1180,16 @@ static void DrawPortalGhost(const TileInfo *ti, bool slice_mode)
 	static constexpr int8_t down_sign_y[DIAGDIR_END] = {8, 13, 8, 3};
 
 	if (!slice_mode) {
-		SpriteID base = SPR_METRO_PORTAL_HILL_BASE;
+		/* A hillside mouth as it is drawn when built: the concrete block of the mouth. */
+		SpriteID base = SPR_METRO_TUNNEL_BASE;
 		if (!ghost->hillside) {
 			base = Clamp(GetTileZ(ti->tile) - ghost->depth, 1, 2) == 1 ? SPR_METRO_PORTAL_CUT_SHALLOW_BASE : SPR_METRO_PORTAL_DIVE_BASE;
 		}
 		SpriteID image = base + dir * 2;
+		SpriteID front = image + 1;
+		if (ghost->hillside && (dir == DIAGDIR_SE || dir == DIAGDIR_SW)) front = SPR_METRO_TUNNEL_SURFACE_BASE + (dir - DIAGDIR_SE);
 		DrawGroundSprite(image, pal);
-		AddSortableSpriteToDraw(image + 1, pal, *ti, _portal_roof_bounds[dir], false);
+		AddSortableSpriteToDraw(front, pal, *ti, _portal_roof_bounds[dir], false);
 
 		/* The arrow lies on the ground, on a hillside on the incline like a one-way road's. */
 		if (ti->tileh == SLOPE_NE || ti->tileh == SLOPE_NW) {

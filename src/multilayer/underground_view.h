@@ -165,6 +165,9 @@ const TileSlice *GetSliceViewPortal(TileIndex tile);
 
 /** Is the portal a hillside mouth: at the foot of an incline rising towards its direction? */
 bool IsHillsidePortal(TileIndex tile, const TileSlice &portal);
+
+/** Whether a tile has a hillside portal (its mouth at the foot of the incline). */
+bool IsHillsidePortalTile(TileIndex tile);
 const TileSlice *GetOpenCutPortal(const Train *t);
 int GetOpenCutDropLevels(TileIndex tile, const TileSlice &portal);
 int GetOpenCutFloorZ(const TileSlice &portal, TileIndex tile, int x, int y);

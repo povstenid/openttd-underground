@@ -95,6 +95,8 @@
 #include "multilayer/underground_gui.h"
 #include "multilayer/underground_render.h"
 #include "multilayer/multilayer_map.h"
+#include "multilayer/station_complex.h"
+#include "spritecache.h"
 #include "timer/timer_game_tick.h"
 
 #include <forward_list>
@@ -1008,6 +1010,8 @@ enum TileHighlightType : uint8_t {
 	THT_WHITE,
 	THT_BLUE,
 	THT_RED,
+	THT_GREEN, ///< Surface exit of an underground station whose window is open, or a platform below for the exit tools.
+	THT_YELLOW, ///< Where the station exit tools may build an exit.
 };
 
 const Station *_viewport_highlight_station; ///< Currently selected station for coverage area highlight
@@ -1057,6 +1061,15 @@ bool IsViewportCompanyCoverageShown()
  */
 static TileHighlightType GetTileHighlightType(TileIndex t)
 {
+	/* The surface exits (pavilions, underpasses) of an underground station whose window is open. */
+	if (const StationComplexNode *exit = FindExplicitStationExitAt(t); exit != nullptr && FindWindowById(WC_STATION_VIEW, exit->station_id) != nullptr) return THT_GREEN;
+	/* With a station exit tool: the platforms of the own underground stations and where their exits may go. */
+	switch (GetStationExitAreaHighlight(t)) {
+		case StationExitAreaHighlight::Platform: return THT_GREEN;
+		case StationExitAreaHighlight::Area: return THT_YELLOW;
+		default: break;
+	}
+
 	if (_viewport_highlight_company_coverage) {
 		if (IsTileType(t, TileType::Station) && IsTileOwner(t, _local_company)) return THT_WHITE;
 		UpdateCompanyCoverageCache();
@@ -1118,6 +1131,8 @@ static void DrawTileHighlightType(const TileInfo *ti, TileHighlightType tht)
 		case THT_WHITE: DrawTileSelectionRect(ti, PAL_NONE); break;
 		case THT_BLUE:  DrawTileSelectionRect(ti, PALETTE_SEL_TILE_BLUE); break;
 		case THT_RED:   DrawTileSelectionRect(ti, PALETTE_SEL_TILE_RED); break;
+		case THT_GREEN: DrawTileSelectionRect(ti, SpriteExists(SPR_METRO_EXIT_HIGHLIGHT_PAL) ? SPR_METRO_EXIT_HIGHLIGHT_PAL : PALETTE_SEL_TILE_BLUE); break;
+		case THT_YELLOW: DrawTileSelectionRect(ti, SpriteExists(SPR_METRO_EXIT_AREA_PAL) ? SPR_METRO_EXIT_AREA_PAL : PAL_NONE); break;
 	}
 }
 
@@ -1379,14 +1394,14 @@ static void ViewportAddLandscape()
 					 * The tall surface portal arch is intentionally NOT drawn here:
 					 * its sortable sprite would cover the underground rendering of
 					 * the portal tile (the inclined connection ramp). */
-					if (_underground_show_above) {
+					if (_underground_show_above && !DrawHillsidePortalSurfaceTile(&_cur_ti)) {
 						_tile_type_procs[tile_type]->draw_tile_proc(&_cur_ti);
 					}
 					DrawUndergroundTile(&_cur_ti);
 					DrawTileSelection(&_cur_ti);
 				} else {
-					/* Normal surface drawing. */
-					_tile_type_procs[tile_type]->draw_tile_proc(&_cur_ti);
+					/* Normal surface drawing; a hillside metro portal draws its whole tile. */
+					if (_cur_ti.tile == INVALID_TILE || !DrawHillsidePortalSurfaceTile(&_cur_ti)) _tile_type_procs[tile_type]->draw_tile_proc(&_cur_ti);
 					/* Draw portal overlay on surface (always visible). */
 					if (_cur_ti.tile != INVALID_TILE && HasPortalOnTile(_cur_ti.tile)) {
 						DrawPortalOverlay(&_cur_ti);
@@ -2378,7 +2393,6 @@ static bool CheckClickOnViewportSign(const Viewport &vp, int x, int y, const Vie
 	return y >= sign->top && y < sign->top + sign_height &&
 			x >= sign->center - sign_half_width && x < sign->center + sign_half_width;
 }
-
 
 /**
  * Check whether any viewport sign was clicked, and dispatch the click.

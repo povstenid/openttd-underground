@@ -137,6 +137,13 @@ bool IsHillsidePortal(TileIndex tile, const TileSlice &portal)
 	return GetInclinedSlopeDirection(GetTileSlope(tile)) != INVALID_DIAGDIR && portal.span.z_bot == GetTileZ(tile);
 }
 
+bool IsHillsidePortalTile(TileIndex tile)
+{
+	if (!_multilayer_map.IsAllocated() || GetInclinedSlopeDirection(GetTileSlope(tile)) == INVALID_DIAGDIR) return false;
+	SliceID sid = _multilayer_map.FindSliceByKind(tile, SliceKind::Portal);
+	return sid != INVALID_SLICE_ID && IsHillsidePortal(tile, _multilayer_map.GetSlice(sid));
+}
+
 /**
  * The portal a train part is crossing when it is in the open cut of a portal
  * diving into flat ground (on the surface layer of the portal tile, or on the
@@ -288,6 +295,9 @@ int GetVehicleViewportZ(const Vehicle *v)
 		if (const TileSlice *portal = GetOpenCutPortal(Train::From(v)); portal != nullptr) {
 			return GetTileZ(v->tile) * static_cast<int>(TILE_HEIGHT) + GetOpenCutFloorZ(*portal, v->tile, v->x_pos, v->y_pos);
 		}
+		/* On the tile of a hillside mouth the track is drawn flat at the foot of the
+		 * incline, like in a vanilla tunnel entrance (see DrawHillsidePortalSurfaceTile). */
+		if (!Train::From(v)->IsUnderground() && IsHillsidePortalTile(v->tile)) return GetTileZ(v->tile) * static_cast<int>(TILE_HEIGHT);
 	}
 	if (IsUndergroundViewActive() && v->type == VEH_TRAIN) {
 		const Train *t = Train::From(v);
