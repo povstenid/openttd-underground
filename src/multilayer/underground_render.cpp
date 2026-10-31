@@ -357,7 +357,7 @@ static void DrawUndergroundSignalSprite(const LevelDrawContext &ctx, const TileR
 	if ((GetUndergroundSignalMask(slice) & signal_bit) == 0) return;
 
 	Trackdir td = FindUndergroundSignalTrackdir(track, signal_bit);
-	SignalState state = td == INVALID_TRACKDIR ? SIGNAL_STATE_RED : GetUndergroundSignalState(ref, td);
+	SignalState state = td == INVALID_TRACKDIR ? SIGNAL_STATE_RED : GetUndergroundSignalDisplayState(ref, td);
 
 	bool side;
 	switch (_settings_game.construction.train_signal_side) {
