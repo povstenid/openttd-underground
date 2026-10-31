@@ -3007,7 +3007,8 @@ static bool ConRailXRay([[maybe_unused]] std::span<std::string_view> argv)
 	if (argv.empty()) {
 		IConsolePrint(CC_HELP, "Toggle the rail X-ray view: track, stations, depots, signals and trains of every level, nothing else. Usage: 'railxray [on|off]'.");
 		IConsolePrint(CC_HELP, "'railxray dest off|selected|all' - Arrows from trains to their current destination: none, the trains with an open window (default), every train.");
-		IConsolePrint(CC_HELP, "'railxray show rail|road|water|air|cargo|orders on|off' - Show or hide a layer, the cargo at the stations, the colours by shared orders.");
+		IConsolePrint(CC_HELP, "'railxray show rail|road|water|air|cargo|orders|implicit on|off' - Show or hide a layer, the cargo at the stations, the colours by shared orders, implicit orders in the routes.");
+		IConsolePrint(CC_HELP, "'railxray routes off|selected|all' - Routes of the order lists from stop to stop: none, of the vehicles with an open window, all.");
 		return true;
 	}
 
@@ -3020,6 +3021,7 @@ static bool ConRailXRay([[maybe_unused]] std::span<std::string_view> argv)
 		if (StrEqualsIgnoreCase(argv[2], "air")) layer = &_xray_settings.air;
 		if (StrEqualsIgnoreCase(argv[2], "cargo")) layer = &_xray_settings.cargo;
 		if (StrEqualsIgnoreCase(argv[2], "orders")) layer = &_xray_settings.order_colours;
+		if (StrEqualsIgnoreCase(argv[2], "implicit")) layer = &_xray_settings.implicit_orders;
 		if (layer == nullptr) return false;
 		*layer = StrEqualsIgnoreCase(argv[3], "on");
 		InvalidateWindowData(WC_RAIL_XRAY, 0);
@@ -3027,17 +3029,19 @@ static bool ConRailXRay([[maybe_unused]] std::span<std::string_view> argv)
 		return true;
 	}
 
-	if (argv.size() >= 2 && StrEqualsIgnoreCase(argv[1], "dest")) {
+	if (argv.size() >= 2 && (StrEqualsIgnoreCase(argv[1], "dest") || StrEqualsIgnoreCase(argv[1], "routes"))) {
 		if (argv.size() < 3) return false;
+		RailXRayDestinations &which = StrEqualsIgnoreCase(argv[1], "dest") ? _rail_xray_destinations : _xray_settings.routes;
 		if (StrEqualsIgnoreCase(argv[2], "off")) {
-			_rail_xray_destinations = RailXRayDestinations::Off;
+			which = RailXRayDestinations::Off;
 		} else if (StrEqualsIgnoreCase(argv[2], "selected")) {
-			_rail_xray_destinations = RailXRayDestinations::Selected;
+			which = RailXRayDestinations::Selected;
 		} else if (StrEqualsIgnoreCase(argv[2], "all")) {
-			_rail_xray_destinations = RailXRayDestinations::All;
+			which = RailXRayDestinations::All;
 		} else {
 			return false;
 		}
+		InvalidateWindowData(WC_RAIL_XRAY, 0);
 		MarkWholeScreenDirty();
 		return true;
 	}

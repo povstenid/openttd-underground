@@ -501,6 +501,10 @@ STR_XRAY_COMPANY_FILTER                                         :{BLACK}Company:
 STR_XRAY_COMPANY_FILTER_TOOLTIP                                 :{BLACK}Draw only what belongs to this company
 STR_XRAY_FILTER_ALL                                             :All
 STR_XRAY_RATING                                                 :{NUM}%
+STR_XRAY_ROUTES                                                 :{BLACK}Routes:
+STR_XRAY_ROUTES_TOOLTIP                                         :{BLACK}Draw the orders as routes from stop to stop, one line per shared order list, in its colour
+STR_XRAY_IMPLICIT                                               :Implicit stops in routes
+STR_XRAY_IMPLICIT_TOOLTIP                                       :{BLACK}Include the stops the game adds by itself (implicit orders), dashed
 
 # File menu
 STR_FILE_MENU_SAVE_GAME                                         :Save game
