@@ -58,6 +58,7 @@ enum MainToolbarHotkeys : int32_t {
 	MTHK_UNDERGROUND_XRAY,
 	MTHK_UNDERGROUND_BELOW,
 	MTHK_UNDERGROUND_ABOVE,
+	MTHK_RAIL_XRAY,
 };
 
 void AllocateToolbar();

@@ -473,6 +473,13 @@ STR_SETTINGS_MENU_FULL_DETAIL                                   :Full detail
 STR_SETTINGS_MENU_TRANSPARENT_BUILDINGS                         :Transparent buildings
 STR_SETTINGS_MENU_TRANSPARENT_SIGNS                             :Transparent signs
 STR_SETTINGS_MENU_TRANSPARENT_PEDESTRIANS                       :Transparent pedestrians
+STR_SETTINGS_MENU_RAIL_XRAY                                     :Rail X-ray view (all levels)
+STR_RAIL_XRAY_SIGNAL_BLOCK                                      :B
+STR_RAIL_XRAY_SIGNAL_ENTRY                                      :En
+STR_RAIL_XRAY_SIGNAL_EXIT                                       :Ex
+STR_RAIL_XRAY_SIGNAL_COMBO                                      :C
+STR_RAIL_XRAY_SIGNAL_PBS                                        :P
+STR_RAIL_XRAY_SIGNAL_PBS_ONEWAY                                 :P1
 
 # File menu
 STR_FILE_MENU_SAVE_GAME                                         :Save game

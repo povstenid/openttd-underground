@@ -18,6 +18,7 @@
 #include "../slope_func.h"
 #include "../window_func.h"
 #include "multilayer_map.h"
+#include "rail_xray.h"
 
 #include "../safeguards.h"
 
@@ -289,22 +290,25 @@ bool IsUndergroundTrainDepthShown(int16_t depth)
 
 int GetVehicleViewportZ(const Vehicle *v)
 {
-	if (v->type == VEH_TRAIN && !IsUndergroundSliceMode()) {
+	/* The rail X-ray view draws every level at its own depth, whatever the underground view. */
+	bool slice = IsUndergroundSliceMode() && !IsRailXRayView();
+	if (v->type == VEH_TRAIN && !slice) {
 		/* In the open cut of a portal diving into flat ground the train runs
 		 * down (or up) its floor, in the surface and in the X-ray view. */
 		if (const TileSlice *portal = GetOpenCutPortal(Train::From(v)); portal != nullptr) {
+			if (IsRailXRayView()) return GetRailXRayPortalPixelZ(v->tile, *portal, v->x_pos, v->y_pos);
 			return GetTileZ(v->tile) * static_cast<int>(TILE_HEIGHT) + GetOpenCutFloorZ(*portal, v->tile, v->x_pos, v->y_pos);
 		}
 		/* On the tile of a hillside mouth the track is drawn flat at the foot of the
 		 * incline, like in a vanilla tunnel entrance (see DrawHillsidePortalSurfaceTile). */
 		if (!Train::From(v)->IsUnderground() && IsHillsidePortalTile(v->tile)) return GetTileZ(v->tile) * static_cast<int>(TILE_HEIGHT);
 	}
-	if (IsUndergroundViewActive() && v->type == VEH_TRAIN) {
+	if ((IsUndergroundViewActive() || IsRailXRayView()) && v->type == VEH_TRAIN) {
 		const Train *t = Train::From(v);
 		if (t->IsUnderground()) return t->underground_depth * static_cast<int>(TILE_HEIGHT);
 		/* On a portal tile the slice view shows at the portal's level, the train
 		 * runs on the drawn exit (flat mouth or ramp), not on the surface rail. */
-		if (IsUndergroundSliceMode()) {
+		if (slice) {
 			if (const TileSlice *portal = GetSliceViewPortal(v->tile); portal != nullptr) {
 				return GetUndergroundSlicePixelZ() + GetSliceViewPortalRise(*portal, v->tile, v->x_pos, v->y_pos);
 			}
