@@ -49,6 +49,14 @@
 #include "../timer/timer.h"
 #include "../timer/timer_window.h"
 #include "../train.h"
+#include "../roadveh.h"
+#include "../ship.h"
+#include "../aircraft.h"
+#include "../depot_base.h"
+#include "../station_base.h"
+#include "../cargotype.h"
+#include "../road_func.h"
+#include "../water_map.h"
 #include "../tunnel_map.h"
 #include "../tunnelbridge_map.h"
 #include "../viewport_func.h"
@@ -60,12 +68,31 @@
 #include "../safeguards.h"
 
 bool _rail_xray_view = false;
+XRaySettings _xray_settings;
 RailXRayDestinations _rail_xray_destinations = RailXRayDestinations::Selected;
 
 /** Background of the view. */
 static constexpr PixelColour XRAY_BACKGROUND = GREY_SCALE(3);
+/** Colour of roads. */
+static constexpr PixelColour XRAY_ROAD_COLOUR = GREY_SCALE(8);
 
-/** Rail tunnels by their two ends, the lower tile index first: nothing on the tiles between the ends tells about them. */
+/** Whether things of an owner are drawn, by the company filter. */
+static bool XRayShowsOwner(Owner owner)
+{
+	return _xray_settings.company_filter == CompanyID::Invalid() || owner == _xray_settings.company_filter;
+}
+
+StationFacilities GetRailXRaySignFacilities()
+{
+	StationFacilities f{};
+	if (_xray_settings.rail) f.Set(StationFacility::Train);
+	if (_xray_settings.road) f.Set({StationFacility::BusStop, StationFacility::TruckStop});
+	if (_xray_settings.water) f.Set(StationFacility::Dock);
+	if (_xray_settings.air) f.Set(StationFacility::Airport);
+	return f;
+}
+
+/** Rail and road tunnels by their two ends, the lower tile index first: nothing on the tiles between the ends tells about them. */
 static std::vector<std::pair<TileIndex, TileIndex>> _xray_tunnels;
 /** Whether #_xray_tunnels is up to date. */
 static bool _xray_tunnels_valid = false;
@@ -484,6 +511,7 @@ static void DrawXRaySurfaceTile(const XRayDrawer &d, TileIndex tile, XRayStage s
 
 	switch (GetTileType(tile)) {
 		case TileType::Railway: {
+			if (!XRayShowsOwner(GetTileOwner(tile))) break;
 			RailType rt = GetRailType(tile);
 			if (IsRailDepot(tile)) {
 				DiagDirection dir = GetRailDepotDirection(tile);
@@ -528,7 +556,7 @@ static void DrawXRaySurfaceTile(const XRayDrawer &d, TileIndex tile, XRayStage s
 		}
 
 		case TileType::Road:
-			if (!IsLevelCrossing(tile)) break;
+			if (!IsLevelCrossing(tile) || !XRayShowsOwner(GetTileOwner(tile))) break;
 			if (stage == XRayStage::Base) {
 				DrawXRayTracks(d, g, GetCrossingRailBits(tile), GetRailType(tile), level);
 			} else {
@@ -538,7 +566,7 @@ static void DrawXRaySurfaceTile(const XRayDrawer &d, TileIndex tile, XRayStage s
 			break;
 
 		case TileType::Station: {
-			if (!HasStationRail(tile)) break;
+			if (!HasStationRail(tile) || !XRayShowsOwner(GetTileOwner(tile))) break;
 			Axis axis = GetRailStationAxis(tile);
 			TrackBits track = AxisToTrackBits(axis);
 			if (stage == XRayStage::Base) {
@@ -556,7 +584,7 @@ static void DrawXRaySurfaceTile(const XRayDrawer &d, TileIndex tile, XRayStage s
 		}
 
 		case TileType::TunnelBridge: {
-			if (GetTunnelBridgeTransportType(tile) != TRANSPORT_RAIL) break;
+			if (GetTunnelBridgeTransportType(tile) != TRANSPORT_RAIL || !XRayShowsOwner(GetTileOwner(tile))) break;
 			TrackBits track = DiagDirToDiagTrackBits(GetTunnelBridgeDirection(tile));
 			if (stage == XRayStage::Base) {
 				DrawXRayTracks(d, g, track, GetRailType(tile), level);
@@ -572,7 +600,7 @@ static void DrawXRaySurfaceTile(const XRayDrawer &d, TileIndex tile, XRayStage s
 
 	if (IsBridgeAbove(tile)) {
 		TileIndex north = GetNorthernBridgeEnd(tile);
-		if (GetTunnelBridgeTransportType(north) != TRANSPORT_RAIL) return;
+		if (GetTunnelBridgeTransportType(north) != TRANSPORT_RAIL || !XRayShowsOwner(GetTileOwner(north))) return;
 		XRayGeom deck{tile, XRayGeom::Kind::Flat, GetBridgePixelHeight(north)};
 		TrackBits track = AxisToTrackBits(GetBridgeAxis(tile));
 		if (stage == XRayStage::Base) {
@@ -581,6 +609,175 @@ static void DrawXRaySurfaceTile(const XRayDrawer &d, TileIndex tile, XRayStage s
 			DrawXRayReservation(d, deck, track, level);
 		}
 	}
+}
+
+/** Draw road pieces: from the middle of the tile to the middle of each edge they reach. */
+static void DrawXRayRoadBits(const XRayDrawer &d, const XRayGeom &g, RoadBits bits, PixelColour colour, int width)
+{
+	if (bits == ROAD_NONE) return;
+	Point c = g.P(d, TILE_SIZE / 2, TILE_SIZE / 2);
+	for (DiagDirection dir = DIAGDIR_BEGIN; dir < DIAGDIR_END; dir++) {
+		if ((bits & DiagDirToRoadBits(dir)) != ROAD_NONE) d.Line(c, g.P(d, _xray_edge_mid[dir]), colour, width);
+	}
+}
+
+/** Draw a depot or hangar: a square with a stub towards its exit (none for a hangar). */
+static void DrawXRayDepot(const XRayDrawer &d, const XRayGeom &g, DiagDirection exit, PixelColour colour, PixelColour stub_colour, int stub_width)
+{
+	std::array<Point, 4> shape = {g.P(d, 3, 3), g.P(d, 13, 3), g.P(d, 13, 13), g.P(d, 3, 13)};
+	if (d.Visible(shape[0], shape[2], 0) || d.Visible(shape[1], shape[3], 0)) GfxFillPolygon(shape, colour);
+	if (exit != INVALID_DIAGDIR) d.Line(g.P(d, TILE_SIZE / 2, TILE_SIZE / 2), g.P(d, _xray_edge_mid[exit]), stub_colour, stub_width);
+}
+
+/** Draw a whole tile as a plain rhombus, a little inset. */
+static void DrawXRayTilePlate(const XRayDrawer &d, const XRayGeom &g, int inset, PixelColour colour)
+{
+	int lo = inset;
+	int hi = TILE_SIZE - inset;
+	std::array<Point, 4> shape = {g.P(d, lo, lo), g.P(d, hi, lo), g.P(d, hi, hi), g.P(d, lo, hi)};
+	if (d.Visible(shape[0], shape[2], 0) || d.Visible(shape[1], shape[3], 0)) GfxFillPolygon(shape, colour);
+}
+
+/** Draw the roads, tram tracks, road stops and road depots of a tile. */
+static void DrawXRayRoadTile(const XRayDrawer &d, TileIndex tile)
+{
+	XRayGeom g{tile};
+	int road_width = std::max(2, d.Px(4));
+	int tram_width = std::max(1, d.Px(2));
+	PixelColour tram = GetColourGradient(COLOUR_MAUVE, SHADE_LIGHTER);
+
+	switch (GetTileType(tile)) {
+		case TileType::Road:
+			if (IsRoadDepot(tile)) {
+				if (!XRayShowsOwner(GetTileOwner(tile))) break;
+				DrawXRayDepot(d, g, GetRoadDepotDirection(tile), GetColourGradient(COLOUR_BROWN, SHADE_NORMAL), XRAY_ROAD_COLOUR, road_width);
+				break;
+			}
+			if (IsLevelCrossing(tile)) {
+				RoadBits bits = GetCrossingRoadBits(tile);
+				if (HasTileRoadType(tile, RTT_ROAD)) DrawXRayRoadBits(d, g, bits, XRAY_ROAD_COLOUR, road_width);
+				if (HasTileRoadType(tile, RTT_TRAM)) DrawXRayRoadBits(d, g, bits, tram, tram_width);
+				break;
+			}
+			DrawXRayRoadBits(d, g, GetRoadBits(tile, RTT_ROAD), XRAY_ROAD_COLOUR, road_width);
+			DrawXRayRoadBits(d, g, GetRoadBits(tile, RTT_TRAM), tram, tram_width);
+			break;
+
+		case TileType::Station: {
+			/* The pavilion of a metro exit is a bus stop tile, but the railway draws it. */
+			if (!IsAnyRoadStop(tile) || !XRayShowsOwner(GetTileOwner(tile)) || IsStationExitPavilionTile(tile)) break;
+			PixelColour plate = IsBusStop(tile) ? GetColourGradient(COLOUR_PALE_GREEN, SHADE_DARK) : GetColourGradient(COLOUR_BROWN, SHADE_LIGHT);
+			if (IsDriveThroughStopTile(tile)) {
+				Axis axis = GetDriveThroughStopAxis(tile);
+				DrawXRayPlatform(d, g, axis, 6, plate);
+				RoadBits bits = axis == AXIS_X ? ROAD_X : ROAD_Y;
+				if (HasTileRoadType(tile, RTT_ROAD)) DrawXRayRoadBits(d, g, bits, XRAY_ROAD_COLOUR, road_width);
+				if (HasTileRoadType(tile, RTT_TRAM)) DrawXRayRoadBits(d, g, bits, tram, tram_width);
+			} else {
+				DrawXRayDepot(d, g, GetBayRoadStopDir(tile), plate, XRAY_ROAD_COLOUR, road_width);
+			}
+			break;
+		}
+
+		case TileType::TunnelBridge:
+			if (GetTunnelBridgeTransportType(tile) != TRANSPORT_ROAD) break;
+			DrawXRayRoadBits(d, g, AxisToRoadBits(DiagDirToAxis(GetTunnelBridgeDirection(tile))), XRAY_ROAD_COLOUR, road_width);
+			break;
+
+		default: break;
+	}
+
+	if (IsBridgeAbove(tile)) {
+		TileIndex north = GetNorthernBridgeEnd(tile);
+		if (GetTunnelBridgeTransportType(north) != TRANSPORT_ROAD) return;
+		XRayGeom deck{tile, XRayGeom::Kind::Flat, GetBridgePixelHeight(north)};
+		DrawXRayRoadBits(d, deck, AxisToRoadBits(GetBridgeAxis(tile)), XRAY_ROAD_COLOUR, road_width);
+	}
+}
+
+/** Draw the docks, buoys and ship depots of a tile. */
+static void DrawXRayWaterTile(const XRayDrawer &d, TileIndex tile)
+{
+	XRayGeom g{tile};
+	if (IsTileType(tile, TileType::Station) && (IsDock(tile) || IsBuoy(tile))) {
+		if (!XRayShowsOwner(GetTileOwner(tile))) return;
+		if (IsBuoy(tile)) {
+			d.Square(g.P(d, TILE_SIZE / 2, TILE_SIZE / 2), std::max(2, d.Px(3)), GetColourGradient(COLOUR_LIGHT_BLUE, SHADE_LIGHTER), PC_BLACK, 1);
+		} else {
+			DrawXRayTilePlate(d, g, 2, GetColourGradient(COLOUR_BLUE, SHADE_NORMAL));
+		}
+	} else if (IsShipDepotTile(tile) && XRayShowsOwner(GetTileOwner(tile))) {
+		DrawXRayDepot(d, g, INVALID_DIAGDIR, GetColourGradient(COLOUR_DARK_BLUE, SHADE_LIGHT), PC_BLACK, 1);
+	}
+}
+
+/** Draw the airport tiles and hangars of a tile. */
+static void DrawXRayAirTile(const XRayDrawer &d, TileIndex tile)
+{
+	if (!IsTileType(tile, TileType::Station) || !IsAirport(tile) || !XRayShowsOwner(GetTileOwner(tile))) return;
+	XRayGeom g{tile};
+	DrawXRayTilePlate(d, g, 0, GetColourGradient(COLOUR_GREY, SHADE_DARKER));
+	if (IsHangar(tile)) DrawXRayDepot(d, g, INVALID_DIAGDIR, GetColourGradient(COLOUR_BROWN, SHADE_NORMAL), PC_BLACK, 1);
+}
+
+/**
+ * Draw the surface exit of a metro station: a square with a dashed line down
+ * to the level of the station's platforms, the way the passengers go.
+ */
+static void DrawXRayStationExit(const XRayDrawer &d, TileIndex tile)
+{
+	const StationComplexNode *exit = FindExplicitStationExitAt(tile);
+	if (exit == nullptr) return;
+	const BaseStation *st = BaseStation::GetIfValid(StationID(exit->station_id));
+	if (st == nullptr || !XRayShowsOwner(st->owner)) return;
+
+	XRayGeom g{tile};
+	Point top = g.P(d, TILE_SIZE / 2, TILE_SIZE / 2);
+	auto it = _station_complexes.find(exit->station_id);
+	if (it != _station_complexes.end()) {
+		for (const StationComplexNode &n : it->second.nodes) {
+			if (n.role != StationRole::Platform || !_multilayer_map.IsValidSlice(n.ref.slice)) continue;
+			int z = _multilayer_map.GetSlice(n.ref.slice).span.z_bot * static_cast<int>(TILE_HEIGHT);
+			Point bottom = d.Screen(TileX(tile) * TILE_SIZE + TILE_SIZE / 2, TileY(tile) * TILE_SIZE + TILE_SIZE / 2, z);
+			d.Line(top, bottom, GetColourGradient(COLOUR_LIGHT_BLUE, SHADE_LIGHT), 1, std::max(2, d.Px(3)));
+			break;
+		}
+	}
+	d.Square(top, std::max(2, d.Px(4)), GetColourGradient(COLOUR_DARK_BLUE, SHADE_LIGHTEST), PC_WHITE, 1);
+}
+
+/** Draw the surface of a tile, layer after layer: aviation, water, roads and the railway on top. */
+static void DrawXRaySurfaceLayers(const XRayDrawer &d, TileIndex tile, XRayStage stage)
+{
+	if (stage == XRayStage::Base) {
+		if (_xray_settings.air) DrawXRayAirTile(d, tile);
+		if (_xray_settings.water) DrawXRayWaterTile(d, tile);
+		if (_xray_settings.road) DrawXRayRoadTile(d, tile);
+	}
+	if (_xray_settings.rail) {
+		DrawXRaySurfaceTile(d, tile, stage);
+		if (stage == XRayStage::Overlay) DrawXRayStationExit(d, tile);
+	}
+}
+
+/** Write the name of a depot of a shown layer on its tile, once per depot. */
+static void DrawXRayDepotLabel(const XRayDrawer &d, TileIndex tile)
+{
+	VehicleType type;
+	if (_xray_settings.rail && IsRailDepotTile(tile)) {
+		type = VEH_TRAIN;
+	} else if (_xray_settings.road && IsRoadDepotTile(tile)) {
+		type = VEH_ROAD;
+	} else if (_xray_settings.water && IsShipDepotTile(tile)) {
+		type = VEH_SHIP;
+	} else {
+		return;
+	}
+	if (!XRayShowsOwner(GetTileOwner(tile))) return;
+	DepotID id = GetDepotIndex(tile);
+	if (Depot::Get(id)->xy != tile) return;
+	XRayGeom g{tile};
+	d.Label(g.P(d, TILE_SIZE / 2, TILE_SIZE / 2), GetString(STR_DEPOT_NAME, type, id), TC_ORANGE);
 }
 
 /** Draw the signals of an underground track or ramp. */
@@ -604,6 +801,7 @@ static void DrawXRayUndergroundTile(const XRayDrawer &d, TileIndex tile, XRaySta
 
 	for (SliceID sid : col.slices) {
 		const TileSlice &s = _multilayer_map.GetSlice(sid);
+		if (!XRayShowsOwner(static_cast<Owner>(s.owner))) continue;
 		XRayLevel level = GetXRayUndergroundLevel(s.span.z_bot);
 		XRayGeom g{tile, XRayGeom::Kind::Flat, s.span.z_bot * static_cast<int>(TILE_HEIGHT)};
 
@@ -668,19 +866,21 @@ static void DrawXRayUndergroundTile(const XRayDrawer &d, TileIndex tile, XRaySta
 	}
 }
 
-/** Collect the rail tunnels of the map. */
+/** Collect the rail and road tunnels of the map. */
 static void RebuildXRayTunnels()
 {
 	_xray_tunnels.clear();
 	for (const auto tile : Map::Iterate()) {
-		if (!IsTileType(tile, TileType::TunnelBridge) || !IsTunnel(tile) || GetTunnelBridgeTransportType(tile) != TRANSPORT_RAIL) continue;
+		if (!IsTileType(tile, TileType::TunnelBridge) || !IsTunnel(tile)) continue;
+		TransportType tt = GetTunnelBridgeTransportType(tile);
+		if (tt != TRANSPORT_RAIL && tt != TRANSPORT_ROAD) continue;
 		TileIndex other = GetOtherTunnelEnd(tile);
 		if (TileIndex(tile) < other) _xray_tunnels.emplace_back(tile, other);
 	}
 	_xray_tunnels_valid = true;
 }
 
-/** Draw the rail tunnels: dashed between their ends, at the height of the trains in them. */
+/** Draw the tunnels of the shown layers: dashed between their ends, at the height of the vehicles in them. */
 static void DrawXRayTunnels(const XRayDrawer &d)
 {
 	if (!_xray_tunnels_valid) RebuildXRayTunnels();
@@ -690,6 +890,11 @@ static void DrawXRayTunnels(const XRayDrawer &d)
 		int z = GetTilePixelZ(a);
 		Point pa = d.Screen(TileX(a) * TILE_SIZE + TILE_SIZE / 2, TileY(a) * TILE_SIZE + TILE_SIZE / 2, z);
 		Point pb = d.Screen(TileX(b) * TILE_SIZE + TILE_SIZE / 2, TileY(b) * TILE_SIZE + TILE_SIZE / 2, z);
+		if (GetTunnelBridgeTransportType(a) == TRANSPORT_ROAD) {
+			if (_xray_settings.road) d.Line(pa, pb, XRAY_ROAD_COLOUR, std::max(2, d.Px(3)), d.Px(4));
+			continue;
+		}
+		if (!_xray_settings.rail || !XRayShowsOwner(GetTileOwner(a))) continue;
 		bool reserved = HasTunnelBridgeReservation(a) || HasTunnelBridgeReservation(b);
 		PixelColour colour = reserved ? GetColourGradient(COLOUR_ORANGE, SHADE_LIGHTER) : GetColourGradient(GetXRayRailTypeColour(GetRailType(a)), level.shade);
 		d.Line(pa, pb, colour, d.Px(2), d.Px(4));
@@ -698,79 +903,180 @@ static void DrawXRayTunnels(const XRayDrawer &d)
 
 bool IsRailXRayTrainPartDrawn(const Train *t)
 {
+	if (!_xray_settings.rail || !XRayShowsOwner(t->owner)) return false;
 	if (t->IsUnderground()) return true;
 	/* Hidden on the surface: in a depot, or in a tunnel, which the view shows. */
 	return !t->vehstatus.Test(VehState::Hidden) || t->track == TRACK_BIT_WORMHOLE;
 }
 
-/** Colour of a train by what it does. */
-static PixelColour GetXRayTrainColour(const Train *front)
+bool IsXRayVehicleDrawn(const Vehicle *v)
+{
+	switch (v->type) {
+		case VEH_TRAIN: return IsRailXRayTrainPartDrawn(Train::From(v));
+		case VEH_ROAD: return _xray_settings.road && XRayShowsOwner(v->owner) && !v->vehstatus.Test(VehState::Hidden);
+		case VEH_SHIP: return _xray_settings.water && XRayShowsOwner(v->owner) && !v->vehstatus.Test(VehState::Hidden);
+		case VEH_AIRCRAFT: return _xray_settings.air && XRayShowsOwner(v->owner) && Aircraft::From(v)->IsNormalAircraft() && !v->vehstatus.Test(VehState::Hidden);
+		default: return false;
+	}
+}
+
+/** Colour of a vehicle by what it does. */
+static PixelColour GetXRayStateColour(const Vehicle *front)
 {
 	if (front->vehstatus.Test(VehState::Crashed)) return PC_VERY_DARK_RED;
 	if (front->vehstatus.Test(VehState::Stopped)) return PC_GREY;
 	if (front->current_order.IsType(OT_LOADING)) return GetColourGradient(COLOUR_BLUE, SHADE_LIGHTER);
-	if (front->cur_speed == 0) return front->flags.Test(VehicleRailFlag::Stuck) ? GetColourGradient(COLOUR_PINK, SHADE_LIGHTER) : PC_RED;
+	if (front->cur_speed == 0) {
+		if (front->type == VEH_TRAIN && Train::From(front)->flags.Test(VehicleRailFlag::Stuck)) return GetColourGradient(COLOUR_PINK, SHADE_LIGHTER);
+		return PC_RED;
+	}
 	return PC_WHITE;
 }
 
 /**
- * Draw the trains: a bar per vehicle, at the height the ordinary view draws
- * it, with a yellow dot at the head of the train.
- * @param underground Draw the parts below the surface, else the others.
+ * Colour of the vehicles sharing an order list: the same for all of them and
+ * the same as long as the list exists, as it is picked from its pool index.
  */
-static void DrawXRayTrains(const XRayDrawer &d, bool underground)
+static PixelColour GetXRayOrderColour(const Vehicle *front)
 {
+	if (front->orders == nullptr) return PC_GREY;
+	static const Colours colours[] = {
+		COLOUR_RED, COLOUR_GREEN, COLOUR_BLUE, COLOUR_YELLOW, COLOUR_PURPLE, COLOUR_ORANGE, COLOUR_LIGHT_BLUE, COLOUR_PINK,
+		COLOUR_CREAM, COLOUR_PALE_GREEN, COLOUR_MAUVE, COLOUR_BROWN, COLOUR_DARK_GREEN, COLOUR_WHITE,
+	};
+	uint32_t h = static_cast<uint32_t>(front->orders->index.base() + 1) * 2654435761U;
+	Colours c = colours[(h >> 16) % std::size(colours)];
+	return GetColourGradient(c, (h & (1U << 8)) != 0 ? SHADE_LIGHTER : SHADE_NORMAL);
+}
+
+/** Body colour of a vehicle: by its shared orders when asked for, else by what it does. */
+static PixelColour GetXRayBodyColour(const Vehicle *front)
+{
+	return _xray_settings.order_colours ? GetXRayOrderColour(front) : GetXRayStateColour(front);
+}
+
+/** Colour of the mark on the head of a vehicle: what it does when the body has the colour of its orders. */
+static PixelColour GetXRayHeadColour(const Vehicle *front)
+{
+	return _xray_settings.order_colours ? GetXRayStateColour(front) : PC_YELLOW;
+}
+
+/**
+ * Draw a vehicle part as a bar along its direction, at the height the
+ * ordinary view draws it, with a mark at the head of the vehicle.
+ * @param len Length of the part, in world units (a full wagon is 8).
+ * @param normal_width Width of the bar at the normal zoom level.
+ */
+static void DrawXRayVehicleBar(const XRayDrawer &d, const Vehicle *v, int len, int normal_width)
+{
+	int z = GetVehicleViewportZ(v);
+	int dx = _xray_dir_dx[v->direction];
+	int dy = _xray_dir_dy[v->direction];
+	int half = std::max(1, (dx != 0 && dy != 0 ? len * 3 / 8 : len / 2) - 1);
+	Point a = d.Screen(v->x_pos - dx * half, v->y_pos - dy * half, z);
+	Point b = d.Screen(v->x_pos + dx * half, v->y_pos + dy * half, z);
+	int width = std::max(3, d.Px(normal_width));
+	if (!d.Visible(a, b, width + 2)) return;
+
+	const Vehicle *front = v->First();
+	d.Line(a, b, PC_BLACK, width + 2);
+	d.Line(a, b, GetXRayBodyColour(front), width);
+	if (v == front) d.Square(b, std::max(1, d.Px(2)), GetXRayHeadColour(front), PC_BLACK, 1);
+}
+
+/** Draw an aircraft: an arrow the way it flies, at its height, with a thin line down to the ground. */
+static void DrawXRayAircraft(const XRayDrawer &d, const Aircraft *v)
+{
+	Point p = d.Screen(v->x_pos, v->y_pos, v->z_pos);
+	int x = Clamp<int>(v->x_pos, 0, Map::SizeX() * TILE_SIZE - 1);
+	int y = Clamp<int>(v->y_pos, 0, Map::SizeY() * TILE_SIZE - 1);
+	Point ground = d.Screen(v->x_pos, v->y_pos, GetSlopePixelZ(x, y));
+	int r = std::max(5, d.Px(9));
+	if (!d.Visible(p, ground, r + 2)) return;
+
+	if (ground.y - p.y > r) d.Line(p, ground, PC_DARK_GREY, 1, std::max(2, d.Px(3)));
+	Point ahead = d.Screen(v->x_pos + _xray_dir_dx[v->direction] * 8, v->y_pos + _xray_dir_dy[v->direction] * 8, v->z_pos);
+	int dx = ahead.x - p.x;
+	int dy = ahead.y - p.y;
+	int len = std::max<int>(1, IntSqrt(dx * dx + dy * dy));
+	int ux = dx * 256 / len;
+	int uy = dy * 256 / len;
+	auto arrow = [&](int s) -> std::array<Point, 3> {
+		return {{
+			{p.x + ux * s / 256, p.y + uy * s / 256},
+			{p.x - ux * s / 256 - uy * s * 2 / 3 / 256, p.y - uy * s / 256 + ux * s * 2 / 3 / 256},
+			{p.x - ux * s / 256 + uy * s * 2 / 3 / 256, p.y - uy * s / 256 - ux * s * 2 / 3 / 256},
+		}};
+	};
+	GfxFillPolygon(arrow(r + 2), PC_BLACK);
+	GfxFillPolygon(arrow(r), GetXRayBodyColour(v));
+	if (_xray_settings.order_colours) d.Square(p, std::max(1, d.Px(2)), GetXRayHeadColour(v), PC_BLACK, 1);
+}
+
+/**
+ * Draw the vehicles of the shown layers.
+ * @param underground Draw the train parts below the surface, else everything else.
+ */
+static void DrawXRayVehicles(const XRayDrawer &d, bool underground)
+{
+	if (underground) {
+		for (const Train *t : Train::Iterate()) {
+			if (t->IsUnderground() && IsRailXRayTrainPartDrawn(t)) DrawXRayVehicleBar(d, t, t->gcache.cached_veh_length, 6);
+		}
+		return;
+	}
+	if (_xray_settings.water) {
+		for (const Ship *v : Ship::Iterate()) {
+			if (IsXRayVehicleDrawn(v)) DrawXRayVehicleBar(d, v, 12, 8);
+		}
+	}
+	if (_xray_settings.road) {
+		for (const RoadVehicle *v : RoadVehicle::Iterate()) {
+			if (IsXRayVehicleDrawn(v)) DrawXRayVehicleBar(d, v, v->gcache.cached_veh_length, 4);
+		}
+	}
 	for (const Train *t : Train::Iterate()) {
-		if (t->IsUnderground() != underground || !IsRailXRayTrainPartDrawn(t)) continue;
-
-		int z = GetVehicleViewportZ(t);
-		int dx = _xray_dir_dx[t->direction];
-		int dy = _xray_dir_dy[t->direction];
-		int len = t->gcache.cached_veh_length;
-		int half = std::max(1, (dx != 0 && dy != 0 ? len * 3 / 8 : len / 2) - 1);
-		Point a = d.Screen(t->x_pos - dx * half, t->y_pos - dy * half, z);
-		Point b = d.Screen(t->x_pos + dx * half, t->y_pos + dy * half, z);
-		int width = std::max(3, d.Px(6));
-		if (!d.Visible(a, b, width + 2)) continue;
-
-		d.Line(a, b, PC_BLACK, width + 2);
-		d.Line(a, b, GetXRayTrainColour(t->First()), width);
-		if (t == t->First()) d.Square(b, d.Px(2), PC_YELLOW, PC_BLACK, 1);
+		if (!t->IsUnderground() && IsRailXRayTrainPartDrawn(t)) DrawXRayVehicleBar(d, t, t->gcache.cached_veh_length, 6);
+	}
+	if (_xray_settings.air) {
+		for (const Aircraft *v : Aircraft::Iterate()) {
+			if (IsXRayVehicleDrawn(v)) DrawXRayAircraft(d, v);
+		}
 	}
 }
 
-/** Whether a train shows the arrow to its destination. */
-static bool IsXRayDestinationShown(const Train *t)
+/** Whether a vehicle shows the arrow to its destination. */
+static bool IsXRayDestinationShown(const Vehicle *v)
 {
 	switch (_rail_xray_destinations) {
 		case RailXRayDestinations::All: return true;
 		case RailXRayDestinations::Selected:
-			return FindWindowById(WC_VEHICLE_VIEW, t->index) != nullptr || FindWindowById(WC_VEHICLE_ORDERS, t->index) != nullptr ||
-					FindWindowById(WC_VEHICLE_TIMETABLE, t->index) != nullptr;
+			return FindWindowById(WC_VEHICLE_VIEW, v->index) != nullptr || FindWindowById(WC_VEHICLE_ORDERS, v->index) != nullptr ||
+					FindWindowById(WC_VEHICLE_TIMETABLE, v->index) != nullptr;
 		default: return false;
 	}
 }
 
 /**
- * The world position a train heads for by its current order: the tile the
+ * The world position a vehicle heads for by its current order: the tile the
  * pathfinder aims at, at its height; for an underground station the platform
  * of it nearest to the train, at its level.
- * @param t The front of the train.
+ * @param v The front of the vehicle.
  * @param[out] target World x, y and height.
- * @return False when the train goes nowhere in particular.
+ * @return False when the vehicle goes nowhere in particular.
  */
-static bool GetXRayTrainTarget(const Train *t, std::array<int, 3> &target)
+static bool GetXRayVehicleTarget(const Vehicle *v, std::array<int, 3> &target)
 {
-	if (!t->current_order.IsGotoOrder()) return false;
+	if (!v->current_order.IsGotoOrder()) return false;
 
-	if (t->current_order.IsType(OT_GOTO_STATION) || t->current_order.IsType(OT_GOTO_WAYPOINT)) {
-		auto it = _station_complexes.find(t->current_order.GetDestination().base());
+	if (v->type == VEH_TRAIN && (v->current_order.IsType(OT_GOTO_STATION) || v->current_order.IsType(OT_GOTO_WAYPOINT))) {
+		auto it = _station_complexes.find(v->current_order.GetDestination().base());
 		if (it != _station_complexes.end()) {
 			const StationComplexNode *best = nullptr;
 			uint best_dist = UINT_MAX;
 			for (const StationComplexNode &n : it->second.nodes) {
 				if (n.role != StationRole::Platform || !_multilayer_map.IsValidSlice(n.ref.slice)) continue;
-				uint dist = DistanceManhattan(n.ref.tile, t->tile);
+				uint dist = DistanceManhattan(n.ref.tile, v->tile);
 				if (dist < best_dist) {
 					best_dist = dist;
 					best = &n;
@@ -784,7 +1090,7 @@ static bool GetXRayTrainTarget(const Train *t, std::array<int, 3> &target)
 		}
 	}
 
-	TileIndex tile = t->dest_tile;
+	TileIndex tile = v->dest_tile;
 	if (!IsValidTile(tile)) return false;
 	int x = TileX(tile) * TILE_SIZE + TILE_SIZE / 2;
 	int y = TileY(tile) * TILE_SIZE + TILE_SIZE / 2;
@@ -792,16 +1098,16 @@ static bool GetXRayTrainTarget(const Train *t, std::array<int, 3> &target)
 	return true;
 }
 
-/** Draw a dashed arrow from the head of each train that shows it to where its current order sends it. */
+/** Draw a dashed arrow from the head of each vehicle that shows it to where its current order sends it. */
 static void DrawXRayDestinations(const XRayDrawer &d)
 {
 	if (_rail_xray_destinations == RailXRayDestinations::Off) return;
-	for (const Train *t : Train::Iterate()) {
-		if (t != t->First() || !IsRailXRayTrainPartDrawn(t) || !IsXRayDestinationShown(t)) continue;
+	for (const Vehicle *v : Vehicle::Iterate()) {
+		if (!v->IsPrimaryVehicle() || !IsXRayVehicleDrawn(v) || !IsXRayDestinationShown(v)) continue;
 		std::array<int, 3> target;
-		if (!GetXRayTrainTarget(t, target)) continue;
+		if (!GetXRayVehicleTarget(v, target)) continue;
 
-		Point a = d.Screen(t->x_pos, t->y_pos, GetVehicleViewportZ(t));
+		Point a = d.Screen(v->x_pos, v->y_pos, GetVehicleViewportZ(v));
 		Point b = d.Screen(target[0], target[1], target[2]);
 		int width = std::max(2, d.Px(2));
 		if (!d.Visible(a, b, width + 16)) continue;
@@ -824,16 +1130,80 @@ static void DrawXRayDestinations(const XRayDrawer &d)
 	}
 }
 
-/** Write the name of every train above its head. */
-static void DrawXRayTrainLabels(const XRayDrawer &d)
+/**
+ * Write the name of every vehicle above its head: trains at every zoom level
+ * that has names, the more numerous road vehicles, ships and aircraft only
+ * when zoomed in.
+ */
+static void DrawXRayVehicleLabels(const XRayDrawer &d)
 {
-	for (const Train *t : Train::Iterate()) {
-		if (t != t->First() || !IsRailXRayTrainPartDrawn(t)) continue;
-		Point head = d.Screen(t->x_pos, t->y_pos, GetVehicleViewportZ(t));
-		head.y -= std::max(4, d.Px(6));
+	for (const Vehicle *v : Vehicle::Iterate()) {
+		if (!v->IsPrimaryVehicle() || !IsXRayVehicleDrawn(v)) continue;
+		if (v->type != VEH_TRAIN && d.zoom > ZoomLevel::Normal) continue;
+		Point head = d.Screen(v->x_pos, v->y_pos, GetVehicleViewportZ(v));
+		head.y -= std::max(4, d.Px(v->type == VEH_AIRCRAFT ? 10 : 6));
 		/* Rough cull before formatting the name. */
 		if (!d.Visible(head, head, 120)) continue;
-		d.Label(head, GetString(STR_VEHICLE_NAME, t->index), TC_WHITE);
+		d.Label(head, GetString(STR_VEHICLE_NAME, v->index), TC_WHITE);
+	}
+}
+
+/** Whether the station is drawn: one of its facilities is in a shown layer, and its owner is shown. */
+static bool IsXRayStationShown(const BaseStation *st)
+{
+	if (!XRayShowsOwner(st->owner)) return false;
+	return st->facilities.Any(GetRailXRaySignFacilities());
+}
+
+/** Colour of a station rating. */
+static TextColour GetXRayRatingColour(uint percent)
+{
+	if (percent < 35) return TC_RED;
+	if (percent < 60) return TC_YELLOW;
+	return TC_GREEN;
+}
+
+/**
+ * Write under the name of each shown station the cargo waiting there and its
+ * rating, one row per cargo: the cargo icon, the amount, the rating in its colour.
+ */
+static void DrawXRayStationCargo(const XRayDrawer &d)
+{
+	if (!_xray_settings.cargo || !d.ShowsLabels()) return;
+	int sign_height = GetCharacterHeight(d.zoom <= ZoomLevel::Normal ? FS_NORMAL : FS_SMALL) + 4;
+	int row = GetCharacterHeight(FS_SMALL) + 2;
+
+	for (const Station *st : Station::Iterate()) {
+		if (!IsXRayStationShown(st)) continue;
+		Point top{UnScaleByZoomLower(st->sign.center, d.zoom), UnScaleByZoomLower(st->sign.top, d.zoom) + sign_height};
+		if (!d.Visible(top, top, 200)) continue;
+
+		int y = top.y;
+		for (const CargoSpec *cs : _sorted_standard_cargo_specs) {
+			CargoType c = cs->Index();
+			if (IsValidCargoType(_xray_settings.cargo_filter) && c != _xray_settings.cargo_filter) continue;
+			const GoodsEntry &ge = st->goods[c];
+			uint waiting = ge.HasData() ? ge.GetData().cargo.TotalCount() : 0;
+			if (!ge.HasRating() && waiting == 0) continue;
+
+			std::string amount = GetString(STR_JUST_COMMA, waiting);
+			std::string rating = ge.HasRating() ? GetString(STR_XRAY_RATING, ToPercent8(ge.rating)) : std::string{};
+			SpriteID icon = cs->GetCargoIcon();
+			Dimension icon_size = GetSpriteSize(icon);
+			int amount_width = GetStringBoundingBox(amount, FS_SMALL).width;
+			int rating_width = rating.empty() ? 0 : GetStringBoundingBox(rating, FS_SMALL).width + 4;
+			int width = static_cast<int>(icon_size.width) + 3 + amount_width + rating_width + 4;
+			int h = std::max<int>(row, icon_size.height + 2);
+
+			int left = top.x - width / 2;
+			GfxFillRect(left, y, left + width, y + h - 1, PC_BLACK);
+			DrawSprite(icon, PAL_NONE, left + 2, y + (h - static_cast<int>(icon_size.height)) / 2);
+			int x = left + 2 + icon_size.width + 3;
+			int ty = y + (h - GetCharacterHeight(FS_SMALL)) / 2;
+			DrawString(x, x + amount_width, ty, amount, TC_WHITE, SA_LEFT, false, FS_SMALL);
+			if (!rating.empty()) DrawString(x + amount_width + 4, x + amount_width + rating_width, ty, rating, GetXRayRatingColour(ToPercent8(ge.rating)), SA_LEFT, false, FS_SMALL);
+			y += h;
+		}
 	}
 }
 
@@ -922,30 +1292,27 @@ void ViewportDrawRailXRay(const DrawPixelInfo &vd_dpi)
 		}
 	}
 
-	if (_multilayer_map.IsAllocated()) {
+	if (_xray_settings.rail && _multilayer_map.IsAllocated()) {
 		for (XRayStage stage : {XRayStage::Base, XRayStage::Overlay}) {
 			for (TileIndex tile : tiles) DrawXRayUndergroundTile(d, tile, stage);
 		}
-		DrawXRayTrains(d, true);
+		DrawXRayVehicles(d, true);
 	}
 
 	DrawXRayTunnels(d);
 	for (XRayStage stage : {XRayStage::Base, XRayStage::Overlay}) {
-		for (TileIndex tile : tiles) DrawXRaySurfaceTile(d, tile, stage);
+		for (TileIndex tile : tiles) DrawXRaySurfaceLayers(d, tile, stage);
 	}
-	DrawXRayTrains(d, false);
+	DrawXRayVehicles(d, false);
 	DrawXRayDestinations(d);
 
-	/* Names on top of everything: every train and every depot (stations and
-	 * waypoints have their signs, see ViewportAddRailXRaySigns). */
+	/* Names on top of everything: vehicles and depots (stations and waypoints
+	 * have their signs, see ViewportAddRailXRaySigns), the cargo at the stations. */
 	if (d.ShowsLabels()) {
-		for (TileIndex tile : tiles) {
-			if (!IsRailDepotTile(tile)) continue;
-			XRayGeom g{tile};
-			d.Label(g.P(d, TILE_SIZE / 2, TILE_SIZE / 2), GetString(STR_DEPOT_NAME, VEH_TRAIN, GetDepotIndex(tile)), TC_ORANGE);
-		}
-		DrawXRayTrainLabels(d);
+		for (TileIndex tile : tiles) DrawXRayDepotLabel(d, tile);
+		DrawXRayVehicleLabels(d);
 	}
+	DrawXRayStationCargo(d);
 
 	DrawXRayTileSelection(d);
 }
@@ -1030,7 +1397,8 @@ bool RailXRayPickPoint(int vx, int vy, Point &pt)
 	return found;
 }
 
-void SetRailXRayView(bool on)
+/** Switch the view itself on or off, without its window. */
+static void ApplyRailXRayView(bool on)
 {
 	if (on == _rail_xray_view) return;
 	_rail_xray_view = on;
@@ -1043,6 +1411,21 @@ void SetRailXRayView(bool on)
 	}
 	MarkWholeScreenDirty();
 	InvalidateWindowClassesData(WC_MAIN_TOOLBAR);
+}
+
+void SetRailXRayView(bool on)
+{
+	ApplyRailXRayView(on);
+	if (on) {
+		ShowRailXRayWindow();
+	} else {
+		CloseWindowById(WC_RAIL_XRAY, 0);
+	}
+}
+
+void RailXRayWindowClosed()
+{
+	ApplyRailXRayView(false);
 }
 
 /** Repaint the view now and then: reservations and signals change without marking it dirty. */

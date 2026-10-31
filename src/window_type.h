@@ -738,6 +738,12 @@ enum WindowClass : uint16_t {
 	 */
 	WC_HELPWIN,
 
+	/**
+	 * X-ray view window; %Window numbers:
+	 *   - 0 = #RailXRayWidgets
+	 */
+	WC_RAIL_XRAY,
+
 	WC_INVALID = 0xFFFF, ///< Invalid window.
 };
 

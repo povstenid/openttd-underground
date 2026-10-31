@@ -473,13 +473,34 @@ STR_SETTINGS_MENU_FULL_DETAIL                                   :Full detail
 STR_SETTINGS_MENU_TRANSPARENT_BUILDINGS                         :Transparent buildings
 STR_SETTINGS_MENU_TRANSPARENT_SIGNS                             :Transparent signs
 STR_SETTINGS_MENU_TRANSPARENT_PEDESTRIANS                       :Transparent pedestrians
-STR_SETTINGS_MENU_RAIL_XRAY                                     :Rail X-ray view (all levels)
+STR_SETTINGS_MENU_RAIL_XRAY                                     :X-ray view
 STR_RAIL_XRAY_SIGNAL_BLOCK                                      :B
 STR_RAIL_XRAY_SIGNAL_ENTRY                                      :En
 STR_RAIL_XRAY_SIGNAL_EXIT                                       :Ex
 STR_RAIL_XRAY_SIGNAL_COMBO                                      :C
 STR_RAIL_XRAY_SIGNAL_PBS                                        :P
 STR_RAIL_XRAY_SIGNAL_PBS_ONEWAY                                 :P1
+STR_XRAY_CAPTION                                                :X-ray
+STR_XRAY_LAYER_RAIL                                             :Railways (all levels)
+STR_XRAY_LAYER_ROAD                                             :Roads, stops and road vehicles
+STR_XRAY_LAYER_WATER                                            :Docks, buoys and ships
+STR_XRAY_LAYER_AIR                                              :Airports and aircraft
+STR_XRAY_LAYER_TOOLTIP                                          :{BLACK}Show or hide this layer
+STR_XRAY_CARGO                                                  :Cargo and ratings at stations
+STR_XRAY_CARGO_TOOLTIP                                          :{BLACK}Under the name of each station: the cargo waiting there, how much, and its rating
+STR_XRAY_ORDER_COLOURS                                          :Colour by shared orders
+STR_XRAY_ORDER_COLOURS_TOOLTIP                                  :{BLACK}Vehicles sharing their orders have one colour; the mark at their head shows what they do
+STR_XRAY_DESTINATIONS                                           :{BLACK}Arrows to destination:
+STR_XRAY_DESTINATIONS_TOOLTIP                                   :{BLACK}Draw an arrow from vehicles to where their current order sends them
+STR_XRAY_DESTINATIONS_OFF                                       :None
+STR_XRAY_DESTINATIONS_SELECTED                                  :Vehicles with an open window
+STR_XRAY_DESTINATIONS_ALL                                       :All vehicles
+STR_XRAY_CARGO_FILTER                                           :{BLACK}Cargo:
+STR_XRAY_CARGO_FILTER_TOOLTIP                                   :{BLACK}List only this cargo at the stations
+STR_XRAY_COMPANY_FILTER                                         :{BLACK}Company:
+STR_XRAY_COMPANY_FILTER_TOOLTIP                                 :{BLACK}Draw only what belongs to this company
+STR_XRAY_FILTER_ALL                                             :All
+STR_XRAY_RATING                                                 :{NUM}%
 
 # File menu
 STR_FILE_MENU_SAVE_GAME                                         :Save game

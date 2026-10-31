@@ -1128,7 +1128,7 @@ void CallVehicleTicks()
 static bool IsVehicleVisibleInCurrentView(const Vehicle *v)
 {
 	/* The rail X-ray view shows trains only, on every level. */
-	if (IsRailXRayView()) return v->type == VEH_TRAIN && IsRailXRayTrainPartDrawn(Train::From(v));
+	if (IsRailXRayView()) return IsXRayVehicleDrawn(v);
 
 	if (v->type == VEH_TRAIN) {
 		const Train *train = Train::From(v);
