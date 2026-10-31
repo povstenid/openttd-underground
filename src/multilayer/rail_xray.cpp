@@ -56,6 +56,7 @@
 #include "../station_base.h"
 #include "../cargotype.h"
 #include "../road_func.h"
+#include "../order_base.h"
 #include "../water_map.h"
 #include "../tunnel_map.h"
 #include "../tunnelbridge_map.h"
@@ -937,16 +938,27 @@ static PixelColour GetXRayStateColour(const Vehicle *front)
  * Colour of the vehicles sharing an order list: the same for all of them and
  * the same as long as the list exists, as it is picked from its pool index.
  */
-static PixelColour GetXRayOrderColour(const Vehicle *front)
+static uint32_t GetXRayOrderListHash(const OrderList *list)
 {
-	if (front->orders == nullptr) return PC_GREY;
+	return static_cast<uint32_t>(list->index.base() + 1) * 2654435761U;
+}
+
+/** Colour of an order list, for its vehicles and its route. */
+static PixelColour GetXRayOrderListColour(const OrderList *list)
+{
 	static const Colours colours[] = {
 		COLOUR_RED, COLOUR_GREEN, COLOUR_BLUE, COLOUR_YELLOW, COLOUR_PURPLE, COLOUR_ORANGE, COLOUR_LIGHT_BLUE, COLOUR_PINK,
 		COLOUR_CREAM, COLOUR_PALE_GREEN, COLOUR_MAUVE, COLOUR_BROWN, COLOUR_DARK_GREEN, COLOUR_WHITE,
 	};
-	uint32_t h = static_cast<uint32_t>(front->orders->index.base() + 1) * 2654435761U;
+	uint32_t h = GetXRayOrderListHash(list);
 	Colours c = colours[(h >> 16) % std::size(colours)];
 	return GetColourGradient(c, (h & (1U << 8)) != 0 ? SHADE_LIGHTER : SHADE_NORMAL);
+}
+
+static PixelColour GetXRayOrderColour(const Vehicle *front)
+{
+	if (front->orders == nullptr) return PC_GREY;
+	return GetXRayOrderListColour(front->orders);
 }
 
 /** Body colour of a vehicle: by its shared orders when asked for, else by what it does. */
@@ -1045,15 +1057,156 @@ static void DrawXRayVehicles(const XRayDrawer &d, bool underground)
 	}
 }
 
+/** Whether a vehicle has its view, orders or timetable window open. */
+static bool IsXRayVehicleSelected(const Vehicle *v)
+{
+	return FindWindowById(WC_VEHICLE_VIEW, v->index) != nullptr || FindWindowById(WC_VEHICLE_ORDERS, v->index) != nullptr ||
+			FindWindowById(WC_VEHICLE_TIMETABLE, v->index) != nullptr;
+}
+
 /** Whether a vehicle shows the arrow to its destination. */
 static bool IsXRayDestinationShown(const Vehicle *v)
 {
 	switch (_rail_xray_destinations) {
 		case RailXRayDestinations::All: return true;
-		case RailXRayDestinations::Selected:
-			return FindWindowById(WC_VEHICLE_VIEW, v->index) != nullptr || FindWindowById(WC_VEHICLE_ORDERS, v->index) != nullptr ||
-					FindWindowById(WC_VEHICLE_TIMETABLE, v->index) != nullptr;
+		case RailXRayDestinations::Selected: return IsXRayVehicleSelected(v);
 		default: return false;
+	}
+}
+
+/** Whether the layer of a vehicle type is shown. */
+static bool IsXRayLayerShown(VehicleType type)
+{
+	switch (type) {
+		case VEH_TRAIN: return _xray_settings.rail;
+		case VEH_ROAD: return _xray_settings.road;
+		case VEH_SHIP: return _xray_settings.water;
+		case VEH_AIRCRAFT: return _xray_settings.air;
+		default: return false;
+	}
+}
+
+/**
+ * Where an order sends its vehicles, for the route lines: the station (for a
+ * metro station of a train its first platform, at its level) or the depot.
+ * @param order The order.
+ * @param type Type of the vehicles.
+ * @param[out] point World x, y and height.
+ * @return False when the order goes nowhere fixed.
+ */
+static bool GetXRayOrderPoint(const Order &order, VehicleType type, std::array<int, 3> &point)
+{
+	TileIndex tile;
+	switch (order.GetType()) {
+		case OT_GOTO_STATION:
+		case OT_GOTO_WAYPOINT:
+		case OT_IMPLICIT: {
+			uint16_t id = order.GetDestination().base();
+			if (type == VEH_TRAIN) {
+				auto it = _station_complexes.find(id);
+				if (it != _station_complexes.end()) {
+					for (const StationComplexNode &n : it->second.nodes) {
+						if (n.role != StationRole::Platform || !_multilayer_map.IsValidSlice(n.ref.slice)) continue;
+						point = {static_cast<int>(TileX(n.ref.tile) * TILE_SIZE + TILE_SIZE / 2), static_cast<int>(TileY(n.ref.tile) * TILE_SIZE + TILE_SIZE / 2),
+								_multilayer_map.GetSlice(n.ref.slice).span.z_bot * static_cast<int>(TILE_HEIGHT)};
+						return true;
+					}
+				}
+			}
+			const BaseStation *st = BaseStation::GetIfValid(StationID(id));
+			if (st == nullptr) return false;
+			tile = st->xy;
+			break;
+		}
+
+		case OT_GOTO_DEPOT: {
+			if (order.GetDepotActionType().Test(OrderDepotActionFlag::NearestDepot)) return false;
+			const Depot *depot = Depot::GetIfValid(DepotID(order.GetDestination().base()));
+			if (depot == nullptr) return false;
+			tile = depot->xy;
+			break;
+		}
+
+		default: return false;
+	}
+	if (!IsValidTile(tile)) return false;
+	int x = TileX(tile) * TILE_SIZE + TILE_SIZE / 2;
+	int y = TileY(tile) * TILE_SIZE + TILE_SIZE / 2;
+	point = {x, y, GetSlopePixelZ(x, y)};
+	return true;
+}
+
+/**
+ * Draw the routes of the order lists: from stop to stop in the order of the
+ * orders, back to the first one, with an arrow the way the vehicles go, in
+ * the colour of the list. Implicit orders are dashed. Lists sharing stops are
+ * drawn a little apart, each to the right of its way.
+ */
+static void DrawXRayRoutes(const XRayDrawer &d)
+{
+	if (_xray_settings.routes == RailXRayDestinations::Off) return;
+
+	struct Stop {
+		Point screen;
+		bool implicit;
+	};
+	std::vector<Stop> stops;
+
+	for (const OrderList *list : OrderList::Iterate()) {
+		const Vehicle *first = list->GetFirstSharedVehicle();
+		if (first == nullptr || !IsXRayLayerShown(first->type) || !XRayShowsOwner(first->owner)) continue;
+		if (_xray_settings.routes == RailXRayDestinations::Selected) {
+			bool selected = false;
+			for (const Vehicle *v = first; v != nullptr && !selected; v = v->NextShared()) selected = IsXRayVehicleSelected(v);
+			if (!selected) continue;
+		}
+
+		stops.clear();
+		for (const Order &order : list->GetOrders()) {
+			bool implicit = order.IsType(OT_IMPLICIT);
+			if (implicit && !_xray_settings.implicit_orders) continue;
+			std::array<int, 3> p;
+			if (!GetXRayOrderPoint(order, first->type, p)) continue;
+			Point s = d.Screen(p[0], p[1], p[2]);
+			/* The same stop twice in a row adds nothing to the line. */
+			if (!stops.empty() && stops.back().screen.x == s.x && stops.back().screen.y == s.y) continue;
+			stops.push_back({s, implicit});
+		}
+		if (stops.size() < 2) continue;
+
+		PixelColour colour = GetXRayOrderListColour(list);
+		uint32_t h = GetXRayOrderListHash(list);
+		int offset = std::max(3, d.Px(4)) + static_cast<int>((h >> 4) % 4) * std::max(2, d.Px(3));
+		int width = std::max(3, d.Px(3));
+		for (size_t i = 0; i < stops.size(); i++) {
+			const Stop &from = stops[i];
+			const Stop &to = stops[(i + 1) % stops.size()];
+			int dx = to.screen.x - from.screen.x;
+			int dy = to.screen.y - from.screen.y;
+			int len = std::max<int>(1, IntSqrt(dx * dx + dy * dy));
+			int ux = dx * 256 / len;
+			int uy = dy * 256 / len;
+			/* To the right of the way, so a line back between two stops runs beside the line there. */
+			Point shift{-uy * offset / 256, ux * offset / 256};
+			Point a{from.screen.x + shift.x, from.screen.y + shift.y};
+			Point b{to.screen.x + shift.x, to.screen.y + shift.y};
+			if (!d.Visible(a, b, width + 8)) continue;
+
+			bool dashed = from.implicit || to.implicit;
+			d.Line(a, b, PC_BLACK, width + 2, dashed ? std::max(3, d.Px(5)) : 0);
+			d.Line(a, b, colour, width, dashed ? std::max(3, d.Px(5)) : 0);
+
+			/* The way it goes: an arrow head two thirds along. */
+			Point m{a.x + dx * 2 / 3, a.y + dy * 2 / 3};
+			int r = std::max(4, d.Px(6));
+			std::array<Point, 3> head = {{
+				{m.x + ux * r / 256, m.y + uy * r / 256},
+				{m.x - ux * r / 256 - uy * r * 2 / 3 / 256, m.y - uy * r / 256 + ux * r * 2 / 3 / 256},
+				{m.x - ux * r / 256 + uy * r * 2 / 3 / 256, m.y - uy * r / 256 - ux * r * 2 / 3 / 256},
+			}};
+			GfxFillPolygon(head, colour);
+		}
+		for (const Stop &stop : stops) d.Square(stop.screen, std::max(2, d.Px(3)), colour, PC_BLACK, 1);
 	}
 }
 
@@ -1303,6 +1456,7 @@ void ViewportDrawRailXRay(const DrawPixelInfo &vd_dpi)
 	for (XRayStage stage : {XRayStage::Base, XRayStage::Overlay}) {
 		for (TileIndex tile : tiles) DrawXRaySurfaceLayers(d, tile, stage);
 	}
+	DrawXRayRoutes(d);
 	DrawXRayVehicles(d, false);
 	DrawXRayDestinations(d);
 

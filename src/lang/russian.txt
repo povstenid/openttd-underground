@@ -621,6 +621,10 @@ STR_XRAY_COMPANY_FILTER                                         :{BLACK}Комп
 STR_XRAY_COMPANY_FILTER_TOOLTIP                                 :{BLACK}Показывать только то, что принадлежит этой компании
 STR_XRAY_FILTER_ALL                                             :Все
 STR_XRAY_RATING                                                 :{NUM}%
+STR_XRAY_ROUTES                                                 :{BLACK}Маршруты:
+STR_XRAY_ROUTES_TOOLTIP                                         :{BLACK}Приказы линиями от пункта к пункту, одна линия на общий список приказов, его цветом
+STR_XRAY_IMPLICIT                                               :Автоматические пункты в маршрутах
+STR_XRAY_IMPLICIT_TOOLTIP                                       :{BLACK}Показывать пункты, которые игра добавляет сама (автоматические приказы), пунктиром
 
 # File menu
 STR_FILE_MENU_SAVE_GAME                                         :Сохранить игру

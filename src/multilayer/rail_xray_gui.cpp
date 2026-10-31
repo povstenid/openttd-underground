@@ -31,7 +31,9 @@ enum RailXRayWidgets : WidgetID {
 	WID_XR_AIR,            ///< Layer: airports and aircraft.
 	WID_XR_CARGO,          ///< Cargo and ratings at the stations.
 	WID_XR_ORDER_COLOURS,  ///< Colour by shared orders.
+	WID_XR_IMPLICIT,       ///< Implicit orders in the routes.
 	WID_XR_DESTINATIONS,   ///< Dropdown: arrows to the destinations.
+	WID_XR_ROUTES,         ///< Dropdown: routes of the order lists.
 	WID_XR_CARGO_FILTER,   ///< Dropdown: cargo filter.
 	WID_XR_COMPANY_FILTER, ///< Dropdown: company filter.
 };
@@ -66,6 +68,7 @@ struct RailXRayWindow : Window {
 			case WID_XR_AIR: return &_xray_settings.air;
 			case WID_XR_CARGO: return &_xray_settings.cargo;
 			case WID_XR_ORDER_COLOURS: return &_xray_settings.order_colours;
+			case WID_XR_IMPLICIT: return &_xray_settings.implicit_orders;
 			default: return nullptr;
 		}
 	}
@@ -73,7 +76,7 @@ struct RailXRayWindow : Window {
 	void OnInvalidateData([[maybe_unused]] int data = 0, [[maybe_unused]] bool gui_scope = true) override
 	{
 		/* A switched on toggle is lowered and green, so it shows at a glance. */
-		for (WidgetID widget = WID_XR_RAIL; widget <= WID_XR_ORDER_COLOURS; widget++) {
+		for (WidgetID widget = WID_XR_RAIL; widget <= WID_XR_IMPLICIT; widget++) {
 			bool on = *GetToggle(widget);
 			this->SetWidgetLoweredState(widget, on);
 			this->GetWidget<NWidgetCore>(widget)->colour = on ? COLOUR_GREEN : COLOUR_GREY;
@@ -85,6 +88,9 @@ struct RailXRayWindow : Window {
 		switch (widget) {
 			case WID_XR_DESTINATIONS:
 				return GetString(_xray_destination_names[to_underlying(_rail_xray_destinations)]);
+
+			case WID_XR_ROUTES:
+				return GetString(_xray_destination_names[to_underlying(_xray_settings.routes)]);
 
 			case WID_XR_CARGO_FILTER:
 				if (!IsValidCargoType(_xray_settings.cargo_filter)) return GetString(STR_XRAY_FILTER_ALL);
@@ -101,7 +107,7 @@ struct RailXRayWindow : Window {
 
 	void UpdateWidgetSize(WidgetID widget, Dimension &size, [[maybe_unused]] const Dimension &padding, [[maybe_unused]] Dimension &fill, [[maybe_unused]] Dimension &resize) override
 	{
-		if (widget != WID_XR_DESTINATIONS && widget != WID_XR_CARGO_FILTER && widget != WID_XR_COMPANY_FILTER) return;
+		if (widget != WID_XR_DESTINATIONS && widget != WID_XR_ROUTES && widget != WID_XR_CARGO_FILTER && widget != WID_XR_COMPANY_FILTER) return;
 		Dimension d = GetStringBoundingBox(STR_XRAY_FILTER_ALL);
 		for (StringID str : _xray_destination_names) d = maxdim(d, GetStringBoundingBox(str));
 		for (const CargoSpec *cs : _sorted_standard_cargo_specs) d = maxdim(d, GetStringBoundingBox(cs->name));
@@ -121,12 +127,14 @@ struct RailXRayWindow : Window {
 		}
 
 		switch (widget) {
-			case WID_XR_DESTINATIONS: {
+			case WID_XR_DESTINATIONS:
+			case WID_XR_ROUTES: {
 				DropDownList list;
 				for (int i = 0; i < static_cast<int>(std::size(_xray_destination_names)); i++) {
 					list.push_back(MakeDropDownListStringItem(_xray_destination_names[i], i));
 				}
-				ShowDropDownList(this, std::move(list), to_underlying(_rail_xray_destinations), widget);
+				RailXRayDestinations current = widget == WID_XR_ROUTES ? _xray_settings.routes : _rail_xray_destinations;
+				ShowDropDownList(this, std::move(list), to_underlying(current), widget);
 				break;
 			}
 
@@ -158,6 +166,10 @@ struct RailXRayWindow : Window {
 		switch (widget) {
 			case WID_XR_DESTINATIONS:
 				_rail_xray_destinations = static_cast<RailXRayDestinations>(index);
+				break;
+
+			case WID_XR_ROUTES:
+				_xray_settings.routes = static_cast<RailXRayDestinations>(index);
 				break;
 
 			case WID_XR_CARGO_FILTER:
@@ -194,6 +206,11 @@ static constexpr std::initializer_list<NWidgetPart> _nested_rail_xray_widgets = 
 				NWidget(WWT_TEXT, INVALID_COLOUR), SetFill(1, 0), SetStringTip(STR_XRAY_DESTINATIONS),
 				NWidget(WWT_DROPDOWN, COLOUR_GREY, WID_XR_DESTINATIONS), SetToolTip(STR_XRAY_DESTINATIONS_TOOLTIP),
 			EndContainer(),
+			NWidget(NWID_HORIZONTAL), SetPIP(0, WidgetDimensions::unscaled.hsep_normal, 0),
+				NWidget(WWT_TEXT, INVALID_COLOUR), SetFill(1, 0), SetStringTip(STR_XRAY_ROUTES),
+				NWidget(WWT_DROPDOWN, COLOUR_GREY, WID_XR_ROUTES), SetToolTip(STR_XRAY_ROUTES_TOOLTIP),
+			EndContainer(),
+			NWidget(WWT_TEXTBTN, COLOUR_GREY, WID_XR_IMPLICIT), SetFill(1, 0), SetStringTip(STR_XRAY_IMPLICIT, STR_XRAY_IMPLICIT_TOOLTIP),
 			NWidget(NWID_HORIZONTAL), SetPIP(0, WidgetDimensions::unscaled.hsep_normal, 0),
 				NWidget(WWT_TEXT, INVALID_COLOUR), SetFill(1, 0), SetStringTip(STR_XRAY_CARGO_FILTER),
 				NWidget(WWT_DROPDOWN, COLOUR_GREY, WID_XR_CARGO_FILTER), SetToolTip(STR_XRAY_CARGO_FILTER_TOOLTIP),
