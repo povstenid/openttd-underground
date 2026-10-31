@@ -2252,6 +2252,52 @@ static void AddNearbyStation(TileIndex tile, TileArea *ctx)
 }
 
 /**
+ * Find the own underground stations with a platform in an area. Their
+ * platforms are no station tiles on the map, so the search by tiles misses them.
+ * @param search Area to look for platforms in.
+ * @param ctx Area of the station to be built (it must stay within the station spread of the found station).
+ * @return The stations, each once.
+ */
+static std::vector<StationID> FindUndergroundStationsInArea(TileArea search, const TileArea &ctx)
+{
+	std::vector<StationID> result;
+	for (const auto &[station_id, sc] : _station_complexes) {
+		const Station *st = Station::GetIfValid(StationID(station_id));
+		if (st == nullptr || st->owner != _local_company) continue;
+		bool found = false;
+		for (const StationComplexNode *n : sc.GetPlatforms()) {
+			if (search.Contains(n->ref.tile)) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) continue;
+		StationRect rect = st->rect;
+		if (rect.BeforeAddRect(ctx.tile, ctx.w, ctx.h, StationRect::ADD_TEST).Succeeded()) result.push_back(st->index);
+	}
+	return result;
+}
+
+/**
+ * Add the own underground stations with a platform near the to-be-built
+ * station to the stations it could join.
+ * @param ta Area of the station to be built.
+ * @param max_dist How far around it to look.
+ * @tparam T the station filter type, for stations to look for
+ */
+template <class T>
+static void AddNearbyUndergroundStations(TileArea ta, uint max_dist)
+{
+	if constexpr (std::is_same_v<T, StationTypeFilter>) {
+		TileArea search = ta;
+		search.Expand(max_dist);
+		for (StationID sid : FindUndergroundStationsInArea(search, ta)) {
+			if (std::ranges::find(_stations_nearby_list, sid) == _stations_nearby_list.end()) _stations_nearby_list.push_back(sid);
+		}
+	}
+}
+
+/**
  * Circulate around the to-be-built station to find stations we could join.
  * Make sure that only stations are returned where joining wouldn't exceed
  * station spread and are our own station.
@@ -2293,8 +2339,12 @@ static void FindStationsNearby(TileArea ta, bool distant_join)
 	/* Only search tiles where we have a chance to stay within the station spread.
 	 * The complete check needs to be done in the callback as we don't know the
 	 * extent of the found station, yet. */
-	if (distant_join && std::min(ta.w, ta.h) >= _settings_game.station.station_spread) return;
+	if (distant_join && std::min(ta.w, ta.h) >= _settings_game.station.station_spread) {
+		AddNearbyUndergroundStations<T>(ta, 0);
+		return;
+	}
 	uint max_dist = distant_join ? _settings_game.station.station_spread - std::min(ta.w, ta.h) : 1;
+	AddNearbyUndergroundStations<T>(ta, max_dist);
 
 	for (auto tile : SpiralTileSequence(TileAddByDir(ctx.tile, DIR_N), max_dist, ta.w, ta.h)) {
 		AddNearbyStation<T>(tile, &ctx);
@@ -2491,7 +2541,18 @@ static bool StationJoinerNeeded(const StationPickerCmdProc &proc)
 template <class T>
 void ShowSelectBaseStationIfNeeded(TileArea ta, StationPickerCmdProc&& proc)
 {
-	if (StationJoinerNeeded(proc)) {
+	/* Building right above or next to the platforms of an own underground station
+	 * offers to join it even without ctrl: nothing on the map shows it is there. */
+	bool near_underground = false;
+	if constexpr (std::is_same_v<T, StationTypeFilter>) {
+		if (!_ctrl_pressed && _settings_game.station.distant_join_stations) {
+			TileArea search = ta;
+			search.Expand(1);
+			near_underground = !FindUndergroundStationsInArea(search, ta).empty();
+		}
+	}
+
+	if (StationJoinerNeeded(proc) || (near_underground && proc(true, StationID::Invalid()))) {
 		if (!_settings_client.gui.persistent_buildingtools) ResetObjectToPlace();
 		FindStationsNearby<T>(ta, false);
 		new SelectStationWindow<T>(_select_station_desc, ta, std::move(proc));
