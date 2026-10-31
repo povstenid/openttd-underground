@@ -3007,6 +3007,23 @@ static bool ConRailXRay([[maybe_unused]] std::span<std::string_view> argv)
 	if (argv.empty()) {
 		IConsolePrint(CC_HELP, "Toggle the rail X-ray view: track, stations, depots, signals and trains of every level, nothing else. Usage: 'railxray [on|off]'.");
 		IConsolePrint(CC_HELP, "'railxray dest off|selected|all' - Arrows from trains to their current destination: none, the trains with an open window (default), every train.");
+		IConsolePrint(CC_HELP, "'railxray show rail|road|water|air|cargo|orders on|off' - Show or hide a layer, the cargo at the stations, the colours by shared orders.");
+		return true;
+	}
+
+	if (argv.size() >= 2 && StrEqualsIgnoreCase(argv[1], "show")) {
+		if (argv.size() < 4) return false;
+		bool *layer = nullptr;
+		if (StrEqualsIgnoreCase(argv[2], "rail")) layer = &_xray_settings.rail;
+		if (StrEqualsIgnoreCase(argv[2], "road")) layer = &_xray_settings.road;
+		if (StrEqualsIgnoreCase(argv[2], "water")) layer = &_xray_settings.water;
+		if (StrEqualsIgnoreCase(argv[2], "air")) layer = &_xray_settings.air;
+		if (StrEqualsIgnoreCase(argv[2], "cargo")) layer = &_xray_settings.cargo;
+		if (StrEqualsIgnoreCase(argv[2], "orders")) layer = &_xray_settings.order_colours;
+		if (layer == nullptr) return false;
+		*layer = StrEqualsIgnoreCase(argv[3], "on");
+		InvalidateWindowData(WC_RAIL_XRAY, 0);
+		MarkWholeScreenDirty();
 		return true;
 	}
 

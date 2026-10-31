@@ -12,8 +12,39 @@
 
 #include "../gfx_type.h"
 #include "../tile_type.h"
+#include "../cargo_type.h"
+#include "../company_type.h"
+#include "../station_type.h"
 
 struct Train;
+struct Vehicle;
+
+/** What the X-ray view shows, as set in its window. */
+struct XRaySettings {
+	bool rail = true;           ///< Railways on every level, rail stations and depots, trains.
+	bool road = false;          ///< Roads, tram tracks, road stops and depots, road vehicles.
+	bool water = false;         ///< Docks, buoys, ship depots, ships.
+	bool air = false;           ///< Airports, hangars, aircraft.
+	bool cargo = true;          ///< The cargo waiting at the shown stations and its rating.
+	bool order_colours = false; ///< Vehicles sharing their orders have one colour; what they do shows at their head.
+	CargoType cargo_filter = INVALID_CARGO;          ///< The only cargo listed at the stations, INVALID_CARGO for all.
+	CompanyID company_filter = CompanyID::Invalid(); ///< The only company drawn, Invalid for all.
+};
+
+/** What the X-ray view shows. */
+extern XRaySettings _xray_settings;
+
+/** The station facilities whose names the X-ray view shows: those of the shown layers. */
+StationFacilities GetRailXRaySignFacilities();
+
+/** Whether a vehicle is drawn (and can be clicked) in the X-ray view. */
+bool IsXRayVehicleDrawn(const Vehicle *v);
+
+/** Open the X-ray window (the view is on while it is open). */
+void ShowRailXRayWindow();
+
+/** The X-ray window was closed: leave the view. */
+void RailXRayWindowClosed();
 
 /**
  * Whether the rail X-ray view is on. It replaces the drawing of the viewports

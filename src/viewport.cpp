@@ -1926,7 +1926,7 @@ static void ViewportAddRailXRaySigns(DrawPixelInfo *dpi)
 	uint8_t opt = _display_opt & ~((1 << DO_SHOW_TOWN_NAMES) | (1 << DO_SHOW_SIGNS));
 	opt |= (1 << DO_SHOW_STATION_NAMES) | (1 << DO_SHOW_WAYPOINT_NAMES);
 	AutoRestoreBackup display_opt(_display_opt, opt);
-	AutoRestoreBackup facility_opt(_facility_display_opt, StationFacilities{StationFacility::Train});
+	AutoRestoreBackup facility_opt(_facility_display_opt, GetRailXRaySignFacilities());
 	ViewportAddKdtreeSigns(dpi);
 }
 

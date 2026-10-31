@@ -593,13 +593,34 @@ STR_SETTINGS_MENU_FULL_ANIMATION                                :Полная а
 STR_SETTINGS_MENU_FULL_DETAIL                                   :Полная детализация
 STR_SETTINGS_MENU_TRANSPARENT_BUILDINGS                         :Прозрачные здания
 STR_SETTINGS_MENU_TRANSPARENT_SIGNS                             :Прозрачные надписи
-STR_SETTINGS_MENU_RAIL_XRAY                                     :Рентген ж/д (все уровни)
+STR_SETTINGS_MENU_RAIL_XRAY                                     :Рентген
 STR_RAIL_XRAY_SIGNAL_BLOCK                                      :Б
 STR_RAIL_XRAY_SIGNAL_ENTRY                                      :Вх
 STR_RAIL_XRAY_SIGNAL_EXIT                                       :Вых
 STR_RAIL_XRAY_SIGNAL_COMBO                                      :К
 STR_RAIL_XRAY_SIGNAL_PBS                                        :М
 STR_RAIL_XRAY_SIGNAL_PBS_ONEWAY                                 :М1
+STR_XRAY_CAPTION                                                :Рентген
+STR_XRAY_LAYER_RAIL                                             :Железные дороги (все уровни)
+STR_XRAY_LAYER_ROAD                                             :Дороги, остановки и автотранспорт
+STR_XRAY_LAYER_WATER                                            :Порты, буи и корабли
+STR_XRAY_LAYER_AIR                                              :Аэропорты и самолёты
+STR_XRAY_LAYER_TOOLTIP                                          :{BLACK}Показать или скрыть этот слой
+STR_XRAY_CARGO                                                  :Грузы и рейтинги на станциях
+STR_XRAY_CARGO_TOOLTIP                                          :{BLACK}Под названием каждой станции: какие грузы ждут, сколько и рейтинг по каждому
+STR_XRAY_ORDER_COLOURS                                          :Цвет по общим приказам
+STR_XRAY_ORDER_COLOURS_TOOLTIP                                  :{BLACK}Транспорт с общими приказами одного цвета; что он делает, показывает метка на голове
+STR_XRAY_DESTINATIONS                                           :{BLACK}Стрелки к цели:
+STR_XRAY_DESTINATIONS_TOOLTIP                                   :{BLACK}Стрелка от транспорта к цели его текущего приказа
+STR_XRAY_DESTINATIONS_OFF                                       :Нет
+STR_XRAY_DESTINATIONS_SELECTED                                  :У транспорта с открытым окном
+STR_XRAY_DESTINATIONS_ALL                                       :У всего транспорта
+STR_XRAY_CARGO_FILTER                                           :{BLACK}Груз:
+STR_XRAY_CARGO_FILTER_TOOLTIP                                   :{BLACK}Показывать на станциях только этот груз
+STR_XRAY_COMPANY_FILTER                                         :{BLACK}Компания:
+STR_XRAY_COMPANY_FILTER_TOOLTIP                                 :{BLACK}Показывать только то, что принадлежит этой компании
+STR_XRAY_FILTER_ALL                                             :Все
+STR_XRAY_RATING                                                 :{NUM}%
 
 # File menu
 STR_FILE_MENU_SAVE_GAME                                         :Сохранить игру

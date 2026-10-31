@@ -12,6 +12,7 @@ add_files(
     portal_registry.h
     rail_xray.cpp
     rail_xray.h
+    rail_xray_gui.cpp
     station_complex.cpp
     station_complex.h
     underground_cmd.cpp
