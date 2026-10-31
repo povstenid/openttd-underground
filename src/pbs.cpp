@@ -898,6 +898,25 @@ SignalState GetUndergroundSignalState(const TileRef &ref, Trackdir td, VehicleID
 }
 
 /**
+ * The state an underground signal shows. Block signals show their computed
+ * state (see GetUndergroundSignalState). Path signals show green only while a
+ * train's reserved path runs through them, red otherwise, like vanilla path
+ * signals: their computed state only says whether the tile behind them is
+ * free, which does not mean a train may go (the rest of its path may be held).
+ * @param ref Underground tile reference (tile WITH the signal).
+ * @param td The trackdir the signal stops.
+ * @return SIGNAL_STATE_GREEN or SIGNAL_STATE_RED.
+ */
+SignalState GetUndergroundSignalDisplayState(const TileRef &ref, Trackdir td)
+{
+	if (!ref.IsValid() || !_multilayer_map.IsValidSlice(ref.slice)) return SIGNAL_STATE_RED;
+	const TileSlice &slice = _multilayer_map.GetSlice(ref.slice);
+	if (!CanSliceCarrySignals(slice) || !HasUndergroundSignalOnTrackdir(slice, td)) return GetUndergroundSignalState(ref, td);
+	if (!IsPbsSignal(GetUndergroundSignalType(slice, TrackdirToTrack(td)))) return GetUndergroundSignalState(ref, td);
+	return HasTrack(GetUndergroundReservedTrackbits(ref), TrackdirToTrack(td)) ? SIGNAL_STATE_GREEN : SIGNAL_STATE_RED;
+}
+
+/**
  * Try to reserve a track on an underground slice for a train.
  * Reserving a track the same train already holds succeeds without change.
  * @param ref The underground tile reference.

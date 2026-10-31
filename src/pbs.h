@@ -28,6 +28,7 @@ void FreeUndergroundPathAhead(const TileRef &ref, Trackdir td, VehicleID owner);
 
 bool HasUndergroundSignalOnTrack(const TileRef &ref, Track t);
 SignalState GetUndergroundSignalState(const TileRef &ref, Trackdir td, VehicleID owner = VehicleID::Invalid());
+SignalState GetUndergroundSignalDisplayState(const TileRef &ref, Trackdir td);
 
 void SetRailStationPlatformReservation(TileIndex start, DiagDirection dir, bool b);
 
