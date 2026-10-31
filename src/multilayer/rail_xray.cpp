@@ -251,7 +251,7 @@ struct XRayGeom {
 		int wx = TileX(this->tile) * TILE_SIZE + std::min<int>(lx, TILE_SIZE - 1);
 		int wy = TileY(this->tile) * TILE_SIZE + std::min<int>(ly, TILE_SIZE - 1);
 		switch (this->kind) {
-			case Kind::Surface: return GetSlopePixelZ(wx, wy);
+			case Kind::Surface: return GetSlopePixelZ(wx, wy, true);
 			case Kind::Flat: return this->z;
 			case Kind::Ramp: {
 				int u;
@@ -496,6 +496,28 @@ static void DrawXRayUndergroundDeadEnds(const XRayDrawer &d, const XRayGeom &g, 
 	}
 }
 
+/**
+ * The height of the track or road over a bridge head: up from the ground at
+ * its outer edge to the deck at the bridge side, so it meets the deck drawn
+ * over the tiles under the bridge without a gap.
+ */
+static XRayGeom GetXRayBridgeHeadGeom(TileIndex tile)
+{
+	DiagDirection dir = GetTunnelBridgeDirection(tile);
+	XRayGeom g{tile, XRayGeom::Kind::Ramp};
+	g.dir = dir;
+	Point outer = _xray_edge_mid[ReverseDiagDir(dir)];
+	g.z = GetSlopePixelZ(TileX(tile) * TILE_SIZE + std::min<int>(outer.x, TILE_SIZE - 1), TileY(tile) * TILE_SIZE + std::min<int>(outer.y, TILE_SIZE - 1), true);
+	g.z_exit = GetBridgePixelHeight(tile);
+	return g;
+}
+
+/** The height model of the way over a tunnel or bridge head. */
+static XRayGeom GetXRayTunnelBridgeGeom(TileIndex tile)
+{
+	return IsBridge(tile) ? GetXRayBridgeHeadGeom(tile) : XRayGeom{tile};
+}
+
 /** The portal on a tile, if there is one. */
 static const TileSlice *GetXRayPortal(TileIndex tile)
 {
@@ -587,11 +609,12 @@ static void DrawXRaySurfaceTile(const XRayDrawer &d, TileIndex tile, XRayStage s
 		case TileType::TunnelBridge: {
 			if (GetTunnelBridgeTransportType(tile) != TRANSPORT_RAIL || !XRayShowsOwner(GetTileOwner(tile))) break;
 			TrackBits track = DiagDirToDiagTrackBits(GetTunnelBridgeDirection(tile));
+			XRayGeom head = GetXRayTunnelBridgeGeom(tile);
 			if (stage == XRayStage::Base) {
-				DrawXRayTracks(d, g, track, GetRailType(tile), level);
+				DrawXRayTracks(d, head, track, GetRailType(tile), level);
 			} else {
-				if (HasTunnelBridgeReservation(tile)) DrawXRayReservation(d, g, track, level);
-				DrawXRaySurfaceDeadEnds(d, g, track);
+				if (HasTunnelBridgeReservation(tile)) DrawXRayReservation(d, head, track, level);
+				DrawXRaySurfaceDeadEnds(d, head, track);
 			}
 			break;
 		}
@@ -682,7 +705,7 @@ static void DrawXRayRoadTile(const XRayDrawer &d, TileIndex tile)
 
 		case TileType::TunnelBridge:
 			if (GetTunnelBridgeTransportType(tile) != TRANSPORT_ROAD) break;
-			DrawXRayRoadBits(d, g, AxisToRoadBits(DiagDirToAxis(GetTunnelBridgeDirection(tile))), XRAY_ROAD_COLOUR, road_width);
+			DrawXRayRoadBits(d, GetXRayTunnelBridgeGeom(tile), AxisToRoadBits(DiagDirToAxis(GetTunnelBridgeDirection(tile))), XRAY_ROAD_COLOUR, road_width);
 			break;
 
 		default: break;
@@ -888,9 +911,11 @@ static void DrawXRayTunnels(const XRayDrawer &d)
 	XRayLevel level = GetXRaySurfaceLevel();
 	for (const auto &[a, b] : _xray_tunnels) {
 		if (!IsTileType(a, TileType::TunnelBridge) || !IsTunnel(a) || !IsTileType(b, TileType::TunnelBridge)) continue;
-		int z = GetTilePixelZ(a);
-		Point pa = d.Screen(TileX(a) * TILE_SIZE + TILE_SIZE / 2, TileY(a) * TILE_SIZE + TILE_SIZE / 2, z);
-		Point pb = d.Screen(TileX(b) * TILE_SIZE + TILE_SIZE / 2, TileY(b) * TILE_SIZE + TILE_SIZE / 2, z);
+		/* From mouth to mouth, where the way on the entrance tiles ends, at the height of the vehicles inside. */
+		Point ma = _xray_edge_mid[GetTunnelBridgeDirection(a)];
+		Point mb = _xray_edge_mid[GetTunnelBridgeDirection(b)];
+		Point pa = d.Screen(TileX(a) * TILE_SIZE + ma.x, TileY(a) * TILE_SIZE + ma.y, XRayGeom{a}.Z(ma.x, ma.y));
+		Point pb = d.Screen(TileX(b) * TILE_SIZE + mb.x, TileY(b) * TILE_SIZE + mb.y, XRayGeom{b}.Z(mb.x, mb.y));
 		if (GetTunnelBridgeTransportType(a) == TRANSPORT_ROAD) {
 			if (_xray_settings.road) d.Line(pa, pb, XRAY_ROAD_COLOUR, std::max(2, d.Px(3)), d.Px(4));
 			continue;
