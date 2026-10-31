@@ -2267,7 +2267,7 @@ struct MainToolbarWindow : Window {
 		Hotkey(WKC_CTRL | WKC_HOME, "underground_xray", MTHK_UNDERGROUND_XRAY),
 		Hotkey(WKC_CTRL | WKC_PAGEDOWN, "underground_below", MTHK_UNDERGROUND_BELOW),
 		Hotkey(WKC_CTRL | WKC_PAGEUP, "underground_above", MTHK_UNDERGROUND_ABOVE),
-		Hotkey(WKC_CTRL | WKC_SHIFT | 'R', "rail_xray", MTHK_RAIL_XRAY),
+		Hotkey(WKC_CTRL | WKC_F11, "xray_window", MTHK_RAIL_XRAY),
 	}};
 };
 
