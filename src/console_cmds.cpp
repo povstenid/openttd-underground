@@ -50,6 +50,7 @@
 #include "misc_cmd.h"
 #include "multilayer/underground_gui.h"
 #include "multilayer/underground_view.h"
+#include "multilayer/rail_xray.h"
 #include "multilayer/underground_cmd.h"
 #include "multilayer/blueprint_gui.h"
 #include "multilayer/multilayer_map.h"
@@ -3001,6 +3002,42 @@ static bool ConDumpInfo(std::span<std::string_view> argv)
 
 /* === Underground / Metro console commands === */
 
+static bool ConRailXRay([[maybe_unused]] std::span<std::string_view> argv)
+{
+	if (argv.empty()) {
+		IConsolePrint(CC_HELP, "Toggle the rail X-ray view: track, stations, depots, signals and trains of every level, nothing else. Usage: 'railxray [on|off]'.");
+		IConsolePrint(CC_HELP, "'railxray dest off|selected|all' - Arrows from trains to their current destination: none, the trains with an open window (default), every train.");
+		return true;
+	}
+
+	if (argv.size() >= 2 && StrEqualsIgnoreCase(argv[1], "dest")) {
+		if (argv.size() < 3) return false;
+		if (StrEqualsIgnoreCase(argv[2], "off")) {
+			_rail_xray_destinations = RailXRayDestinations::Off;
+		} else if (StrEqualsIgnoreCase(argv[2], "selected")) {
+			_rail_xray_destinations = RailXRayDestinations::Selected;
+		} else if (StrEqualsIgnoreCase(argv[2], "all")) {
+			_rail_xray_destinations = RailXRayDestinations::All;
+		} else {
+			return false;
+		}
+		MarkWholeScreenDirty();
+		return true;
+	}
+
+	if (argv.size() == 1) {
+		ToggleRailXRayView();
+	} else if (StrEqualsIgnoreCase(argv[1], "on")) {
+		SetRailXRayView(true);
+	} else if (StrEqualsIgnoreCase(argv[1], "off")) {
+		SetRailXRayView(false);
+	} else {
+		return false;
+	}
+	IConsolePrint(CC_DEFAULT, "Rail X-ray view: {}", IsRailXRayView() ? "ON" : "OFF");
+	return true;
+}
+
 static bool ConUnderground([[maybe_unused]] std::span<std::string_view> argv)
 {
 	if (argv.size() == 1 || argv.empty()) {
@@ -3483,5 +3520,6 @@ void IConsoleStdLibRegister()
 
 	/* Underground / Metro */
 	IConsole::CmdRegister("underground",             ConUnderground);
+	IConsole::CmdRegister("railxray",                ConRailXRay);
 	IConsole::CmdRegister("blueprint",               ConBlueprint);
 }

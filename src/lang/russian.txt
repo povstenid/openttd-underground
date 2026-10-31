@@ -593,6 +593,13 @@ STR_SETTINGS_MENU_FULL_ANIMATION                                :Полная а
 STR_SETTINGS_MENU_FULL_DETAIL                                   :Полная детализация
 STR_SETTINGS_MENU_TRANSPARENT_BUILDINGS                         :Прозрачные здания
 STR_SETTINGS_MENU_TRANSPARENT_SIGNS                             :Прозрачные надписи
+STR_SETTINGS_MENU_RAIL_XRAY                                     :Рентген ж/д (все уровни)
+STR_RAIL_XRAY_SIGNAL_BLOCK                                      :Б
+STR_RAIL_XRAY_SIGNAL_ENTRY                                      :Вх
+STR_RAIL_XRAY_SIGNAL_EXIT                                       :Вых
+STR_RAIL_XRAY_SIGNAL_COMBO                                      :К
+STR_RAIL_XRAY_SIGNAL_PBS                                        :М
+STR_RAIL_XRAY_SIGNAL_PBS_ONEWAY                                 :М1
 
 # File menu
 STR_FILE_MENU_SAVE_GAME                                         :Сохранить игру

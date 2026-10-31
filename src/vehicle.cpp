@@ -61,6 +61,7 @@
 #include "timer/timer_game_economy.h"
 #include "timer/timer_game_tick.h"
 #include "multilayer/underground_view.h"
+#include "multilayer/rail_xray.h"
 
 #include "table/strings.h"
 
@@ -1126,6 +1127,9 @@ void CallVehicleTicks()
 
 static bool IsVehicleVisibleInCurrentView(const Vehicle *v)
 {
+	/* The rail X-ray view shows trains only, on every level. */
+	if (IsRailXRayView()) return v->type == VEH_TRAIN && IsRailXRayTrainPartDrawn(Train::From(v));
+
 	if (v->type == VEH_TRAIN) {
 		const Train *train = Train::From(v);
 		if (train->IsUnderground()) {

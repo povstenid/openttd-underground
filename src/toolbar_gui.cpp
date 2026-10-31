@@ -63,6 +63,7 @@
 
 #include "widgets/toolbar_widget.h"
 #include "multilayer/underground_view.h"
+#include "multilayer/rail_xray.h"
 #include "multilayer/underground_gui.h"
 
 #include "network/network.h"
@@ -263,6 +264,7 @@ enum class OptionMenuEntries : uint8_t {
 	TransparentBuildings, ///< Toggle buildings transparency.
 	TransparentStationSigns, ///< Toggle transparency of signs and names.
 	TransparentPedestrians, ///< Toggle transparency of pedestrians.
+	RailXRay, ///< Toggle the rail X-ray view.
 };
 
 /**
@@ -304,6 +306,7 @@ static CallBackFunction ToolbarOptionsClick(Window *w)
 	list.push_back(MakeDropDownListCheckedItem(IsTransparencySet(TO_HOUSES), STR_SETTINGS_MENU_TRANSPARENT_BUILDINGS, OptionMenuEntries::TransparentBuildings));
 	list.push_back(MakeDropDownListCheckedItem(IsTransparencySet(TO_SIGNS), STR_SETTINGS_MENU_TRANSPARENT_SIGNS, OptionMenuEntries::TransparentStationSigns));
 	list.push_back(MakeDropDownListCheckedItem(IsTransparencySet(TO_PEDESTRIANS), STR_SETTINGS_MENU_TRANSPARENT_PEDESTRIANS, OptionMenuEntries::TransparentPedestrians));
+	list.push_back(MakeDropDownListCheckedItem(IsRailXRayView(), STR_SETTINGS_MENU_RAIL_XRAY, OptionMenuEntries::RailXRay));
 
 	ShowDropDownList(w, std::move(list), 0, WID_TN_SETTINGS, 140, GetToolbarDropDownOptions());
 	return CallBackFunction::None;
@@ -344,6 +347,7 @@ static CallBackFunction MenuClickSettings(int index)
 		case OptionMenuEntries::TransparentBuildings: ToggleTransparency(TO_HOUSES); break;
 		case OptionMenuEntries::TransparentStationSigns: ToggleTransparency(TO_SIGNS); break;
 		case OptionMenuEntries::TransparentPedestrians: ToggleTransparency(TO_PEDESTRIANS); break;
+		case OptionMenuEntries::RailXRay: ToggleRailXRayView(); break;
 	}
 	MarkWholeScreenDirty();
 	return CallBackFunction::None;
@@ -2167,6 +2171,7 @@ struct MainToolbarWindow : Window {
 			case MTHK_UNDERGROUND_XRAY: ToolbarUndergroundXRayClick(this); break;
 			case MTHK_UNDERGROUND_BELOW: ToolbarUndergroundBelowClick(this); break;
 			case MTHK_UNDERGROUND_ABOVE: ToolbarUndergroundAboveClick(this); break;
+			case MTHK_RAIL_XRAY: ToggleRailXRayView(); break;
 			default: return ES_NOT_HANDLED;
 		}
 		if (cbf != CallBackFunction::None) _last_started_action = cbf;
@@ -2262,6 +2267,7 @@ struct MainToolbarWindow : Window {
 		Hotkey(WKC_CTRL | WKC_HOME, "underground_xray", MTHK_UNDERGROUND_XRAY),
 		Hotkey(WKC_CTRL | WKC_PAGEDOWN, "underground_below", MTHK_UNDERGROUND_BELOW),
 		Hotkey(WKC_CTRL | WKC_PAGEUP, "underground_above", MTHK_UNDERGROUND_ABOVE),
+		Hotkey(WKC_CTRL | WKC_SHIFT | 'R', "rail_xray", MTHK_RAIL_XRAY),
 	}};
 };
 

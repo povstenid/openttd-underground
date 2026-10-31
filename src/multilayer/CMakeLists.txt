@@ -10,6 +10,8 @@ add_files(
     multilayer_types.h
     portal_registry.cpp
     portal_registry.h
+    rail_xray.cpp
+    rail_xray.h
     station_complex.cpp
     station_complex.h
     underground_cmd.cpp

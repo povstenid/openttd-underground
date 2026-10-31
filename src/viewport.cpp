@@ -92,6 +92,7 @@
 #include "viewport_cmd.h"
 #include "pedestrians.h"
 #include "multilayer/underground_view.h"
+#include "multilayer/rail_xray.h"
 #include "multilayer/underground_gui.h"
 #include "multilayer/underground_render.h"
 #include "multilayer/multilayer_map.h"
@@ -442,9 +443,13 @@ Point TranslateXYToTileCoord(const Viewport &vp, int x, int y, bool clamp_to_map
 		return pt;
 	}
 
-	return InverseRemapCoords2(
-			ScaleByZoom(x - vp.left, vp.zoom) + vp.virtual_left,
-			ScaleByZoom(y - vp.top, vp.zoom) + vp.virtual_top, clamp_to_map);
+	int vx = ScaleByZoom(x - vp.left, vp.zoom) + vp.virtual_left;
+	int vy = ScaleByZoom(y - vp.top, vp.zoom) + vp.virtual_top;
+
+	/* The rail X-ray view picks the railway drawn there, on whatever level it is. */
+	if (Point pt; IsRailXRayView() && RailXRayPickPoint(vx, vy, pt)) return pt;
+
+	return InverseRemapCoords2(vx, vy, clamp_to_map);
 }
 
 /* When used for zooming, check area below current coordinates (x,y)
@@ -1911,6 +1916,20 @@ static void ViewportDrawStrings(ZoomLevel zoom, const StringSpriteToDrawVector *
 	}
 }
 
+/**
+ * Add the names of train stations and waypoints, the only signs of the rail X-ray
+ * view: always shown there, whatever the display options say.
+ * @param dpi Rectangle being drawn.
+ */
+static void ViewportAddRailXRaySigns(DrawPixelInfo *dpi)
+{
+	uint8_t opt = _display_opt & ~((1 << DO_SHOW_TOWN_NAMES) | (1 << DO_SHOW_SIGNS));
+	opt |= (1 << DO_SHOW_STATION_NAMES) | (1 << DO_SHOW_WAYPOINT_NAMES);
+	AutoRestoreBackup display_opt(_display_opt, opt);
+	AutoRestoreBackup facility_opt(_facility_display_opt, StationFacilities{StationFacility::Train});
+	ViewportAddKdtreeSigns(dpi);
+}
+
 void ViewportDoDraw(const Viewport &vp, int left, int top, int right, int bottom)
 {
 	_vd.dpi.zoom = vp.zoom;
@@ -1931,13 +1950,18 @@ void ViewportDoDraw(const Viewport &vp, int left, int top, int right, int bottom
 	_vd.dpi.dst_ptr = BlitterFactory::GetCurrentBlitter()->MoveTo(_cur_dpi->dst_ptr, x - _cur_dpi->left, y - _cur_dpi->top);
 	AutoRestoreBackup dpi_backup(_cur_dpi, &_vd.dpi);
 
-	ViewportAddLandscape();
-	ViewportAddVehicles(&_vd.dpi);
-	ViewportAddPedestrians(&_vd.dpi);
+	if (IsRailXRayView()) {
+		ViewportDrawRailXRay(_vd.dpi);
+		ViewportAddRailXRaySigns(&_vd.dpi);
+	} else {
+		ViewportAddLandscape();
+		ViewportAddVehicles(&_vd.dpi);
+		ViewportAddPedestrians(&_vd.dpi);
 
-	ViewportAddKdtreeSigns(&_vd.dpi);
+		ViewportAddKdtreeSigns(&_vd.dpi);
 
-	DrawTextEffects(&_vd.dpi);
+		DrawTextEffects(&_vd.dpi);
+	}
 
 	if (!_vd.tile_sprites_to_draw.empty()) ViewportDrawTileSprites(&_vd.tile_sprites_to_draw);
 
@@ -2240,10 +2264,12 @@ void MarkTileDirtyByTile(TileIndex tile, int bridge_level_offset, int tile_heigh
 
 	/* In the slice view a cut column is drawn at the plane, not at its terrain height;
 	 * the X-ray view and the view of the levels below draw deeper levels lower still. */
-	if (IsUndergroundViewActive()) {
-		int z = IsTileCutBySlice(tile) ? GetUndergroundSlicePixelZ() : tile_height_override * TILE_HEIGHT;
+	if (IsUndergroundViewActive() || IsRailXRayView()) {
+		bool xray = IsRailXRayView();
+		int z = !xray && IsTileCutBySlice(tile) ? GetUndergroundSlicePixelZ() : tile_height_override * TILE_HEIGHT;
+		int lowest = xray ? GetRailXRayLowestPixelZ() : GetUndergroundViewLowestPixelZ();
 		Point ps = RemapCoords(TileX(tile) * TILE_SIZE, TileY(tile) * TILE_SIZE, z);
-		Point pd = RemapCoords(TileX(tile) * TILE_SIZE, TileY(tile) * TILE_SIZE, std::min(z, GetUndergroundViewLowestPixelZ()));
+		Point pd = RemapCoords(TileX(tile) * TILE_SIZE, TileY(tile) * TILE_SIZE, std::min(z, lowest));
 		MarkAllViewportsDirty(
 				ps.x - MAX_TILE_EXTENT_LEFT,
 				ps.y - MAX_TILE_EXTENT_TOP,
