@@ -591,7 +591,7 @@ static void DrawXRayUndergroundSignals(const XRayDrawer &d, const XRayGeom &g, T
 	for (Track t : SetTrackBitIterator(tracks)) {
 		for (Trackdir td : {TrackToTrackdir(t), ReverseTrackdir(TrackToTrackdir(t))}) {
 			if (!HasUndergroundSignalOnTrackdir(s, td)) continue;
-			DrawXRaySignal(d, g, td, GetUndergroundSignalType(s, t), GetUndergroundSignalState(TileRef{tile, sid}, td), level);
+			DrawXRaySignal(d, g, td, GetUndergroundSignalType(s, t), GetUndergroundSignalDisplayState(TileRef{tile, sid}, td), level);
 		}
 	}
 }
