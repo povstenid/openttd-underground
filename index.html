@@ -56,6 +56,8 @@
     <li><strong>Blueprints.</strong> Copy a 3D area of underground construction and paste it elsewhere.</li>
     <li><strong>A metro set.</strong> Metro track and five generations of metro cars come with the game and are active in a first new game. See <a href="#/metro-set">Metro track and cars</a>.</li>
     <li><strong>An Underground settings page</strong> with the depth limits, prices, soil multipliers and refund rules.</li>
+    <li><strong>Rail X-ray.</strong> A view of your transport network alone, on every level at once, with cargo and ratings at the stations and the routes of the orders. See <a href="#/rail-xray">Rail X-ray</a>.</li>
+    <li><strong>Joined stations.</strong> A metro station can be joined to an airport, a bus terminal or a railway station on the surface, so passengers change between them. See <a href="#/building">Building underground</a>.</li>
   </ul>
 
   <h2>How it differs from vanilla tunnels</h2>
@@ -85,6 +87,7 @@
     <li><a href="#/getting-started">Getting started</a>: open the underground toolbar and move between levels.</li>
     <li><a href="#/building">Building underground</a>: track, stations, portals, ramps.</li>
     <li><a href="#/signals">Signals and trains</a>: how trains behave underground and how to avoid jams.</li>
+    <li><a href="#/rail-xray">Rail X-ray</a>: see where every train is and why it waits.</li>
     <li><a href="#/soil">Soil and prices</a>: what the soil is and what it costs.</li>
   </ul>
 </template>
@@ -139,6 +142,61 @@
 
   <h2>Tip: check the costs first</h2>
   <p>Hold <kbd>Shift</kbd> while using a tool to see the cost estimate without building. Estimates include the soil, so you can compare a route at two depths before you pay for it.</p>
+
+  <h2>Clicking on stations</h2>
+  <p>An underground station often lies right under a surface station, and their name signs cover each other. The view decides which one a click opens: in the normal view the surface station, in the underground views the underground one. In the underground views a click on a platform opens its station, and a <em>Go to</em> order on the tile goes to the platform on the viewed level.</p>
+</template>
+
+<template id="rail-xray" data-title="Rail X-ray" data-group="Start here">
+  <h1>Rail X-ray</h1>
+  <p class="lead">Rail X-ray shows your transport network alone: track, stations, signals and vehicles, on every underground level at once, on a plain background. Use it to see where every train is and why it waits.</p>
+
+  <h2>Open it</h2>
+  <p>Press <kbd>Ctrl</kbd>+<kbd>F11</kbd>, choose <strong>X-ray view</strong> in the settings menu of the main toolbar, or type <code>railxray on</code> in the console. The X-ray window opens; while it is open the map shows the X-ray. Close the window to go back to the normal view.</p>
+  <div class="figures">
+    <figure>
+      <img src="assets/img/xray-before.png" alt="A town with a metro in the normal view" loading="lazy">
+      <figcaption>The normal view: the metro is under the town and cannot be seen.</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/img/xray.png" alt="The same place in Rail X-ray: tracks, platforms, signals, trains and the X-ray window" loading="lazy">
+      <figcaption>The same place in Rail X-ray, with the X-ray window on the left.</figcaption>
+    </figure>
+  </div>
+
+  <h2>What you see</h2>
+  <ul>
+    <li><strong>Track</strong> of every level, the deeper levels darker. Bridges and tunnels are drawn as one line with the track around them.</li>
+    <li><strong>Platforms</strong> in blue, with the station name. With <em>Cargo and ratings at stations</em> on, the name sign shows the cargo waiting there and its rating.</li>
+    <li><strong>Signals</strong> as arrows beside the track, pointing the way of the trains they stop: green or red, framed by their type, with the type written next to them when you zoom in.</li>
+    <li><strong>Reserved track</strong> in orange: the path a train has reserved ahead of it.</li>
+    <li><strong>Trains</strong> as their cars, a yellow square at the front, with their name. A train that stands still is red.</li>
+    <li><strong>Dead ends</strong> as red crosses.</li>
+    <li><strong>Depots</strong> with their name.</li>
+  </ul>
+
+  <h2>The X-ray window</h2>
+  <ul>
+    <li><strong>Layers.</strong> Railways (all levels); roads, stops and road vehicles; docks, buoys and ships; airports and aircraft. A layer that is on is green.</li>
+    <li><strong>Cargo and ratings at stations</strong>, as above.</li>
+    <li><strong>Colour by shared orders.</strong> Vehicles that share their orders get one colour, so you see which trains run one line.</li>
+    <li><strong>Arrows to destination.</strong> A yellow arrow from a vehicle to the station of its current order: for no vehicles, the vehicles with an open window, or all.</li>
+    <li><strong>Routes.</strong> The orders of each order list drawn from stop to stop: none, those of the vehicles with an open window, or all. <em>Implicit stops in routes</em> adds the stations a vehicle stops at without an order.</li>
+    <li><strong>Cargo</strong> and <strong>Company</strong> filters.</li>
+  </ul>
+  <img src="assets/img/xray-routes.png" alt="Rail X-ray with the routes of all order lists" loading="lazy">
+  <p class="caption">Routes of all order lists, each list in its own colour.</p>
+
+  <h2>From the console</h2>
+  <table>
+    <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>railxray on</code> / <code>off</code></td><td>Opens or closes the X-ray.</td></tr>
+      <tr><td><code>railxray show rail|road|water|air|cargo|orders|implicit on|off</code></td><td>Shows or hides a layer, the cargo at the stations, the colours by shared orders or the implicit stops in routes.</td></tr>
+      <tr><td><code>railxray dest off|selected|all</code></td><td>Arrows to the destination.</td></tr>
+      <tr><td><code>railxray routes off|selected|all</code></td><td>Routes of the order lists.</td></tr>
+    </tbody>
+  </table>
 </template>
 
 <!-- ============================================================ -->
@@ -174,17 +232,47 @@
     <li><strong>Underpass.</strong> Built on a straight road tile without junctions. The road keeps working. Catchment radius 2 tiles.</li>
   </ul>
   <p>By default the exits take only passengers and mail from the houses and industries around them, and give them only those. Set <em>Cargo through underground station exits</em> to <em>All cargo</em> to serve freight through them too. Surface platforms and stops joined to the same station always serve all cargo in their own catchment, and freight unloaded underground for a transfer still waits at the station. Games saved by an earlier version keep <em>All cargo</em>.</p>
-  <p>To remove an exit, remove it on the surface first; the error <em>remove the metro station exit first</em> means that you must do so before you remove the station.</p>
+  <h3>Finding where an exit can go</h3>
+  <p>With the pavilion or the underpass tool chosen, the surface shows your underground stations: the tiles above their platforms are outlined in green, and every tile an exit may be built on in yellow. While a station's window is open, its exits are outlined in green.</p>
+  <img src="assets/img/exit-area.png" alt="Pavilion tool chosen: green outlines above the platforms, yellow outlines where an exit can be built" loading="lazy">
+  <p class="caption">The pavilion tool: platforms below are outlined in green, the area for exits in yellow.</p>
+  <p>The last platform of a station takes its exits with it. To remove an exit alone, use the dynamite, the remove button with the exit tool, or remove the road stop of a pavilion or the road of an underpass.</p>
+
+  <h3>Joining a metro station to an airport or a terminal</h3>
+  <p>A metro station and a surface station (an airport, a bus terminal, a railway station) can be one station, so passengers change between them. There are two ways:</p>
+  <ul>
+    <li><strong>The metro first.</strong> Build the platforms under or next to the surface station. When you place the first exit near it, the <em>Join station</em> window lists the metro station and the surface station. Pick the surface station: the metro station joins it, and the exit is built for it. This works while the metro station has no exit and no cargo waiting.</li>
+    <li><strong>The surface station first or later.</strong> Build a surface station right above or next to the metro platforms: the <em>Join station</em> window offers the metro station, even without <kbd>Ctrl</kbd>. With <kbd>Ctrl</kbd> it offers every own metro station within the station spread.</li>
+  </ul>
+  <p>The joined station must fit in the station spread (<em>Maximum station spread</em>, 12 tiles by default), with its platforms.</p>
+  <div class="figures">
+    <figure>
+      <img src="assets/img/join-station.png" alt="The Join station window offering the metro station and the airport" loading="lazy">
+      <figcaption>Placing the first pavilion: the window offers the metro station and the airport.</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/img/joined-station.png" alt="The airport station window showing two underground platforms and one exit" loading="lazy">
+      <figcaption>Joined: the airport has two underground platforms and the pavilion as its exit.</figcaption>
+    </figure>
+  </div>
 
   <h2>Portals</h2>
   <p>A portal is the entrance between the surface line and the underground. Build it with the portal tool.</p>
   <ul>
     <li><strong>Flat ground: a dive portal.</strong> The line dives down into the ground. The portal's track runs straight, and the cut rises up to the surface line.</li>
-    <li><strong>Hillside: a hillside portal.</strong> The tunnel starts at the foot of the slope, so the mouth sits on the surface where the hill begins.</li>
+    <li><strong>Hillside: a hillside portal.</strong> The tunnel starts at the foot of the slope, so the mouth sits on the surface where the hill begins. It is a concrete mouth with an opening the size of the tunnel; the track runs flat into it.</li>
   </ul>
   <p>Choose the direction like for a ramp. On flat ground the portal dives into the ground towards the tile edge nearest to your cursor, or drag from the portal's tile along a line to lead it towards the drag. On a hillside the slope sets the direction. Before you click, a ghost of the portal shows where it goes: the arrow points along the line into the tunnel, its tail is the side the surface line comes from. A red ghost means it cannot be built there.</p>
-  <img src="assets/img/tunnel-mouths.png" alt="Two tunnel mouths: a dive portal on flat ground and a hillside mouth at the foot of a slope" loading="lazy">
-  <p class="caption">Tunnel mouths: a dive portal on flat ground and a hillside mouth at the foot of a slope.</p>
+  <div class="figures">
+    <figure>
+      <img src="assets/img/hillside-portals.png" alt="Four hillside portals, one on each side of a hill" loading="lazy">
+      <figcaption>Hillside portals on the four sides of a hill. A mouth facing away shows its back.</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/img/dive-portal-gate.png" alt="A dive portal seen on its level: a ramp up to a gate" loading="lazy">
+      <figcaption>A dive portal on its level: the ramp rises to the gate where the line leaves for the surface.</figcaption>
+    </figure>
+  </div>
 
   <h3>The slope rule</h3>
   <ul>
@@ -208,13 +296,15 @@
   <p>A ramp is priced with the soil of its lower level, and its price is set by the ramp multiplier.</p>
 
   <h2>Removing track, stations, signals, portals and ramps</h2>
+  <p>Every remover removes what it meets:</p>
   <ul>
-    <li>The <strong>Demolish</strong> tool removes underground track, stations, signals, portals and ramps on the viewed level.</li>
-    <li><kbd>Ctrl</kbd>+click and drag demolishes surface buildings, roads and so on instead.</li>
+    <li><strong>Any dynamite</strong> (of the railway, road, water or landscaping toolbar) removes underground track, stations, signals, portals, ramps and exits on the viewed level when you look underground. <kbd>Ctrl</kbd>+drag demolishes the surface instead.</li>
+    <li>On the surface the dynamite removes a portal with its track, and a pavilion with its road stop. Removing the road of an underpass removes the underpass.</li>
+    <li>The <strong>remove</strong> button (<kbd>R</kbd>) works with every underground tool: track and signals, the station tool (drag over platforms), the pavilion and underpass tools, the portal tool and the ramp tools.</li>
+    <li>Removing underground track removes the platform, ramp or portal it runs over; removing the surface track of a portal removes the portal.</li>
     <li>Hold <kbd>Shift</kbd> to see the cost of the removal without removing anything. A removal pays back a share of the build price. See <a href="#/soil">Soil and prices</a>.</li>
-    <li>The track tool can also remove track: the <em>build/remove</em> toggle switches it, and holding <kbd>Ctrl</kbd> with the track tool removes track too.</li>
-    <li>A portal cannot be removed while track still runs through its mouth. The errors you will see are <em>must remove metro portal first</em> and <em>must remove railway track first</em>.</li>
   </ul>
+  <p>Building over a portal or a pavilion does not remove it: remove it first.</p>
 
   <h2>Where construction can fail</h2>
   <p>Construction is refused with a short reason in the status line. The usual reasons are:</p>
@@ -251,6 +341,7 @@
     <li>A train reserves the track ahead of it, up to the next signal. A block signal that is green still reserves the path to the next signal, so a train cannot run into another train's reservation.</li>
     <li>A train never enters a tile it has not reserved. It waits instead.</li>
     <li>A red signal stops trains at the tile before it.</li>
+    <li>A path signal is red until a train reserves its path through it; then it shows green. Like on the surface, a train never waits at a green path signal: if it waits, its path beyond the signal is held by another train.</li>
   </ul>
 
   <h2>Portals</h2>
@@ -285,6 +376,9 @@
   <h2>Assembling a train</h2>
   <p>Every metro car is a self-propelled car of a multiple unit. Buy a car in a metro depot, buy more cars of the same type and drag each one onto the first in the depot window. Typical trains are 4 to 8 cars. The cars at both ends of a train show a cab, the cars in the middle do not. For the 717, put a 717 at each end and 714 cars in the middle. Clone the finished train with the <em>Clone train</em> button of the depot.</p>
   <p>A car is half a tile long and carries passengers only, with fast loading.</p>
+  <p>The head and the tail car of a 717, 720 or 765 train have the third at their cab painted darker, so you see at a glance where a train begins and ends. The Type A and Type E, whose cars are all alike, have no such mark.</p>
+  <img src="assets/img/metro-cars-cab-marks.png" alt="Trains of the five metro car types: head, two middle cars and tail" loading="lazy">
+  <p class="caption">From top to bottom: Type A, Type E, 717, 720, 765. Each row is a head car, two middle cars and a tail car.</p>
 
   <h2>The cars</h2>
   <table>
